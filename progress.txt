@@ -110,7 +110,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 55: Embedding download with progress tracking
 [x] Task 56: Embedding API router (GET /embedding/models, POST /embedding/download, GET /embedding/status)
 [x] Task 57: Wire EmbeddingService into IngestService + lifespan
-[ ] Task 58: Re-embedding on model change (config PUT triggers re-index)
+[x] Task 58: Re-embedding on model change (config PUT triggers re-index)
 [ ] Task 59: Frontend embedding download UI (SettingsPage progress bar)
 
 ### 4C. Data Export
@@ -192,3 +192,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 55 complete: async download_model(language) in EmbeddingService using asyncio.to_thread(SentenceTransformer, model_name, cache_folder); sets _download_progress to 'downloading'→'complete' or 'error'; 8 new tests (progress states, error handling, correct model name, cache_folder path, runs in thread); 295/296 backend tests pass.
 2026-03-13 — Task 56 complete: app/routers/embedding.py with GET /embedding/models (model list + download status), POST /embedding/download (background task trigger, returns {status, language}), GET /embedding/status?language= (progress dict); init_embedding_router/reset pattern; 10 new tests; 305/306 backend tests pass.
 2026-03-13 — Task 57 complete: IngestService accepts optional embedding_function param (passed to get_or_create_collection if not None); main.py lifespan creates EmbeddingService, calls get_embedding_function(config.embedding_language), passes to IngestService, mounts embedding_router; 9 new tests (IngestService ef param, Chroma passthrough, None skipped, lifespan integration x3, config-aware ef, backward compat ingest); 314/315 backend tests pass.
+2026-03-13 — Task 58 complete: EmbeddingService.reembed_all(new_language, ingest_service, knowledge_dir, embedding_function) re-ingests all files; config router PUT /config detects embedding_language change, triggers background reembed_all(), returns reembedding=true; init_reembed_dependencies(ingest_service, embedding_service, knowledge_dir) registered in main.py lifespan; 6 new tests (reembed_all behavior x2, no reembed when unchanged, triggers on change, response flag, graceful when no deps); 320/321 backend tests pass.

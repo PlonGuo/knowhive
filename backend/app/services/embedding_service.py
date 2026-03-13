@@ -80,3 +80,13 @@ class EmbeddingService:
         """Return a chromadb SentenceTransformerEmbeddingFunction for the given language."""
         model_name = MODEL_REGISTRY[language]["name"]
         return embedding_functions.SentenceTransformerEmbeddingFunction(model_name=model_name)
+
+    async def reembed_all(
+        self,
+        new_language: EmbeddingLanguage,
+        ingest_service: Any,
+        knowledge_dir: Path,
+        embedding_function: Any,
+    ) -> None:
+        """Re-ingest all files in knowledge_dir using the new embedding function."""
+        await ingest_service.ingest_directory(knowledge_dir)

@@ -17,7 +17,7 @@ from app.database import close_db, init_db
 from app.logging_config import setup_logging
 from app.routers.chat import init_chat_router
 from app.routers.chat import router as chat_router
-from app.routers.config import init_config_router
+from app.routers.config import init_config_router, init_reembed_dependencies
 from app.routers.config import router as config_router
 from app.routers.ingest import init_ingest_router
 from app.routers.ingest import router as ingest_router
@@ -73,6 +73,11 @@ def create_app(
 
         # Initialize routers with dependencies
         init_config_router(_config_path)
+        init_reembed_dependencies(
+            ingest_service=ingest_service,
+            embedding_service=embedding_service,
+            knowledge_dir=Path(_knowledge_dir),
+        )
         init_ingest_router(chroma_path=_chroma_path, knowledge_dir=_knowledge_dir)
         init_knowledge_router(knowledge_dir=_knowledge_dir, ingest_service=ingest_service)
         init_chat_router(rag_service=rag_service, config_path=_config_path)
