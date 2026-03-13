@@ -98,7 +98,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 50: StatusBar LLM display + hot-reload on settings save
 
 ### 3G. RAGAs + Langfuse (dev-only)
-[ ] Task 51: Add ragas/langfuse dev dependencies
+[x] Task 51: Add ragas/langfuse dev dependencies
 [ ] Task 52: RAGAs evaluation script (CLI tool)
 [ ] Task 53: Langfuse tracing in RAGService (env var gated)
 
@@ -149,3 +149,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 46 complete: Added watchdog>=4.0.0 to pyproject.toml; app/services/file_watcher.py with FileWatcher class — watchdog Observer, _DebouncedHandler (threading.Timer debounce, extension filter, asyncio bridge), start/stop/status, case-insensitive extension matching; 19 new tests (init, extension filter, start/stop, debounce coalescing, ignore non-watched, detect new/delete, status); all 19 pass.
 2026-03-13 — Task 49 complete: StatusBar watcher indicator — polls GET /watcher/status every 10s, displays "Watching"/"Watcher off"/"Syncing…" with color coding, click to toggle via POST /watcher/toggle; AppLayout passes backendUrl to StatusBar; 9 new tests; all 109 frontend tests pass; tsc clean.
 2026-03-13 — Task 50 complete: StatusBar LLM display — fetches GET /config on mount and shows "provider / model" indicator; hot-reload via configVersion prop (AppLayout increments on SettingsPage save, StatusBar refetches config); SettingsPage gains onConfigSaved callback; 7 new statusbar-llm tests + 2 new settings tests; all 118 frontend tests pass; tsc clean.
+2026-03-13 — Task 51 complete: Added ragas>=0.2.0 and langfuse>=2.0.0 to dev dependency-groups in pyproject.toml; uv sync installs ragas 0.4.3 + langfuse 4.0.0 with transitive deps (openai, pandas, pyarrow, tiktoken, etc.); 3 new import tests (ragas, langfuse, ragas.metrics); all 13 import tests pass; 255/256 backend tests pass (1 pre-existing config test isolation failure).

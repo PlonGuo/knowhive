@@ -55,3 +55,21 @@ def test_aiosqlite_importable():
 def test_pyyaml_importable():
     mod = importlib.import_module("yaml")
     assert mod, "pyyaml should be importable"
+
+
+# Task 51: RAGAs + Langfuse dev dependencies
+
+
+def test_ragas_importable():
+    mod = importlib.import_module("ragas")
+    assert mod.__version__, "ragas should have a version"
+
+
+def test_langfuse_importable():
+    mod = importlib.import_module("langfuse")
+    assert mod, "langfuse should be importable"
+
+
+def test_ragas_metrics_importable():
+    mod = importlib.import_module("ragas.metrics")
+    assert mod, "ragas.metrics should be importable"
