@@ -64,6 +64,44 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 ### 2E. Integration
 [x] Task 32: End-to-end wiring (IPC bridge updates, startup sync, full flow)
 
+## Phase 3: Complete Features
+Plan: ~/.claude/plans/zany-percolating-key.md
+
+### 3A. File Management
+[ ] Task 33: DELETE /knowledge/file endpoint (disk + DB + Chroma cleanup, path traversal protection)
+[ ] Task 34: PUT /knowledge/file rename endpoint (disk rename + DB update + Chroma metadata)
+[ ] Task 35: Frontend context menu (right-click delete/rename on FileTree)
+
+### 3B. PDF Support
+[ ] Task 36: PyMuPDF dependency + PDF text extractor utility
+[ ] Task 37: Extend IngestService for PDF (find_ingestable_files, PDF ingest branch)
+[ ] Task 38: Router + frontend PDF support (resync + file picker filter)
+
+### 3C. Anthropic Claude Provider
+[ ] Task 39: Config — add ANTHROPIC provider enum + default base_url
+[ ] Task 40: RAGService — Anthropic LLM call + stream (/v1/messages, x-api-key)
+[ ] Task 41: test-llm — Anthropic connection test support
+[ ] Task 42: Frontend — Anthropic option in Settings page
+
+### 3D. File Editor
+[ ] Task 43: PUT /knowledge/file/content endpoint (save + re-ingest)
+[ ] Task 44: Frontend MarkdownEditor component (textarea + Save/Cancel)
+[ ] Task 45: Wire FileTree click to editor view
+
+### 3E. File Watcher
+[ ] Task 46: watchdog dependency + FileWatcher service (debounce, extension filter)
+[ ] Task 47: FileWatcher + IngestService integration (async bridge)
+[ ] Task 48: Lifespan integration + watcher API (GET /watcher/status, POST /watcher/toggle)
+[ ] Task 49: Frontend watcher status indicator in StatusBar
+
+### 3F. LLM Dynamic Switch UI
+[ ] Task 50: StatusBar LLM display + hot-reload on settings save
+
+### 3G. RAGAs + Langfuse (dev-only)
+[ ] Task 51: Add ragas/langfuse dev dependencies
+[ ] Task 52: RAGAs evaluation script (CLI tool)
+[ ] Task 53: Langfuse tracing in RAGService (env var gated)
+
 === LOG ===
 2026-03-12 — Task 18 complete: Added langchain-core, langchain-community, langchain-text-splitters, chromadb, sentence-transformers, aiosqlite, pyyaml, pytest-asyncio to pyproject.toml; uv sync installs 93 new packages; 7 new import tests; all 21 tests pass.
 2026-03-12 — Task 19 complete: app/database.py with async SQLite connection manager (aiosqlite), 3 tables (documents, chat_messages, ingest_tasks) matching PRD schema; app/models.py with Pydantic models + StrEnum types; 18 database tests; all 39 tests pass.

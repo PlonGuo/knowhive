@@ -11,5 +11,18 @@ backend/*.egg-info/
 *.pyc
 backend/logs/
 
-# Packaging artifacts (build output)
+# Runtime data
+backend/chroma_data/
+backend/config.yaml
+backend/knowhive.db
+logs/
+
+# Build artifacts
 extraResources/
+tsconfig.web.tsbuildinfo
+
+# IDE
+.vscode/
+
+# Ralph loop
+.ralph.log
