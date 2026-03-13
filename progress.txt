@@ -73,7 +73,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 35: Frontend context menu (right-click delete/rename on FileTree)
 
 ### 3B. PDF Support
-[ ] Task 36: PyMuPDF dependency + PDF text extractor utility
+[x] Task 36: PyMuPDF dependency + PDF text extractor utility
 [ ] Task 37: Extend IngestService for PDF (find_ingestable_files, PDF ingest branch)
 [ ] Task 38: Router + frontend PDF support (resync + file picker filter)
 
@@ -138,3 +138,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 34 complete: PUT /knowledge/file rename endpoint — RenameRequest model (old_path, new_path), path traversal protection on both paths, disk rename with parent dir creation, DB file_path+file_name update, Chroma metadata update via new rename_chunks_file_path() method on IngestService; 409 on target exists, 400 on directory; 15 new tests (rename 200, response body, content preserved, nested, move to dir, create parent dirs, 404, 409 conflict, traversal blocked x2, absolute blocked x2, directory blocked, DB update, Chroma metadata update); all 40 knowledge tests pass; 174/175 backend tests pass (1 pre-existing config test failure).
 2026-03-13 — Task 33 complete: DELETE /knowledge/file endpoint — path traversal protection (reused into _resolve_safe_path helper), disk deletion, DB document record cleanup, Chroma chunk cleanup via IngestService.delete_chunks_for_file(); init_knowledge_router now accepts optional ingest_service param; main.py passes ingest_service; 10 new tests (delete 200, response body, nested, 404, traversal, absolute, missing param, DB cleanup, Chroma cleanup, directory blocked); all 25 knowledge tests pass; 159/160 backend tests pass (1 pre-existing config test failure).
 2026-03-13 — Task 35 complete: FileTree context menu — right-click on files shows Rename/Delete menu (directories excluded); Delete triggers confirm() dialog then DELETE /knowledge/file with auto-refresh; Rename shows inline input (Enter submit, Escape cancel, blur cancel), PUT /knowledge/file with old/new paths, auto-refresh; outside click closes menu; 10 new tests; all 105 frontend tests pass; tsc clean.
+2026-03-13 — Task 36 complete: Added pymupdf>=1.24.0 to pyproject.toml; app/services/pdf_extractor.py with extract_pdf_text(path) using PyMuPDF (fitz) — concatenates all pages, raises FileNotFoundError/ValueError; 6 new tests (single page, multi page, empty PDF, file not found, invalid PDF, return type); all 6 pass.
