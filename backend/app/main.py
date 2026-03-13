@@ -23,6 +23,8 @@ from app.routers.ingest import init_ingest_router
 from app.routers.ingest import router as ingest_router
 from app.routers.knowledge import init_knowledge_router
 from app.routers.knowledge import router as knowledge_router
+from app.routers.summary import init_summary_router
+from app.routers.summary import router as summary_router
 from app.routers.review import init_review_router
 from app.routers.review import router as review_router
 from app.routers.embedding import init_embedding_router
@@ -36,6 +38,7 @@ from app.routers.watcher import router as watcher_router
 from app.services.embedding_service import EmbeddingService
 from app.services.community_service import CommunityService
 from app.services.spaced_repetition_service import SpacedRepetitionService
+from app.services.summary_service import SummaryService
 from app.services.export_service import ExportService
 from app.services.ingest_service import IngestService
 from app.services.rag_service import RAGService
@@ -105,6 +108,10 @@ def create_app(
         srs = SpacedRepetitionService()
         init_review_router(srs)
 
+        # Initialize summary service
+        summary_service = SummaryService()
+        init_summary_router(summary_service, rag_service=rag_service, config_path=_config_path, knowledge_dir=Path(_knowledge_dir))
+
         # Run startup sync + start file watcher
         knowledge_path = Path(_knowledge_dir)
         watcher_bridge = None
@@ -146,6 +153,7 @@ def create_app(
     app.include_router(export_router)
     app.include_router(community_router)
     app.include_router(review_router)
+    app.include_router(summary_router)
 
     @app.get("/health")
     def health() -> dict:

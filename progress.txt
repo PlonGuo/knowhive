@@ -134,7 +134,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 
 ### 4E. AI Review Summaries
 [x] Task 73: Summary generation service (LLM summarization, DB caching)
-[ ] Task 74: Summary DB table + API router (GET/POST /summary/file, /summary/topic, /summary/batch)
+[x] Task 74: Summary DB table + API router (GET/POST /summary/file, /summary/topic, /summary/batch)
 [ ] Task 75: Review page + AI summaries integration (Show AI Summary button)
 [ ] Task 76: Knowledge overview with summaries (document list + summaries)
 
