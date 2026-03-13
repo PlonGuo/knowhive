@@ -63,6 +63,30 @@ class CommunityService:
         self._cache_time = now
         return self._cached_manifest
 
+    async def import_pack(self, pack: ContentPack) -> dict[str, Any]:
+        """Download all files in a pack to knowledge/{pack.id}/. Returns status dict."""
+        pack_dir = self._knowledge_dir / pack.id
+
+        # Check if already imported (dir exists and is non-empty)
+        if pack_dir.exists() and any(pack_dir.iterdir()):
+            return {"status": "already_imported", "pack_id": pack.id}
+
+        pack_dir.mkdir(parents=True, exist_ok=True)
+
+        # Fetch file listing
+        pack_files = await self.fetch_pack_files(pack)
+
+        # Download each file
+        base = self._manifest_url.rsplit("/manifest.json", 1)[0]
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for pack_file in pack_files:
+                file_url = f"{base}/{pack_file.path}"
+                resp = await client.get(file_url)
+                resp.raise_for_status()
+                (pack_dir / pack_file.filename).write_bytes(resp.content)
+
+        return {"status": "imported", "pack_id": pack.id, "file_count": len(pack_files)}
+
     async def fetch_pack_files(self, pack: ContentPack) -> list[PackFile]:
         """Fetch the file listing for a content pack."""
         # files.json is at {pack.path}/files.json in the community repo
