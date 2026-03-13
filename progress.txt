@@ -123,7 +123,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 60: Community manifest schema + fetch service (httpx, cache TTL)
 [x] Task 61: Community import service (download pack to knowledge/)
 [x] Task 62: Community API router (GET /community/packs, POST /community/import)
-[ ] Task 63: Frontend community browser (pack cards, import, search/filter)
+[x] Task 63: Frontend community browser (pack cards, import, search/filter)
 
 ### 4D. Spaced Repetition
 [ ] Task 68: review_items DB table + models (SM-2 fields, ReviewQuality enum)
