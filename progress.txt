@@ -84,7 +84,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 42: Frontend — Anthropic option in Settings page
 
 ### 3D. File Editor
-[ ] Task 43: PUT /knowledge/file/content endpoint (save + re-ingest)
+[x] Task 43: PUT /knowledge/file/content endpoint (save + re-ingest)
 [ ] Task 44: Frontend MarkdownEditor component (textarea + Save/Cancel)
 [ ] Task 45: Wire FileTree click to editor view
 
@@ -143,3 +143,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 38 complete: Updated Electron file picker filter to accept .md + .pdf (was .md only); added 2 backend tests (resync includes PDF, ingest PDF via API) and 1 frontend test (PDF import alongside Markdown); all 13 ingest API tests pass, all 11 import flow tests pass; tsc clean.
 2026-03-13 — Task 39 complete: Added ANTHROPIC to LLMProvider enum in config.py; updated config router test-llm endpoint with Anthropic branch (x-api-key header, /v1/models endpoint); default base_url https://api.anthropic.com; 4 new tests (anthropic model, enum value, PUT config anthropic, test-llm anthropic with header verification); all 192 backend tests pass (1 pre-existing config test isolation failure).
 2026-03-13 — Task 42 complete: Added 'anthropic' to AppConfig llm_provider type union, added "Anthropic Claude" option to provider dropdown, API key field now shows for both openai-compatible and anthropic providers; 4 new tests (anthropic option exists, API key shown on load, API key shown on switch, label text); all 110 frontend tests pass; tsc clean.
+2026-03-13 — Task 43 complete: PUT /knowledge/file/content endpoint — SaveContentRequest model (path, content), path traversal protection, disk write + re-ingest via IngestService.ingest_file(); 10 new tests (200, response body, disk write, nested, 404, traversal, absolute, directory blocked, re-ingest Chroma, DB update); all 50 knowledge tests pass.

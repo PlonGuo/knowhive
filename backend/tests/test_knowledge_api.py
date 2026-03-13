@@ -1,4 +1,4 @@
-"""Tests for knowledge API endpoints — GET /knowledge/tree, GET /knowledge/file, DELETE /knowledge/file."""
+"""Tests for knowledge API endpoints — GET /knowledge/tree, GET /knowledge/file, PUT /knowledge/file/content, DELETE /knowledge/file."""
 from pathlib import Path
 
 import pytest
@@ -476,3 +476,129 @@ async def test_rename_updates_chroma_metadata(client, knowledge_dir, ingest_serv
     # New path chunks should exist
     results = ingest_service.collection.get(where={"file_path": new_path_str})
     assert len(results["ids"]) > 0
+
+
+# ── PUT /knowledge/file/content (save + re-ingest) ───────────────
+
+
+def test_save_content_returns_200(client, knowledge_dir):
+    """PUT /knowledge/file/content should save content and return 200."""
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "readme.md", "content": "# Updated Readme\n\nNew content.\n"},
+    )
+    assert resp.status_code == 200
+
+
+def test_save_content_response_body(client, knowledge_dir):
+    """Response should include path and status."""
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "readme.md", "content": "# Updated\n"},
+    )
+    data = resp.json()
+    assert data["path"] == "readme.md"
+    assert data["status"] == "saved"
+
+
+def test_save_content_writes_to_disk(client, knowledge_dir):
+    """Content should be written to the file on disk."""
+    new_content = "# Brand New Content\n\nHello world.\n"
+    client.put(
+        "/knowledge/file/content",
+        json={"path": "readme.md", "content": new_content},
+    )
+    assert (knowledge_dir / "readme.md").read_text(encoding="utf-8") == new_content
+
+
+def test_save_content_nested_file(client, knowledge_dir):
+    """PUT should work for files in subdirectories."""
+    new_content = "# Updated Guide\n"
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "guides/getting-started.md", "content": new_content},
+    )
+    assert resp.status_code == 200
+    assert (knowledge_dir / "guides" / "getting-started.md").read_text(encoding="utf-8") == new_content
+
+
+def test_save_content_not_found(client):
+    """PUT for nonexistent file should return 404."""
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "nonexistent.md", "content": "whatever"},
+    )
+    assert resp.status_code == 404
+
+
+def test_save_content_path_traversal_blocked(client):
+    """PUT with path traversal should be blocked."""
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "../../../etc/passwd", "content": "evil"},
+    )
+    assert resp.status_code == 400
+
+
+def test_save_content_absolute_path_blocked(client):
+    """PUT with absolute path should be blocked."""
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "/etc/passwd", "content": "evil"},
+    )
+    assert resp.status_code == 400
+
+
+def test_save_content_directory_blocked(client):
+    """PUT should not allow saving content to directories."""
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "guides", "content": "evil"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_save_content_re_ingests(client, knowledge_dir, ingest_service):
+    """PUT /knowledge/file/content should re-ingest the file (update Chroma chunks)."""
+    file_path = knowledge_dir / "readme.md"
+    # Ingest original content
+    await ingest_service.ingest_file(file_path, knowledge_dir)
+    old_results = ingest_service.collection.get(where={"file_path": str(file_path)})
+    old_ids = set(old_results["ids"])
+    assert len(old_ids) > 0
+
+    # Save new content via API
+    new_content = "# Completely Different\n\nThis is entirely new text for re-ingestion testing.\n"
+    resp = client.put(
+        "/knowledge/file/content",
+        json={"path": "readme.md", "content": new_content},
+    )
+    assert resp.status_code == 200
+
+    # Chunks should have been replaced (old IDs gone, new ones present)
+    new_results = ingest_service.collection.get(where={"file_path": str(file_path)})
+    new_ids = set(new_results["ids"])
+    assert len(new_ids) > 0
+    assert old_ids != new_ids
+
+
+@pytest.mark.asyncio
+async def test_save_content_updates_db(client, knowledge_dir, ingest_service):
+    """PUT /knowledge/file/content should update the DB document record."""
+    file_path = knowledge_dir / "readme.md"
+    await ingest_service.ingest_file(file_path, knowledge_dir)
+
+    # Save new content
+    client.put(
+        "/knowledge/file/content",
+        json={"path": "readme.md", "content": "# New\n\nUpdated.\n"},
+    )
+
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT status FROM documents WHERE file_path = ?", (str(file_path),)
+        )
+        row = await cursor.fetchone()
+        assert row is not None
+        assert row["status"] == "indexed"

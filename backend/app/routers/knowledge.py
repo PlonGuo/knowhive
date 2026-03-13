@@ -113,9 +113,38 @@ def knowledge_file(path: str = Query(..., description="Relative path within know
     }
 
 
+class SaveContentRequest(BaseModel):
+    path: str
+    content: str
+
+
 class RenameRequest(BaseModel):
     old_path: str
     new_path: str
+
+
+@router.put("/knowledge/file/content")
+async def save_knowledge_file_content(req: SaveContentRequest) -> dict:
+    """Save content to a file in the knowledge directory and re-ingest it."""
+    resolved = _resolve_safe_path(req.path)
+
+    if resolved.exists() and resolved.is_dir():
+        raise HTTPException(status_code=400, detail="Cannot save content to directories")
+
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Write content to disk
+    resolved.write_text(req.content, encoding="utf-8")
+
+    # Re-ingest the file
+    if _ingest_service is not None:
+        root = _get_knowledge_path()
+        await _ingest_service.ingest_file(resolved, root)
+
+    logger.info("Saved content to knowledge file: %s", req.path)
+
+    return {"path": req.path, "status": "saved"}
 
 
 @router.put("/knowledge/file")
