@@ -114,7 +114,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 59: Frontend embedding download UI (SettingsPage progress bar)
 
 ### 4C. Data Export
-[ ] Task 64: Export service (ZIP: knowledge + chat_history.json + config.yaml)
+[x] Task 64: Export service (ZIP: knowledge + chat_history.json + config.yaml)
 [ ] Task 65: Export API router (POST /export/full, /export/chat, /export/file)
 [ ] Task 66: Frontend export IPC (Electron save dialog)
 [ ] Task 67: Frontend export UI (SettingsPage Data Management section)
@@ -194,3 +194,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 57 complete: IngestService accepts optional embedding_function param (passed to get_or_create_collection if not None); main.py lifespan creates EmbeddingService, calls get_embedding_function(config.embedding_language), passes to IngestService, mounts embedding_router; 9 new tests (IngestService ef param, Chroma passthrough, None skipped, lifespan integration x3, config-aware ef, backward compat ingest); 314/315 backend tests pass.
 2026-03-13 — Task 58 complete: EmbeddingService.reembed_all(new_language, ingest_service, knowledge_dir, embedding_function) re-ingests all files; config router PUT /config detects embedding_language change, triggers background reembed_all(), returns reembedding=true; init_reembed_dependencies(ingest_service, embedding_service, knowledge_dir) registered in main.py lifespan; 6 new tests (reembed_all behavior x2, no reembed when unchanged, triggers on change, response flag, graceful when no deps); 320/321 backend tests pass.
 2026-03-13 — Task 59 complete: SettingsPage embeds GET /embedding/models fetch on mount, shows model name+size for selected language, Download button (POST /embedding/download) when not downloaded, Ready indicator when downloaded, progress bar polling (GET /embedding/status?language=) while downloading, warning on save if model not downloaded; IngestService fallback on Chroma EF conflict (graceful backward compat); 10 new frontend tests; all 156 frontend + 320/321 backend tests pass; tsc clean.
+2026-03-13 — Task 64 complete: app/services/export_service.py with ExportService class — export_chat_history() (SELECT all chat_messages ordered by created_at, return list of dicts), export_full() (in-memory ZIP with knowledge/ tree, config.yaml, chat_history.json); zipfile.ZIP_DEFLATED; 9 new tests; 329/330 backend tests pass.
