@@ -250,6 +250,62 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
     )
   }
 
-  // Step 3 rendered by Task 85; placeholder
-  return <div data-testid="onboarding-step3" />
+  if (step === 3) {
+    const handleFinish = async () => {
+      try {
+        await fetch(`${backendUrl}/setup/complete`, { method: 'POST' })
+      } catch {
+        // proceed anyway
+      }
+      onComplete()
+    }
+
+    return (
+      <div data-testid="onboarding-step3" className="flex flex-1 flex-col items-center justify-center gap-6 p-12">
+        <div className="flex items-center justify-center w-16 h-16 rounded-full bg-green-100">
+          <span className="text-green-600 text-3xl font-bold">✓</span>
+        </div>
+        <h1 className="text-2xl font-bold">All Set!</h1>
+        <p className="text-gray-500 text-center max-w-sm">
+          KnowHive is ready. You can always change these settings later.
+        </p>
+
+        <div
+          data-testid="onboarding-summary"
+          className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-2 text-sm text-gray-700"
+        >
+          <div className="flex justify-between">
+            <span className="text-gray-500">Python</span>
+            <span>{status?.python_ok ? '✓ OK' : '✗ Missing'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">uv</span>
+            <span>{status?.uv_ok ? '✓ OK' : '✗ Missing'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Ollama</span>
+            <span>{status?.ollama_ok ? '✓ Detected' : '— Not detected'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">LLM Provider</span>
+            <span>{config.llm_provider}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Model</span>
+            <span>{config.model_name}</span>
+          </div>
+        </div>
+
+        <button
+          data-testid="onboarding-finish-btn"
+          onClick={handleFinish}
+          className="rounded-md bg-blue-600 px-8 py-2 text-white font-medium"
+        >
+          Get Started
+        </button>
+      </div>
+    )
+  }
+
+  return null
 }

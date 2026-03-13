@@ -152,7 +152,7 @@ Plan: ~/.claude/plans/tender-hatching-hopcroft.md
 [x] Task 82: Backend AppConfig.first_run_complete field + POST /setup/complete endpoint
 [x] Task 83: Frontend OnboardingPage Step 1 — dependency check UI
 [x] Task 84: Frontend OnboardingPage Step 2 — LLM configuration
-[ ] Task 85: Frontend OnboardingPage Step 3 — ready + POST /setup/complete call
+[x] Task 85: Frontend OnboardingPage Step 3 — ready + POST /setup/complete call
 [ ] Task 86: Wire OnboardingPage into App.tsx + AppLayout.tsx
 
 ### 5C. Documentation
@@ -221,3 +221,4 @@ Plan: ~/.claude/plans/tender-hatching-hopcroft.md
 2026-03-13 — Task 67 complete: SettingsPage Data Management section with Export All (POST /export/full → blob → URL.createObjectURL → anchor download + saveFile IPC) and Export Chat (POST /export/chat → JSON blob download) buttons; exportStatus feedback message; 7 new frontend tests; all 172 frontend tests pass; tsc clean.
 2026-03-13 — Task 60 complete: app/services/community_service.py — ContentPack/CommunityManifest/PackFile Pydantic models; CommunityService with fetch_manifest() (httpx GET, 5-min TTL cache via monotonic time), fetch_pack_files(pack) (fetches pack.path/files.json); 7 new tests (models, fetch+parse, TTL cache hit/miss, pack files); 347/348 backend tests pass.
 2026-03-13 — Task 84 complete: OnboardingPage Step 2 — LLM config form with provider selector (ollama/openai-compatible/anthropic), model name, base URL, API key (conditional), Test Connection button with success/error feedback, Next saves config via PUT /config and advances to Step 3 placeholder; 11 new tests; all 254 frontend+electron tests pass; tsc clean.
+2026-03-13 — Task 85 complete: OnboardingPage Step 3 — ready screen with green checkmark, All Set! heading, setup summary card (python/uv/ollama status + LLM provider/model), Get Started button calls POST /setup/complete then onComplete(); 6 new tests; all 260 tests pass; tsc clean.
