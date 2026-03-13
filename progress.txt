@@ -91,7 +91,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 ### 3E. File Watcher
 [x] Task 46: watchdog dependency + FileWatcher service (debounce, extension filter)
 [x] Task 47: FileWatcher + IngestService integration (async bridge)
-[ ] Task 48: Lifespan integration + watcher API (GET /watcher/status, POST /watcher/toggle)
+[x] Task 48: Lifespan integration + watcher API (GET /watcher/status, POST /watcher/toggle)
 [ ] Task 49: Frontend watcher status indicator in StatusBar
 
 ### 3F. LLM Dynamic Switch UI

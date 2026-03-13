@@ -23,9 +23,12 @@ from app.routers.ingest import init_ingest_router
 from app.routers.ingest import router as ingest_router
 from app.routers.knowledge import init_knowledge_router
 from app.routers.knowledge import router as knowledge_router
+from app.routers.watcher import init_watcher_router
+from app.routers.watcher import router as watcher_router
 from app.services.ingest_service import IngestService
 from app.services.rag_service import RAGService
 from app.services.sync_service import SyncService
+from app.services.watcher_bridge import WatcherBridge
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +67,9 @@ def create_app(
         init_knowledge_router(knowledge_dir=_knowledge_dir, ingest_service=ingest_service)
         init_chat_router(rag_service=rag_service, config_path=_config_path)
 
-        # Run startup sync
+        # Run startup sync + start file watcher
         knowledge_path = Path(_knowledge_dir)
+        watcher_bridge = None
         if knowledge_path.exists():
             sync_service = SyncService(ingest_service, knowledge_path)
             try:
@@ -77,10 +81,19 @@ def create_app(
             except Exception:
                 logger.exception("Startup sync failed")
 
+            # Start file watcher
+            watcher_bridge = WatcherBridge(sync_service, knowledge_path)
+            init_watcher_router(watcher_bridge)
+            watcher_bridge.start()
+            logger.info("FileWatcher started")
+
         logger.info("KnowHive backend ready")
         yield
 
         # ── Shutdown ─────────────────────────────────────────
+        if watcher_bridge is not None:
+            watcher_bridge.stop()
+            logger.info("FileWatcher stopped")
         await close_db()
         logger.info("KnowHive backend shut down")
 
@@ -90,6 +103,7 @@ def create_app(
     app.include_router(ingest_router)
     app.include_router(knowledge_router)
     app.include_router(chat_router)
+    app.include_router(watcher_router)
 
     @app.get("/health")
     def health() -> dict:
