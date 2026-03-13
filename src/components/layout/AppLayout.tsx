@@ -13,7 +13,7 @@ interface AppLayoutProps {
 }
 
 export default function AppLayout({ health, error, backendUrl }: AppLayoutProps) {
-  const [view, setView] = useState<'chat' | 'settings' | 'editor' | 'community'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'editor' | 'community' | 'review'>('chat')
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
   const [configVersion, setConfigVersion] = useState(0)
 
@@ -51,7 +51,7 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
           <ChatArea backendUrl={backendUrl} />
         )}
       </div>
-      <StatusBar health={health} error={error} backendUrl={backendUrl} configVersion={configVersion} />
+      <StatusBar health={health} error={error} backendUrl={backendUrl} configVersion={configVersion} onReviewClick={() => setView("review")} />
     </div>
   )
 }

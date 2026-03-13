@@ -15,11 +15,13 @@ interface StatusBarProps {
   error: string | null
   backendUrl?: string
   configVersion?: number
+  onReviewClick?: () => void
 }
 
-export default function StatusBar({ health, error, backendUrl, configVersion }: StatusBarProps) {
+export default function StatusBar({ health, error, backendUrl, configVersion, onReviewClick }: StatusBarProps) {
   const [watcher, setWatcher] = useState<WatcherStatus | null>(null)
   const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null)
+  const [dueCount, setDueCount] = useState<number>(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchWatcherStatus = async () => {
@@ -52,6 +54,19 @@ export default function StatusBar({ health, error, backendUrl, configVersion }: 
     }
   }
 
+  const fetchDueCount = async () => {
+    if (!backendUrl) return
+    try {
+      const res = await fetch(`${backendUrl}/review/stats`)
+      if (res.ok) {
+        const data = await res.json()
+        setDueCount(data.due_today ?? 0)
+      }
+    } catch {
+      // silently ignore
+    }
+  }
+
   const fetchLlmConfig = async () => {
     if (!backendUrl) return
     try {
@@ -69,6 +84,7 @@ export default function StatusBar({ health, error, backendUrl, configVersion }: 
     if (!backendUrl) return
     fetchWatcherStatus()
     fetchLlmConfig()
+    fetchDueCount()
     intervalRef.current = setInterval(fetchWatcherStatus, 10_000)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
@@ -118,6 +134,15 @@ export default function StatusBar({ health, error, backendUrl, configVersion }: 
         <span data-testid="llm-indicator" className="text-xs text-muted-foreground">
           {llmConfig.llm_provider} / {llmConfig.model_name}
         </span>
+      )}
+      {dueCount > 0 && (
+        <button
+          data-testid="review-badge"
+          onClick={onReviewClick}
+          className="rounded-full bg-orange-500 px-2 py-0.5 text-xs font-medium text-white hover:bg-orange-600 cursor-pointer"
+        >
+          {dueCount}
+        </button>
       )}
       {watcherLabel && (
         <button
