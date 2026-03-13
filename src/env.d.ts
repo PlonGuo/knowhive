@@ -5,5 +5,6 @@ interface Window {
     getBackendUrl: () => Promise<string>
     getSidecarStatus: () => Promise<string>
     selectFiles: () => Promise<string[]>
+    saveFile: (defaultName: string) => Promise<string | null>
   }
 }

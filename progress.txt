@@ -116,7 +116,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 ### 4C. Data Export
 [x] Task 64: Export service (ZIP: knowledge + chat_history.json + config.yaml)
 [x] Task 65: Export API router (POST /export/full, /export/chat, /export/file)
-[ ] Task 66: Frontend export IPC (Electron save dialog)
+[x] Task 66: Frontend export IPC (Electron save dialog)
 [ ] Task 67: Frontend export UI (SettingsPage Data Management section)
 
 ### 4B. Community Content
@@ -196,3 +196,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 59 complete: SettingsPage embeds GET /embedding/models fetch on mount, shows model name+size for selected language, Download button (POST /embedding/download) when not downloaded, Ready indicator when downloaded, progress bar polling (GET /embedding/status?language=) while downloading, warning on save if model not downloaded; IngestService fallback on Chroma EF conflict (graceful backward compat); 10 new frontend tests; all 156 frontend + 320/321 backend tests pass; tsc clean.
 2026-03-13 — Task 64 complete: app/services/export_service.py with ExportService class — export_chat_history() (SELECT all chat_messages ordered by created_at, return list of dicts), export_full() (in-memory ZIP with knowledge/ tree, config.yaml, chat_history.json); zipfile.ZIP_DEFLATED; 9 new tests; 329/330 backend tests pass.
 2026-03-13 — Task 65 complete: app/routers/export.py with POST /export/full (StreamingResponse ZIP, Content-Disposition attachment), POST /export/chat (JSONResponse list), POST /export/file (path traversal protection, 404/400/503); init_export_router + _reset_export_router; main.py mounts ExportService + export_router; 11 new tests; 340/341 backend tests pass.
+2026-03-13 — Task 66 complete: preload.ts saveFile(defaultName) ipcRenderer.invoke('save-file', defaultName) → Promise<string|null>; main.ts 'save-file' handler dialog.showSaveDialog, returns null on cancel; env.d.ts Window.api type updated; 9 new tests (static source checks); all 165 frontend tests pass; tsc clean.

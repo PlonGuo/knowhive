@@ -38,6 +38,13 @@ function registerIpcHandlers(): void {
     })
     return result.canceled ? [] : result.filePaths
   })
+  ipcMain.handle('save-file', async (_event, defaultName: string) => {
+    const win = BrowserWindow.getFocusedWindow()
+    const result = await dialog.showSaveDialog(win!, {
+      defaultPath: defaultName,
+    })
+    return result.canceled ? null : result.filePath ?? null
+  })
 }
 
 async function startSidecar(): Promise<void> {
