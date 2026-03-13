@@ -10,11 +10,17 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const backendUrl = window.api?.getBackendUrl?.() ?? 'http://127.0.0.1:8000'
-    fetch(`${backendUrl}/health`)
-      .then((r) => r.json())
-      .then((data: HealthStatus) => setHealth(data))
-      .catch((e: Error) => setError(e.message))
+    const fetchHealth = async () => {
+      try {
+        const backendUrl = await window.api?.getBackendUrl?.() ?? 'http://127.0.0.1:8000'
+        const res = await fetch(`${backendUrl}/health`)
+        const data: HealthStatus = await res.json()
+        setHealth(data)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    }
+    fetchHealth()
   }, [])
 
   return (

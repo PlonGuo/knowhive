@@ -2,6 +2,7 @@
 
 interface Window {
   api: {
-    getBackendUrl: () => string
+    getBackendUrl: () => Promise<string>
+    getSidecarStatus: () => Promise<string>
   }
 }

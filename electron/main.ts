@@ -1,5 +1,9 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { SidecarManager } from './sidecar'
+
+let sidecar: SidecarManager | null = null
+let backendUrl = ''
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -23,7 +27,24 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+function registerIpcHandlers(): void {
+  ipcMain.handle('get-backend-url', () => backendUrl)
+  ipcMain.handle('get-sidecar-status', () => sidecar?.state.status ?? 'stopped')
+}
+
+async function startSidecar(): Promise<void> {
+  sidecar = new SidecarManager()
+  try {
+    const port = await sidecar.start()
+    backendUrl = `http://127.0.0.1:${port}`
+  } catch (err) {
+    console.error('Failed to start FastAPI sidecar:', err)
+  }
+}
+
+app.whenReady().then(async () => {
+  registerIpcHandlers()
+  await startSidecar()
   createWindow()
 
   app.on('activate', () => {
@@ -33,4 +54,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', async () => {
+  await sidecar?.stop()
 })
