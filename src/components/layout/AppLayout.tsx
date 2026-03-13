@@ -5,6 +5,7 @@ import StatusBar from './StatusBar'
 import SettingsPage from '../settings/SettingsPage'
 import MarkdownEditor from '../knowledge/MarkdownEditor'
 import CommunityBrowser from '../community/CommunityBrowser'
+import ReviewPage from '../review/ReviewPage'
 
 interface AppLayoutProps {
   health: { status: string; version: string } | null
@@ -41,6 +42,8 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
           <SettingsPage backendUrl={backendUrl} onBack={() => setView('chat')} onConfigSaved={() => setConfigVersion((v) => v + 1)} />
         ) : view === 'community' ? (
           <CommunityBrowser backendUrl={backendUrl} onBack={() => setView('chat')} />
+        ) : view === 'review' ? (
+          <ReviewPage backendUrl={backendUrl} onBack={() => setView('chat')} />
         ) : view === 'editor' && selectedFilePath ? (
           <MarkdownEditor
             backendUrl={backendUrl}
