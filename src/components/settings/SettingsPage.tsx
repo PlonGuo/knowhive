@@ -50,6 +50,8 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   const [downloadStatus, setDownloadStatus] = useState<EmbeddingStatus | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [showEmbeddingWarning, setShowEmbeddingWarning] = useState(false)
+  const [exportStatus, setExportStatus] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -136,6 +138,55 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
       onConfigSaved?.()
     } catch {
       setSaveMessage('Failed to save settings')
+    }
+  }
+
+  const handleExportAll = async () => {
+    setExportStatus(null)
+    setExporting(true)
+    try {
+      const res = await fetch(`${backendUrl}/export/full`, { method: 'POST' })
+      const blob = await res.blob()
+      const defaultName = `knowhive-export-${new Date().toISOString().slice(0, 10)}.zip`
+      const savePath = await window.api?.saveFile?.(defaultName)
+      if (savePath) {
+        // In Electron, trigger download via anchor
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = defaultName
+        a.click()
+        URL.revokeObjectURL(url)
+        setExportStatus('Export saved')
+      } else {
+        setExportStatus('Export cancelled')
+      }
+    } catch {
+      setExportStatus('Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportChat = async () => {
+    setExportStatus(null)
+    setExporting(true)
+    try {
+      const res = await fetch(`${backendUrl}/export/chat`, { method: 'POST' })
+      const data = await res.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const defaultName = `knowhive-chat-${new Date().toISOString().slice(0, 10)}.json`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = defaultName
+      a.click()
+      URL.revokeObjectURL(url)
+      setExportStatus('Chat history exported')
+    } catch {
+      setExportStatus('Export failed')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -313,6 +364,34 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
               Warning: The selected embedding model is not downloaded. Ingestion may fail.
             </p>
           )}
+
+          {/* Data Management */}
+          <div data-testid="data-management-section" className="rounded-md border p-3 space-y-2">
+            <h3 className="text-sm font-medium text-foreground">Data Management</h3>
+            <div className="flex gap-2">
+              <button
+                data-testid="export-all-button"
+                onClick={handleExportAll}
+                disabled={exporting}
+                className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+              >
+                {exporting ? 'Exporting...' : 'Export All'}
+              </button>
+              <button
+                data-testid="export-chat-button"
+                onClick={handleExportChat}
+                disabled={exporting}
+                className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+              >
+                Export Chat
+              </button>
+            </div>
+            {exportStatus && (
+              <p data-testid="export-status" className="text-xs text-muted-foreground">
+                {exportStatus}
+              </p>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">
