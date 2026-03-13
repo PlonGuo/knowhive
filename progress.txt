@@ -33,7 +33,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 [x] Task 14: pnpm dev:all script (Vite + uvicorn + Electron in parallel)
 
 ### 1E. Packaging
-[ ] Task 15: electron-builder.yml configuration
+[x] Task 15: electron-builder.yml configuration
 [ ] Task 16: build-backend.sh script (python-build-standalone + uv sync)
 [ ] Task 17: Sidecar packaged mode (extraResources paths, .app size < 500MB)
 
@@ -50,3 +50,4 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 2026-03-12 — Task 12 complete: preload.ts uses ipcRenderer.invoke for getBackendUrl/getSidecarStatus; main.ts registers ipcMain.handle, integrates SidecarManager, starts sidecar before window; App.tsx updated for async API; tsc clean, 9 tests pass.
 2026-03-12 — Task 13 complete: App.tsx already calls /health via IPC bridge and displays status/error; added vitest.config.ts with React plugin + jsdom; 5 component tests (loading, success, error, fallback URL, UI elements); all 14 tests pass; tsc clean.
 2026-03-12 — Task 14 complete: Fixed dev:all script to use electron-vite dev + standalone uvicorn with --reload; added BACKEND_URL env var support to main.ts (skips sidecar when set); wait-on ensures backend health before Electron starts; 10 new tests; all 19 tests pass; tsc clean.
+2026-03-12 — Task 15 complete: electron-builder.yml already configured with extraResources (python/ + backend/), macOS dmg target (arm64+x64), hardened runtime, entitlements; created build/entitlements.mac.plist with JIT, network, file access; 9 builder-config tests; pnpm build:dry validates successfully; all 33 tests pass.
