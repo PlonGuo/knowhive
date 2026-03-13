@@ -92,7 +92,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 46: watchdog dependency + FileWatcher service (debounce, extension filter)
 [x] Task 47: FileWatcher + IngestService integration (async bridge)
 [x] Task 48: Lifespan integration + watcher API (GET /watcher/status, POST /watcher/toggle)
-[ ] Task 49: Frontend watcher status indicator in StatusBar
+[x] Task 49: Frontend watcher status indicator in StatusBar
 
 ### 3F. LLM Dynamic Switch UI
 [ ] Task 50: StatusBar LLM display + hot-reload on settings save
@@ -147,3 +147,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 44 complete: MarkdownEditor component with textarea editor, Save (PUT /knowledge/file/content) and Cancel buttons, loading/error/saved feedback states, filename header display, content refetch on filePath change; 11 new tests; all 121 frontend tests pass; tsc clean.
 2026-03-13 — Task 45 complete: Wired FileTree click to MarkdownEditor view — AppLayout gains 'editor' view state + selectedFilePath, Sidebar passes onFileSelect/selectedPath, clicking file opens editor, Cancel returns to chat, settings still accessible; 7 new tests; all 128 frontend tests pass; tsc clean.
 2026-03-13 — Task 46 complete: Added watchdog>=4.0.0 to pyproject.toml; app/services/file_watcher.py with FileWatcher class — watchdog Observer, _DebouncedHandler (threading.Timer debounce, extension filter, asyncio bridge), start/stop/status, case-insensitive extension matching; 19 new tests (init, extension filter, start/stop, debounce coalescing, ignore non-watched, detect new/delete, status); all 19 pass.
+2026-03-13 — Task 49 complete: StatusBar watcher indicator — polls GET /watcher/status every 10s, displays "Watching"/"Watcher off"/"Syncing…" with color coding, click to toggle via POST /watcher/toggle; AppLayout passes backendUrl to StatusBar; 9 new tests; all 109 frontend tests pass; tsc clean.

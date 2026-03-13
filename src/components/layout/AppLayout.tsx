@@ -46,7 +46,7 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
           <ChatArea backendUrl={backendUrl} />
         )}
       </div>
-      <StatusBar health={health} error={error} />
+      <StatusBar health={health} error={error} backendUrl={backendUrl} />
     </div>
   )
 }
