@@ -8,7 +8,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
-    "dev:all": "concurrently -k -n vite,backend,electron \"vite\" \"cd backend && uv run uvicorn app.main:app --reload --port 8000\" \"wait-on tcp:5173 && electron .\"",
+    "dev:all": "concurrently -k -n backend,electron \"cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 18200\" \"wait-on http://127.0.0.1:18200/health && BACKEND_URL=http://127.0.0.1:18200 electron-vite dev\"",
     "build": "tsc --noEmit && electron-vite build",
     "build:dry": "electron-builder --config electron-builder.yml --dir --publish never",
     "preview": "electron-vite preview",

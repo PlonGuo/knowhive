@@ -30,7 +30,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 
 ### 1D. React Frontend (POC)
 [x] Task 13: Minimal React app calling /health and displaying result
-[ ] Task 14: pnpm dev:all script (Vite + uvicorn + Electron in parallel)
+[x] Task 14: pnpm dev:all script (Vite + uvicorn + Electron in parallel)
 
 ### 1E. Packaging
 [ ] Task 15: electron-builder.yml configuration
@@ -49,3 +49,4 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 2026-03-12 — Task 11 complete: electron/sidecar.ts SidecarManager class with spawn, /health polling, stdout/stderr logging to logs/electron.log, SIGTERM→SIGKILL shutdown, auto-restart (max 3); 5 tests pass (real subprocess integration tests).
 2026-03-12 — Task 12 complete: preload.ts uses ipcRenderer.invoke for getBackendUrl/getSidecarStatus; main.ts registers ipcMain.handle, integrates SidecarManager, starts sidecar before window; App.tsx updated for async API; tsc clean, 9 tests pass.
 2026-03-12 — Task 13 complete: App.tsx already calls /health via IPC bridge and displays status/error; added vitest.config.ts with React plugin + jsdom; 5 component tests (loading, success, error, fallback URL, UI elements); all 14 tests pass; tsc clean.
+2026-03-12 — Task 14 complete: Fixed dev:all script to use electron-vite dev + standalone uvicorn with --reload; added BACKEND_URL env var support to main.ts (skips sidecar when set); wait-on ensures backend health before Electron starts; 10 new tests; all 19 tests pass; tsc clean.

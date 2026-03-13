@@ -3,7 +3,7 @@ import { join } from 'path'
 import { SidecarManager } from './sidecar'
 
 let sidecar: SidecarManager | null = null
-let backendUrl = ''
+let backendUrl = process.env['BACKEND_URL'] ?? ''
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -33,6 +33,12 @@ function registerIpcHandlers(): void {
 }
 
 async function startSidecar(): Promise<void> {
+  // If BACKEND_URL is set (e.g. by dev:all script), skip sidecar management
+  if (backendUrl) {
+    console.log(`Using external backend at ${backendUrl} (sidecar disabled)`)
+    return
+  }
+
   sidecar = new SidecarManager()
   try {
     const port = await sidecar.start()
