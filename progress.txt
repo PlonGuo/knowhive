@@ -99,7 +99,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 
 ### 3G. RAGAs + Langfuse (dev-only)
 [x] Task 51: Add ragas/langfuse dev dependencies
-[ ] Task 52: RAGAs evaluation script (CLI tool)
+[x] Task 52: RAGAs evaluation script (CLI tool)
 [ ] Task 53: Langfuse tracing in RAGService (env var gated)
 
 === LOG ===
@@ -150,3 +150,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 49 complete: StatusBar watcher indicator — polls GET /watcher/status every 10s, displays "Watching"/"Watcher off"/"Syncing…" with color coding, click to toggle via POST /watcher/toggle; AppLayout passes backendUrl to StatusBar; 9 new tests; all 109 frontend tests pass; tsc clean.
 2026-03-13 — Task 50 complete: StatusBar LLM display — fetches GET /config on mount and shows "provider / model" indicator; hot-reload via configVersion prop (AppLayout increments on SettingsPage save, StatusBar refetches config); SettingsPage gains onConfigSaved callback; 7 new statusbar-llm tests + 2 new settings tests; all 118 frontend tests pass; tsc clean.
 2026-03-13 — Task 51 complete: Added ragas>=0.2.0 and langfuse>=2.0.0 to dev dependency-groups in pyproject.toml; uv sync installs ragas 0.4.3 + langfuse 4.0.0 with transitive deps (openai, pandas, pyarrow, tiktoken, etc.); 3 new import tests (ragas, langfuse, ragas.metrics); all 13 import tests pass; 255/256 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-13 — Task 52 complete: app/eval_ragas.py CLI tool — load JSON/JSONL eval datasets (question+ground_truth), run through RAG pipeline (retrieve+generate), build RAGAs SingleTurnSample objects, evaluate with faithfulness/answer_relevancy/context_precision/context_recall metrics, output JSON results; supports --config, --chroma-path, --output, --k flags; llm_factory wrapper for Ollama/OpenAI-compatible/Anthropic providers; 11 new tests (dataset loading, pipeline exec, sample building, CLI entry point); all 11 pass.
