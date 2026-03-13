@@ -46,7 +46,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 
 ### 2B. Ingest Pipeline
 [x] Task 21: Ingest service (Markdown load, text split, embed, Chroma store, dedup)
-[ ] Task 22: Ingest API endpoints (POST /ingest/files, GET /ingest/status, POST /ingest/resync)
+[x] Task 22: Ingest API endpoints (POST /ingest/files, GET /ingest/status, POST /ingest/resync)
 
 ### 2C. Knowledge & Chat
 [ ] Task 23: Knowledge API (GET /knowledge/tree, GET /knowledge/file)
@@ -86,3 +86,4 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 2026-03-12 — ARCHITECTURE DECISION: Switch from bundled Python (python-build-standalone) to system Python. Rationale: target users are developers who already need Ollama; bundling Python adds complexity (C extensions, size, cross-platform) without proportional benefit for an open-source dev tool. Task 16 obsolete, Tasks 15/17 need simplification. Skipping POC packaging validation — moving directly to Phase 2.
 2026-03-12 — Cleanup complete: deleted build-backend.sh + tests, deleted sidecar-packaged.test.ts, simplified sidecar.ts (removed extraResources/VIRTUAL_ENV/PYTHONPATH logic), simplified electron-builder.yml (removed extraResources), updated PRD + feature-requirements. tsc clean, 28/28 tests pass.
 2026-03-12 — Task 21 complete: app/services/ingest_service.py with IngestService class — find_markdown_files (recursive .md discovery), split_text (RecursiveCharacterTextSplitter chunk_size=1000 overlap=200), compute_file_hash (SHA-256), Chroma store/delete, ingest_file (full pipeline with DB upsert, dedup by hash, skip unchanged), ingest_directory; 15 new tests; all 74 tests pass.
+2026-03-12 — Task 22 complete: app/routers/ingest.py with POST /ingest/files (accept file paths, create ingest_tasks record, run ingestion, return task_id), GET /ingest/status/{id} (progress tracking), POST /ingest/resync (re-ingest all .md in knowledge dir); init_ingest_router() pattern; Pydantic request/response models; 11 new tests; all 85 tests pass.

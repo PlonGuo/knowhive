@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from app.logging_config import setup_logging
 from app.routers.config import init_config_router
 from app.routers.config import router as config_router
+from app.routers.ingest import router as ingest_router
 
 APP_VERSION = "0.1.0"
 
@@ -25,6 +26,7 @@ def create_app(config_path: Optional[Path] = None) -> FastAPI:
 
     init_config_router(config_path or DEFAULT_CONFIG_PATH)
     app.include_router(config_router)
+    app.include_router(ingest_router)
 
     @app.get("/health")
     def health() -> dict:
