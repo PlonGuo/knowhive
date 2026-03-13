@@ -25,7 +25,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 ### 1C. Electron Main Process
 [x] Task 9: Electron main process + BrowserWindow
 [x] Task 10: Dynamic port selection with get-port
-[ ] Task 11: FastAPI sidecar manager (spawn, health poll, logging, shutdown, auto-restart)
+[x] Task 11: FastAPI sidecar manager (spawn, health poll, logging, shutdown, auto-restart)
 [ ] Task 12: IPC bridge via preload.ts contextBridge
 
 ### 1D. React Frontend (POC)
@@ -46,3 +46,4 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 2026-03-12 — Task 8 complete: app/logging_config.py with TimedRotatingFileHandler (midnight rotation, 7-day retention), uvicorn log routing; 7 logging tests pass; backend/logs/ in .gitignore.
 2026-03-12 — Task 9 complete: electron/main.ts already implemented in Task 4 scaffold; BrowserWindow 1280x800, preload with contextIsolation, dev/prod URL loading. tsc clean.
 2026-03-12 — Task 10 complete: electron/port.ts with findSidecarPort() using get-port (range 18200-18300); vitest added; 4 tests pass.
+2026-03-12 — Task 11 complete: electron/sidecar.ts SidecarManager class with spawn, /health polling, stdout/stderr logging to logs/electron.log, SIGTERM→SIGKILL shutdown, auto-restart (max 3); 5 tests pass (real subprocess integration tests).
