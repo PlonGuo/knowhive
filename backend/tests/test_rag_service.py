@@ -42,6 +42,7 @@ def rag_service(mock_collection):
     """RAGService with mocked Chroma collection."""
     svc = RAGService.__new__(RAGService)
     svc._collection = mock_collection
+    svc._langfuse = None
     return svc
 
 

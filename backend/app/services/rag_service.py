@@ -1,6 +1,7 @@
 """RAG query service — Chroma retrieval, prompt assembly, LLM call."""
 import json
 import logging
+import os
 from typing import Any, AsyncGenerator
 
 import httpx
@@ -8,6 +9,12 @@ import httpx
 from app.config import AppConfig, LLMProvider
 
 logger = logging.getLogger(__name__)
+
+# Langfuse is optional — only used when env vars are set
+try:
+    from langfuse import Langfuse
+except ImportError:
+    Langfuse = None
 
 SYSTEM_PROMPT = (
     "You are a helpful AI assistant for a personal knowledge base. "
@@ -22,6 +29,22 @@ class RAGService:
 
     def __init__(self, collection: Any):
         self._collection = collection
+        self._langfuse = self._init_langfuse()
+
+    @staticmethod
+    def _init_langfuse():
+        """Initialize Langfuse client if env vars are set."""
+        if Langfuse is None:
+            return None
+        public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
+        secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+        if not public_key or not secret_key:
+            return None
+        try:
+            return Langfuse()
+        except Exception:
+            logger.warning("Failed to initialize Langfuse client", exc_info=True)
+            return None
 
     # ── Retrieval ─────────────────────────────────────────────
 
@@ -261,8 +284,66 @@ class RAGService:
         self, question: str, config: AppConfig, k: int = 5
     ) -> dict[str, Any]:
         """Full RAG pipeline: retrieve → build_prompt → call_llm → return answer + sources."""
+        trace = None
+        if self._langfuse:
+            try:
+                trace = self._langfuse.trace(
+                    name="rag-query",
+                    input=question,
+                    metadata={"k": k, "provider": config.llm_provider.value},
+                )
+            except Exception:
+                logger.warning("Langfuse trace creation failed", exc_info=True)
+
+        # Retrieval
+        retrieval_span = None
+        if trace:
+            try:
+                retrieval_span = trace.span(
+                    name="retrieval",
+                    input={"query": question, "k": k},
+                )
+            except Exception:
+                logger.warning("Langfuse retrieval span failed", exc_info=True)
+
         chunks = self.retrieve(question, k=k)
         sources = self.extract_sources(chunks)
+
+        if retrieval_span:
+            try:
+                retrieval_span.end(output={"num_chunks": len(chunks), "sources": sources})
+            except Exception:
+                logger.warning("Langfuse retrieval span end failed", exc_info=True)
+
+        # Prompt assembly
         messages = self.build_prompt(question, chunks)
+
+        # LLM call
+        generation = None
+        if trace:
+            try:
+                generation = trace.generation(
+                    name="llm-call",
+                    model=config.model_name,
+                    input=messages,
+                    metadata={"provider": config.llm_provider.value},
+                )
+            except Exception:
+                logger.warning("Langfuse generation creation failed", exc_info=True)
+
         answer = await self.call_llm(messages, config)
+
+        if generation:
+            try:
+                generation.end(output=answer)
+            except Exception:
+                logger.warning("Langfuse generation end failed", exc_info=True)
+
+        # Finalize trace
+        if trace:
+            try:
+                trace.update(output={"answer": answer, "sources": sources})
+            except Exception:
+                logger.warning("Langfuse trace update failed", exc_info=True)
+
         return {"answer": answer, "sources": sources}
