@@ -16,7 +16,10 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
   return (
     <div data-testid="app-layout" className="flex h-screen flex-col">
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar onSettingsClick={() => setView('settings')} />
+        <Sidebar
+          onSettingsClick={() => setView('settings')}
+          backendUrl={backendUrl}
+        />
         {view === 'settings' ? (
           <SettingsPage backendUrl={backendUrl} onBack={() => setView('chat')} />
         ) : (

@@ -9,14 +9,25 @@ describe('AppLayout', () => {
     Object.defineProperty(window, 'api', {
       value: {
         getBackendUrl: vi.fn().mockResolvedValue('http://127.0.0.1:18200'),
-        getSidecarStatus: vi.fn().mockResolvedValue('running')
+        getSidecarStatus: vi.fn().mockResolvedValue('running'),
+        selectFiles: vi.fn().mockResolvedValue([]),
       },
       writable: true,
       configurable: true
     })
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      json: () => Promise.resolve({ status: 'ok', version: '0.1.0' })
-    } as Response)
+    const sorted = Object.entries({
+      '/health': { status: 'ok', version: '0.1.0' },
+      '/knowledge/tree': { name: 'knowledge', path: '', type: 'directory', children: [] },
+    }).sort((a, b) => b[0].length - a[0].length)
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url
+      for (const [pattern, data] of sorted) {
+        if (url.includes(pattern)) {
+          return { ok: true, json: () => Promise.resolve(data) } as Response
+        }
+      }
+      return { ok: true, json: () => Promise.resolve({ status: 'ok', version: '0.1.0' }) } as Response
+    })
   })
 
   afterEach(() => {

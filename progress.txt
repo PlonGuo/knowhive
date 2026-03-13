@@ -57,7 +57,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 ### 2D. React Frontend
 [x] Task 27: App layout shell (sidebar + chat + status bar)
 [x] Task 28: Settings page (LLM config, embedding language, test connection)
-[ ] Task 29: File tree sidebar (knowledge/ browser, import button)
+[x] Task 29: File tree sidebar (knowledge/ browser, import button)
 [ ] Task 30: Chat interface (messages, input, SSE streaming, source citations)
 [ ] Task 31: Import flow (file picker, ingest API, progress bar)
 
@@ -93,3 +93,4 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 2026-03-12 — Task 26 complete: app/services/sync_service.py with SyncService class — scan knowledge/ dir, diff file_path+file_hash with SQLite documents table, new→ingest, modified→re-embed, deleted→remove from Chroma+DB; 9 new tests; all 136 tests pass.
 2026-03-12 — Task 27 complete: App layout shell with Sidebar (KnowHive branding, Knowledge placeholder, Settings button), ChatArea (placeholder), StatusBar (backend health status); AppLayout composes all three; App.tsx refactored to use layout; 9 new layout tests + 5 updated App tests; all 42 frontend tests pass; tsc clean.
 2026-03-13 — Task 28 complete: SettingsPage component with LLM provider selector (ollama/openai-compatible), model name, base URL, conditional API key input, embedding language selector, save button (PUT /config), test connection button (POST /config/test-llm) with success/error feedback; AppLayout toggles between ChatArea and SettingsPage via Sidebar settings button; fixed jsdom→happy-dom for component tests; 13 new settings tests; all 55 frontend tests pass; tsc clean.
+2026-03-13 — Task 29 complete: FileTree component with collapsible tree (fetches GET /knowledge/tree, expand/collapse dirs, file selection, selected highlight, refresh callback, error/empty states); Sidebar updated with FileTree integration + Import button (triggers IPC selectFiles → POST /ingest/files); AppLayout passes backendUrl to Sidebar; env.d.ts updated with selectFiles IPC type; 14 new tests (9 filetree + 5 sidebar-filetree); all 69 tests pass; tsc clean.
