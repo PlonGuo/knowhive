@@ -50,7 +50,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 
 ### 2C. Knowledge & Chat
 [x] Task 23: Knowledge API (GET /knowledge/tree, GET /knowledge/file)
-[ ] Task 24: RAG query service (Chroma retrieval + prompt assembly + LLM call)
+[x] Task 24: RAG query service (Chroma retrieval + prompt assembly + LLM call)
 [ ] Task 25: Chat API with SSE streaming (POST /chat, GET/DELETE /chat/history)
 [ ] Task 26: Startup sync service (scan knowledge/, diff with DB, re-embed changes)
 
@@ -88,3 +88,4 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 2026-03-12 — Task 21 complete: app/services/ingest_service.py with IngestService class — find_markdown_files (recursive .md discovery), split_text (RecursiveCharacterTextSplitter chunk_size=1000 overlap=200), compute_file_hash (SHA-256), Chroma store/delete, ingest_file (full pipeline with DB upsert, dedup by hash, skip unchanged), ingest_directory; 15 new tests; all 74 tests pass.
 2026-03-12 — Task 22 complete: app/routers/ingest.py with POST /ingest/files (accept file paths, create ingest_tasks record, run ingestion, return task_id), GET /ingest/status/{id} (progress tracking), POST /ingest/resync (re-ingest all .md in knowledge dir); init_ingest_router() pattern; Pydantic request/response models; 11 new tests; all 85 tests pass.
 2026-03-12 — Task 23 complete: app/routers/knowledge.py with GET /knowledge/tree (recursive file tree JSON, dirs-first sorting) and GET /knowledge/file?path= (read-only content with path traversal protection); init_knowledge_router() pattern; 15 new tests; all 100 tests pass.
+2026-03-12 — Task 24 complete: app/services/rag_service.py with RAGService class — retrieve() (Chroma top-k similarity search, default k=5), extract_sources() (unique file paths), build_prompt() (system prompt + context chunks + user question), call_llm() (Ollama /api/chat + OpenAI-compatible /chat/completions via httpx), query() (full pipeline); 15 new tests; all 115 tests pass.
