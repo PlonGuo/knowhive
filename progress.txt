@@ -102,6 +102,42 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 [x] Task 52: RAGAs evaluation script (CLI tool)
 [x] Task 53: Langfuse tracing in RAGService (env var gated)
 
+## Phase 4: Experience Optimization
+Plan: ~/.claude/plans/zany-percolating-key.md
+
+### 4A. Embedding Model Management
+[x] Task 54: EmbeddingService class with model registry
+[ ] Task 55: Embedding download with progress tracking
+[ ] Task 56: Embedding API router (GET /embedding/models, POST /embedding/download, GET /embedding/status)
+[ ] Task 57: Wire EmbeddingService into IngestService + lifespan
+[ ] Task 58: Re-embedding on model change (config PUT triggers re-index)
+[ ] Task 59: Frontend embedding download UI (SettingsPage progress bar)
+
+### 4C. Data Export
+[ ] Task 64: Export service (ZIP: knowledge + chat_history.json + config.yaml)
+[ ] Task 65: Export API router (POST /export/full, /export/chat, /export/file)
+[ ] Task 66: Frontend export IPC (Electron save dialog)
+[ ] Task 67: Frontend export UI (SettingsPage Data Management section)
+
+### 4B. Community Content
+[ ] Task 60: Community manifest schema + fetch service (httpx, cache TTL)
+[ ] Task 61: Community import service (download pack to knowledge/)
+[ ] Task 62: Community API router (GET /community/packs, POST /community/import)
+[ ] Task 63: Frontend community browser (pack cards, import, search/filter)
+
+### 4D. Spaced Repetition
+[ ] Task 68: review_items DB table + models (SM-2 fields, ReviewQuality enum)
+[ ] Task 69: SpacedRepetitionService (SM-2 algorithm, due items, record review)
+[ ] Task 70: Review API router (GET /review/due, POST /review/record, GET /review/stats)
+[ ] Task 71: Frontend review badge (StatusBar due count, click to review)
+[ ] Task 72: Frontend review page (card-flip, quality buttons, progress)
+
+### 4E. AI Review Summaries
+[ ] Task 73: Summary generation service (LLM summarization, DB caching)
+[ ] Task 74: Summary DB table + API router (GET/POST /summary/file, /summary/topic, /summary/batch)
+[ ] Task 75: Review page + AI summaries integration (Show AI Summary button)
+[ ] Task 76: Knowledge overview with summaries (document list + summaries)
+
 === LOG ===
 2026-03-12 — Task 18 complete: Added langchain-core, langchain-community, langchain-text-splitters, chromadb, sentence-transformers, aiosqlite, pyyaml, pytest-asyncio to pyproject.toml; uv sync installs 93 new packages; 7 new import tests; all 21 tests pass.
 2026-03-12 — Task 19 complete: app/database.py with async SQLite connection manager (aiosqlite), 3 tables (documents, chat_messages, ingest_tasks) matching PRD schema; app/models.py with Pydantic models + StrEnum types; 18 database tests; all 39 tests pass.
@@ -152,3 +188,4 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 2026-03-13 — Task 51 complete: Added ragas>=0.2.0 and langfuse>=2.0.0 to dev dependency-groups in pyproject.toml; uv sync installs ragas 0.4.3 + langfuse 4.0.0 with transitive deps (openai, pandas, pyarrow, tiktoken, etc.); 3 new import tests (ragas, langfuse, ragas.metrics); all 13 import tests pass; 255/256 backend tests pass (1 pre-existing config test isolation failure).
 2026-03-13 — Task 52 complete: app/eval_ragas.py CLI tool — load JSON/JSONL eval datasets (question+ground_truth), run through RAG pipeline (retrieve+generate), build RAGAs SingleTurnSample objects, evaluate with faithfulness/answer_relevancy/context_precision/context_recall metrics, output JSON results; supports --config, --chroma-path, --output, --k flags; llm_factory wrapper for Ollama/OpenAI-compatible/Anthropic providers; 11 new tests (dataset loading, pipeline exec, sample building, CLI entry point); all 11 pass.
 2026-03-13 — Task 53 complete: Langfuse tracing in RAGService gated by LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY env vars; optional import with graceful degradation if langfuse not installed; trace per query() with retrieval span (input query/k, output chunks/sources), generation span (model, messages, output), trace-level output update; all tracing wrapped in try/except so failures never break queries; 9 new tests; all 28 RAG+langfuse tests pass.
+2026-03-13 — Task 54 complete: app/services/embedding_service.py with MODEL_REGISTRY (english→all-MiniLM-L6-v2 80MB, chinese→text2vec-base-chinese 400MB, mixed→bge-m3 1.2GB), EmbeddingService class with get_available_models(), is_model_downloaded(), get_download_status(), get_embedding_function() returning chromadb SentenceTransformerEmbeddingFunction, in-memory _download_progress tracking; 12 new tests; 287/288 backend tests pass (1 pre-existing config test isolation failure).
