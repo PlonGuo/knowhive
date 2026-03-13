@@ -23,8 +23,8 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 [x] Task 8: File-based logging (logs/backend.log, daily rotation, 7-day retention)
 
 ### 1C. Electron Main Process
-[ ] Task 9: Electron main process + BrowserWindow
-[ ] Task 10: Dynamic port selection with get-port
+[x] Task 9: Electron main process + BrowserWindow
+[x] Task 10: Dynamic port selection with get-port
 [ ] Task 11: FastAPI sidecar manager (spawn, health poll, logging, shutdown, auto-restart)
 [ ] Task 12: IPC bridge via preload.ts contextBridge
 
@@ -44,3 +44,5 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 2026-03-12 — Task 5 complete: backend scaffold created. pyproject.toml with FastAPI 0.135.1, uvicorn, pydantic; uv sync passes; 3 import tests pass.
 2026-03-12 — Tasks 6+7 complete: app/main.py with create_app(), --port CLI arg, 127.0.0.1 binding, GET /health → {"status":"ok","version":"0.1.0"}; 4 tests pass; curl smoke test passes.
 2026-03-12 — Task 8 complete: app/logging_config.py with TimedRotatingFileHandler (midnight rotation, 7-day retention), uvicorn log routing; 7 logging tests pass; backend/logs/ in .gitignore.
+2026-03-12 — Task 9 complete: electron/main.ts already implemented in Task 4 scaffold; BrowserWindow 1280x800, preload with contextIsolation, dev/prod URL loading. tsc clean.
+2026-03-12 — Task 10 complete: electron/port.ts with findSidecarPort() using get-port (range 18200-18300); vitest added; 4 tests pass.

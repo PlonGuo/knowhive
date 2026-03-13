@@ -13,14 +13,19 @@
     "build:dry": "electron-builder --config electron-builder.yml --dir --publish never",
     "preview": "electron-vite preview",
     "lint": "eslint src electron --ext .ts,.tsx",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "get-port": "^7.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "esbuild"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
@@ -39,6 +44,7 @@
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.2",
     "vite": "^5.3.1",
+    "vitest": "^2.1.9",
     "wait-on": "^7.2.0"
   }
 }
