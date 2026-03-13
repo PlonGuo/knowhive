@@ -30,6 +30,9 @@ export default function ReviewPage({ backendUrl, onBack }: ReviewPageProps) {
   const [showAnswer, setShowAnswer] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [summaryVisible, setSummaryVisible] = useState(false)
 
   useEffect(() => {
     fetch(`${backendUrl}/review/due`)
@@ -56,7 +59,32 @@ export default function ReviewPage({ backendUrl, onBack }: ReviewPageProps) {
     } finally {
       setSubmitting(false)
       setShowAnswer(false)
+      setAiSummary(null)
+      setSummaryVisible(false)
       setCurrentIndex((i) => i + 1)
+    }
+  }
+
+  const handleShowSummary = async () => {
+    if (!currentItem) return
+    setSummaryVisible(true)
+    setLoadingSummary(true)
+    try {
+      const resp = await fetch(`${backendUrl}/summary/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_path: currentItem.file_path }),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        setAiSummary(data.summary)
+      } else {
+        setAiSummary('Summary not available for this file.')
+      }
+    } catch {
+      setAiSummary('Failed to load summary.')
+    } finally {
+      setLoadingSummary(false)
     }
   }
 
@@ -103,6 +131,19 @@ export default function ReviewPage({ backendUrl, onBack }: ReviewPageProps) {
                   <p className="text-base text-foreground">{currentItem.answer}</p>
                 </div>
               )}
+
+              {summaryVisible && (
+                <div className="mt-4 rounded-md bg-secondary/50 p-3">
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">AI Summary</p>
+                  {loadingSummary ? (
+                    <p className="text-sm text-muted-foreground">Loading summary...</p>
+                  ) : (
+                    <p data-testid="ai-summary" className="text-sm">
+                      {aiSummary}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Controls */}
@@ -116,27 +157,38 @@ export default function ReviewPage({ backendUrl, onBack }: ReviewPageProps) {
                   Show Answer
                 </button>
               ) : (
-                <div className="flex flex-wrap justify-center gap-2">
-                  {[0, 1, 2, 3, 4].map((q) => (
+                <>
+                  {!summaryVisible && (
                     <button
-                      key={q}
-                      data-testid={`quality-button-${q}`}
-                      onClick={() => handleQuality(q)}
-                      disabled={submitting}
-                      className={`rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 ${
-                        q <= 1
-                          ? 'bg-red-500 text-white hover:bg-red-600'
-                          : q === 2
-                          ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                          : q === 3
-                          ? 'bg-blue-500 text-white hover:bg-blue-600'
-                          : 'bg-green-500 text-white hover:bg-green-600'
-                      }`}
+                      data-testid="show-summary-button"
+                      onClick={handleShowSummary}
+                      className="text-xs text-muted-foreground hover:text-foreground hover:underline"
                     >
-                      {QUALITY_LABELS[q]}
+                      Show AI Summary
                     </button>
-                  ))}
-                </div>
+                  )}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {[0, 1, 2, 3, 4].map((q) => (
+                      <button
+                        key={q}
+                        data-testid={`quality-button-${q}`}
+                        onClick={() => handleQuality(q)}
+                        disabled={submitting}
+                        className={`rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 ${
+                          q <= 1
+                            ? 'bg-red-500 text-white hover:bg-red-600'
+                            : q === 2
+                            ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                            : q === 3
+                            ? 'bg-blue-500 text-white hover:bg-blue-600'
+                            : 'bg-green-500 text-white hover:bg-green-600'
+                        }`}
+                      >
+                        {QUALITY_LABELS[q]}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
