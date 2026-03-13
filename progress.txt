@@ -127,7 +127,7 @@ Plan: ~/.claude/plans/zany-percolating-key.md
 
 ### 4D. Spaced Repetition
 [x] Task 68: review_items DB table + models (SM-2 fields, ReviewQuality enum)
-[ ] Task 69: SpacedRepetitionService (SM-2 algorithm, due items, record review)
+[x] Task 69: SpacedRepetitionService (SM-2 algorithm, due items, record review)
 [ ] Task 70: Review API router (GET /review/due, POST /review/record, GET /review/stats)
 [ ] Task 71: Frontend review badge (StatusBar due count, click to review)
 [ ] Task 72: Frontend review page (card-flip, quality buttons, progress)
