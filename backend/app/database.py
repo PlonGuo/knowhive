@@ -40,6 +40,19 @@ CREATE TABLE IF NOT EXISTS ingest_tasks (
     created_at      TEXT DEFAULT (datetime('now')),
     completed_at    TEXT
 );
+
+CREATE TABLE IF NOT EXISTS review_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path       TEXT NOT NULL,
+    question        TEXT NOT NULL,
+    answer          TEXT NOT NULL,
+    repetitions     INTEGER DEFAULT 0,
+    easiness        REAL DEFAULT 2.5,
+    interval        INTEGER DEFAULT 1,
+    due_date        TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
 """
 
 

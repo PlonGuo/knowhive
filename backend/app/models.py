@@ -1,8 +1,9 @@
 """Pydantic models for KnowHive database entities."""
-from enum import StrEnum
+from datetime import date
+from enum import IntEnum, StrEnum
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── Enums ────────────────────────────────────────────────────────
@@ -86,3 +87,27 @@ class IngestTask(BaseModel):
     errors: Optional[str] = None
     created_at: str
     completed_at: Optional[str] = None
+
+
+# ── Spaced Repetition ─────────────────────────────────────────────────────────
+
+
+class ReviewQuality(IntEnum):
+    """SM-2 quality grades: 0=blackout … 4=easy."""
+    BLACKOUT = 0
+    INCORRECT = 1
+    HARD = 2
+    GOOD = 3
+    EASY = 4
+
+
+class ReviewItem(BaseModel):
+    """A flashcard item tracked with SM-2 scheduling."""
+    id: Optional[int] = None
+    file_path: str
+    question: str
+    answer: str
+    repetitions: int = 0
+    easiness: float = 2.5
+    interval: int = 1  # days until next review
+    due_date: str = Field(default_factory=lambda: date.today().isoformat())
