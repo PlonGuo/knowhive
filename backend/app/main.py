@@ -5,17 +5,26 @@ Usage:
     uv run python -m app.main --port 18234
 """
 import argparse
+from pathlib import Path
+from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
 
 from app.logging_config import setup_logging
+from app.routers.config import init_config_router
+from app.routers.config import router as config_router
 
 APP_VERSION = "0.1.0"
 
+DEFAULT_CONFIG_PATH = Path.home() / "Library" / "Application Support" / "knowhive" / "config.yaml"
 
-def create_app() -> FastAPI:
+
+def create_app(config_path: Optional[Path] = None) -> FastAPI:
     app = FastAPI(title="KnowHive Backend", version=APP_VERSION)
+
+    init_config_router(config_path or DEFAULT_CONFIG_PATH)
+    app.include_router(config_router)
 
     @app.get("/health")
     def health() -> dict:

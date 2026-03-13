@@ -42,7 +42,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 ### 2A. Backend Infrastructure
 [x] Task 18: Add RAG dependencies (langchain-core, chromadb, sentence-transformers, aiosqlite)
 [x] Task 19: SQLite database setup (documents, chat_messages, ingest_tasks tables + Pydantic models)
-[ ] Task 20: Config system (config.yaml read/write + /config endpoints + /config/test-llm)
+[x] Task 20: Config system (config.yaml read/write + /config endpoints + /config/test-llm)
 
 ### 2B. Ingest Pipeline
 [ ] Task 21: Ingest service (Markdown load, text split, embed, Chroma store, dedup)
@@ -67,6 +67,7 @@ Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
 === LOG ===
 2026-03-12 — Task 18 complete: Added langchain-core, langchain-community, langchain-text-splitters, chromadb, sentence-transformers, aiosqlite, pyyaml, pytest-asyncio to pyproject.toml; uv sync installs 93 new packages; 7 new import tests; all 21 tests pass.
 2026-03-12 — Task 19 complete: app/database.py with async SQLite connection manager (aiosqlite), 3 tables (documents, chat_messages, ingest_tasks) matching PRD schema; app/models.py with Pydantic models + StrEnum types; 18 database tests; all 39 tests pass.
+2026-03-12 — Task 20 complete: app/config.py with AppConfig Pydantic model (LLMProvider, EmbeddingLanguage enums), YAML read/write; app/routers/config.py with GET/PUT /config + POST /config/test-llm (Ollama + OpenAI-compatible); httpx added; 20 config tests; all 59 tests pass.
 2026-03-12 — Ralph loop initialized. Phase 0 + Phase 1 tasks defined.
 2026-03-12 — Task 4 complete: frontend scaffold created. electron-vite build passes, tsc clean.
 2026-03-12 — Phase 0 complete: Tasks 1-3 done. GitHub repo renamed to knowhive, remote updated, PRD aligned with v1.1.
