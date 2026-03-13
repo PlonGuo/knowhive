@@ -1,9 +1,10 @@
-"""Knowledge API endpoints — GET /knowledge/tree, GET /knowledge/file, DELETE /knowledge/file."""
+"""Knowledge API endpoints — GET /knowledge/tree, GET /knowledge/file, PUT /knowledge/file, DELETE /knowledge/file."""
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from app.services.ingest_service import IngestService
@@ -110,6 +111,59 @@ def knowledge_file(path: str = Query(..., description="Relative path within know
         "path": path,
         "content": content,
     }
+
+
+class RenameRequest(BaseModel):
+    old_path: str
+    new_path: str
+
+
+@router.put("/knowledge/file")
+async def rename_knowledge_file(req: RenameRequest) -> dict:
+    """Rename/move a file within the knowledge directory, updating DB and Chroma."""
+    old_resolved = _resolve_safe_path(req.old_path)
+    new_resolved = _resolve_safe_path(req.new_path)
+
+    if old_resolved.exists() and old_resolved.is_dir():
+        raise HTTPException(status_code=400, detail="Cannot rename directories")
+
+    if not old_resolved.exists() or not old_resolved.is_file():
+        raise HTTPException(status_code=404, detail="Source file not found")
+
+    if new_resolved.exists():
+        raise HTTPException(status_code=409, detail="Target file already exists")
+
+    old_path_str = str(old_resolved)
+    new_path_str = str(new_resolved)
+
+    # Create parent directories if needed
+    new_resolved.parent.mkdir(parents=True, exist_ok=True)
+
+    # Rename on disk
+    old_resolved.rename(new_resolved)
+
+    # Update Chroma metadata
+    if _ingest_service is not None:
+        _ingest_service.rename_chunks_file_path(old_path_str, new_path_str)
+
+    # Update DB record
+    try:
+        from app.database import get_db
+
+        async with get_db() as db:
+            await db.execute(
+                """UPDATE documents SET file_path = ?, file_name = ?,
+                   updated_at = datetime('now') WHERE file_path = ?""",
+                (new_path_str, new_resolved.name, old_path_str),
+            )
+            await db.commit()
+    except RuntimeError:
+        # DB not initialized (e.g., in minimal test setups) — skip
+        pass
+
+    logger.info("Renamed knowledge file: %s → %s", req.old_path, req.new_path)
+
+    return {"old_path": req.old_path, "new_path": req.new_path, "status": "renamed"}
 
 
 @router.delete("/knowledge/file")

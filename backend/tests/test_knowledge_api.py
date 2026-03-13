@@ -298,3 +298,181 @@ def test_delete_directory_blocked(client, knowledge_dir):
     """DELETE should not allow deleting directories."""
     resp = client.delete("/knowledge/file", params={"path": "guides"})
     assert resp.status_code == 400
+
+
+# ── PUT /knowledge/file (rename) ─────────────────────────────────
+
+
+def test_rename_file_returns_200(client, knowledge_dir):
+    """PUT /knowledge/file should rename a file and return 200."""
+    assert (knowledge_dir / "readme.md").exists()
+    resp = client.put("/knowledge/file", json={"old_path": "readme.md", "new_path": "renamed.md"})
+    assert resp.status_code == 200
+    assert not (knowledge_dir / "readme.md").exists()
+    assert (knowledge_dir / "renamed.md").exists()
+
+
+def test_rename_file_response_body(client, knowledge_dir):
+    """PUT response should include old_path, new_path, and status."""
+    resp = client.put("/knowledge/file", json={"old_path": "readme.md", "new_path": "renamed.md"})
+    data = resp.json()
+    assert data["old_path"] == "readme.md"
+    assert data["new_path"] == "renamed.md"
+    assert data["status"] == "renamed"
+
+
+def test_rename_preserves_content(client, knowledge_dir):
+    """Renamed file should retain its original content."""
+    original = (knowledge_dir / "readme.md").read_text()
+    client.put("/knowledge/file", json={"old_path": "readme.md", "new_path": "renamed.md"})
+    assert (knowledge_dir / "renamed.md").read_text() == original
+
+
+def test_rename_nested_file(client, knowledge_dir):
+    """PUT should work for files in subdirectories."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "guides/getting-started.md", "new_path": "guides/intro.md"},
+    )
+    assert resp.status_code == 200
+    assert not (knowledge_dir / "guides" / "getting-started.md").exists()
+    assert (knowledge_dir / "guides" / "intro.md").exists()
+
+
+def test_rename_move_to_different_dir(client, knowledge_dir):
+    """PUT should allow moving a file to a different subdirectory."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "readme.md", "new_path": "guides/readme.md"},
+    )
+    assert resp.status_code == 200
+    assert (knowledge_dir / "guides" / "readme.md").exists()
+
+
+def test_rename_creates_parent_dirs(client, knowledge_dir):
+    """PUT should create parent directories if they don't exist."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "readme.md", "new_path": "new-dir/sub/readme.md"},
+    )
+    assert resp.status_code == 200
+    assert (knowledge_dir / "new-dir" / "sub" / "readme.md").exists()
+
+
+def test_rename_not_found(client):
+    """PUT for nonexistent source file should return 404."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "nonexistent.md", "new_path": "renamed.md"},
+    )
+    assert resp.status_code == 404
+
+
+def test_rename_target_exists(client, knowledge_dir):
+    """PUT should return 409 if target file already exists."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "readme.md", "new_path": "notes.txt"},
+    )
+    assert resp.status_code == 409
+
+
+def test_rename_old_path_traversal_blocked(client):
+    """PUT with path traversal in old_path should be blocked."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "../../../etc/passwd", "new_path": "renamed.md"},
+    )
+    assert resp.status_code == 400
+
+
+def test_rename_new_path_traversal_blocked(client):
+    """PUT with path traversal in new_path should be blocked."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "readme.md", "new_path": "../../../tmp/evil.md"},
+    )
+    assert resp.status_code == 400
+
+
+def test_rename_absolute_old_path_blocked(client):
+    """PUT with absolute old_path should be blocked."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "/etc/passwd", "new_path": "renamed.md"},
+    )
+    assert resp.status_code == 400
+
+
+def test_rename_absolute_new_path_blocked(client):
+    """PUT with absolute new_path should be blocked."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "readme.md", "new_path": "/tmp/evil.md"},
+    )
+    assert resp.status_code == 400
+
+
+def test_rename_directory_blocked(client):
+    """PUT should not allow renaming directories."""
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "guides", "new_path": "tutorials"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_rename_updates_db(client, knowledge_dir, ingest_service):
+    """PUT should update the file_path and file_name in the documents table."""
+    file_path = knowledge_dir / "readme.md"
+    await ingest_service.ingest_file(file_path, knowledge_dir)
+
+    old_path_str = str(file_path)
+    new_path_str = str(knowledge_dir / "renamed.md")
+
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "readme.md", "new_path": "renamed.md"},
+    )
+    assert resp.status_code == 200
+
+    async with get_db() as db:
+        # Old path should be gone
+        cursor = await db.execute(
+            "SELECT id FROM documents WHERE file_path = ?", (old_path_str,)
+        )
+        assert await cursor.fetchone() is None
+
+        # New path should exist
+        cursor = await db.execute(
+            "SELECT file_path, file_name FROM documents WHERE file_path = ?",
+            (new_path_str,),
+        )
+        row = await cursor.fetchone()
+        assert row is not None
+        assert row["file_name"] == "renamed.md"
+
+
+@pytest.mark.asyncio
+async def test_rename_updates_chroma_metadata(client, knowledge_dir, ingest_service):
+    """PUT should update file_path in Chroma chunk metadata."""
+    file_path = knowledge_dir / "readme.md"
+    await ingest_service.ingest_file(file_path, knowledge_dir)
+
+    old_path_str = str(file_path)
+    new_path_str = str(knowledge_dir / "renamed.md")
+
+    resp = client.put(
+        "/knowledge/file",
+        json={"old_path": "readme.md", "new_path": "renamed.md"},
+    )
+    assert resp.status_code == 200
+
+    # Old path chunks should be gone
+    results = ingest_service.collection.get(where={"file_path": old_path_str})
+    assert len(results["ids"]) == 0
+
+    # New path chunks should exist
+    results = ingest_service.collection.get(where={"file_path": new_path_str})
+    assert len(results["ids"]) > 0

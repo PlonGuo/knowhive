@@ -82,6 +82,20 @@ class IngestService:
             # No matching documents — nothing to delete
             pass
 
+    def rename_chunks_file_path(self, old_path: str, new_path: str) -> None:
+        """Update file_path metadata for all chunks belonging to a file."""
+        try:
+            existing = self._collection.get(where={"file_path": old_path})
+            if existing["ids"]:
+                new_metadatas = []
+                for meta in existing["metadatas"]:
+                    updated = dict(meta)
+                    updated["file_path"] = new_path
+                    new_metadatas.append(updated)
+                self._collection.update(ids=existing["ids"], metadatas=new_metadatas)
+        except Exception:
+            pass
+
     # ── Full ingest pipeline ─────────────────────────────────────
 
     async def ingest_file(self, file_path: Path, base_dir: Path) -> dict[str, Any]:
