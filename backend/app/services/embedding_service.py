@@ -1,8 +1,10 @@
 """EmbeddingService — model registry, download status, and embedding function factory."""
+import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
 from chromadb.utils import embedding_functions
+from sentence_transformers import SentenceTransformer
 
 from app.config import EmbeddingLanguage
 
@@ -58,6 +60,19 @@ class EmbeddingService:
     def get_download_status(self, language: EmbeddingLanguage) -> Optional[dict[str, Any]]:
         """Return current download progress for a language, or None if not downloading."""
         return self._download_progress.get(language)
+
+    async def download_model(self, language: EmbeddingLanguage) -> None:
+        """Download a model via SentenceTransformer in a thread. Updates _download_progress."""
+        model_name = MODEL_REGISTRY[language]["name"]
+        self._download_progress[language] = {"status": "downloading", "progress": 0.0}
+        try:
+            await asyncio.to_thread(
+                SentenceTransformer, model_name, cache_folder=str(self._models_dir)
+            )
+            self._download_progress[language] = {"status": "complete", "progress": 1.0}
+        except Exception as e:
+            self._download_progress[language] = {"status": "error", "progress": 0.0, "error": str(e)}
+            raise
 
     def get_embedding_function(
         self, language: EmbeddingLanguage
