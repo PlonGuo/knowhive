@@ -1,6 +1,7 @@
 """RAG query service — Chroma retrieval, prompt assembly, LLM call."""
+import json
 import logging
-from typing import Any
+from typing import Any, AsyncGenerator
 
 import httpx
 
@@ -124,6 +125,71 @@ class RAGService:
                     return data["message"]["content"]
                 else:
                     return data["choices"][0]["message"]["content"]
+
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"LLM connection failed: {e}") from e
+
+    # ── LLM streaming call ─────────────────────────────────────
+
+    async def call_llm_stream(
+        self, messages: list[dict[str, str]], config: AppConfig
+    ) -> AsyncGenerator[str, None]:
+        """Stream tokens from LLM. Yields individual content tokens."""
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                if config.llm_provider == LLMProvider.OLLAMA:
+                    url = f"{config.base_url.rstrip('/')}/api/chat"
+                    async with client.stream(
+                        "POST",
+                        url,
+                        json={
+                            "model": config.model_name,
+                            "messages": messages,
+                            "stream": True,
+                        },
+                    ) as resp:
+                        if resp.status_code != 200:
+                            raise RuntimeError(
+                                f"LLM returned status {resp.status_code}"
+                            )
+                        async for line in resp.aiter_lines():
+                            if not line:
+                                continue
+                            data = json.loads(line)
+                            content = data.get("message", {}).get("content", "")
+                            if content:
+                                yield content
+                else:
+                    # OpenAI-compatible SSE
+                    url = f"{config.base_url.rstrip('/')}/chat/completions"
+                    headers: dict[str, str] = {}
+                    if config.api_key:
+                        headers["Authorization"] = f"Bearer {config.api_key}"
+                    async with client.stream(
+                        "POST",
+                        url,
+                        json={
+                            "model": config.model_name,
+                            "messages": messages,
+                            "stream": True,
+                        },
+                        headers=headers,
+                    ) as resp:
+                        if resp.status_code != 200:
+                            raise RuntimeError(
+                                f"LLM returned status {resp.status_code}"
+                            )
+                        async for line in resp.aiter_lines():
+                            if not line or not line.startswith("data: "):
+                                continue
+                            payload = line[6:]
+                            if payload == "[DONE]":
+                                break
+                            data = json.loads(payload)
+                            delta = data["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                yield content
 
         except httpx.ConnectError as e:
             raise ConnectionError(f"LLM connection failed: {e}") from e
