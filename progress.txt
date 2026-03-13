@@ -143,7 +143,7 @@ Plan: ~/.claude/plans/tender-hatching-hopcroft.md
 
 ### 5A. Packaging Fix
 [x] Task 77: Backend main.py — add --data-dir CLI arg; derive all data paths from it
-[ ] Task 78: Electron sidecar.ts — fix packaged backend dir resolution + pass --data-dir
+[x] Task 78: Electron sidecar.ts — fix packaged backend dir resolution + pass --data-dir
 [ ] Task 79: electron-builder.yml + package.json — include backend/ via extraResources + asarUnpack + add build scripts
 [ ] Task 80: Electron IPC — check-setup handler (uv --version probe) + preload.ts checkSetup()
 [ ] Task 81: Backend GET /setup/status endpoint (python_ok, uv_ok, ollama_ok, first_run)

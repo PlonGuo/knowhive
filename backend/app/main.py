@@ -196,6 +196,9 @@ def main() -> None:
 
     setup_logging()
 
+    if args.data_dir:
+        Path(args.data_dir).mkdir(parents=True, exist_ok=True)
+
     path_kwargs = _resolve_data_paths(args.data_dir)
     uvicorn.run(
         create_app(**path_kwargs),

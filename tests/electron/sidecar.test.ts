@@ -8,7 +8,8 @@ import http from 'node:http'
 vi.mock('electron', () => ({
   app: {
     isPackaged: false,
-    getAppPath: () => process.cwd()
+    getAppPath: () => process.cwd(),
+    getPath: (name: string) => `/tmp/knowhive-test/${name}`
   }
 }))
 

@@ -105,11 +105,16 @@ export class SidecarManager {
 
   private resolveBackendDir(): string {
     if (this.backendDir) return this.backendDir
+    if (app.isPackaged) {
+      // backend/ is asarUnpack'd into Resources/app.unpacked/backend
+      return path.join(process.resourcesPath, 'app.unpacked', 'backend')
+    }
     return path.join(app.getAppPath(), 'backend')
   }
 
   private buildArgs(): string[] {
-    return ['run', 'python', '-m', 'app.main', '--port', String(this._port)]
+    const dataDir = app.getPath('userData')
+    return ['run', 'python', '-m', 'app.main', '--port', String(this._port), '--data-dir', dataDir]
   }
 
   private resolveLogsDir(): string {
