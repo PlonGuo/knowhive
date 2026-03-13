@@ -1,0 +1,41 @@
+Project: KnowHive (local-first AI knowledge base desktop app)
+Start: 2026-03-12
+Tech stack: Electron 28+ (React 18 + TypeScript + shadcn/ui + Tailwind) + FastAPI sidecar (Python 3.11, langchain-core, Chroma, SQLite) + Ollama/OpenAI Compatible LLM
+Package managers: pnpm (frontend), uv (Python)
+Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
+
+=== TASKS ===
+
+## Phase 0: Project Rename
+[ ] Task 1: Rename GitHub repo to `knowhive` (manual)
+[ ] Task 2: Rename local directory + update git remote
+[ ] Task 3: Update PRD repo path reference
+
+## Phase 1: POC — Electron + FastAPI Packaging Validation
+
+### 1A. Scaffolding
+[ ] Task 4: Initialize frontend scaffold (package.json, Vite, Electron, Tailwind, shadcn/ui)
+[ ] Task 5: Initialize backend scaffold (pyproject.toml, FastAPI, uv sync)
+
+### 1B. FastAPI Backend
+[ ] Task 6: FastAPI entry point with CLI --port arg + 127.0.0.1 binding
+[ ] Task 7: GET /health endpoint (with unit tests)
+[ ] Task 8: File-based logging (logs/backend.log, daily rotation, 7-day retention)
+
+### 1C. Electron Main Process
+[ ] Task 9: Electron main process + BrowserWindow
+[ ] Task 10: Dynamic port selection with get-port
+[ ] Task 11: FastAPI sidecar manager (spawn, health poll, logging, shutdown, auto-restart)
+[ ] Task 12: IPC bridge via preload.ts contextBridge
+
+### 1D. React Frontend (POC)
+[ ] Task 13: Minimal React app calling /health and displaying result
+[ ] Task 14: pnpm dev:all script (Vite + uvicorn + Electron in parallel)
+
+### 1E. Packaging
+[ ] Task 15: electron-builder.yml configuration
+[ ] Task 16: build-backend.sh script (python-build-standalone + uv sync)
+[ ] Task 17: Sidecar packaged mode (extraResources paths, .app size < 500MB)
+
+=== LOG ===
+2026-03-12 — Ralph loop initialized. Phase 0 + Phase 1 tasks defined.
