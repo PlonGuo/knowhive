@@ -41,6 +41,7 @@ class DocumentCreate(BaseModel):
     tags: Optional[str] = None
     difficulty: Optional[str] = None
     pack_id: Optional[str] = None
+    chunk_strategy: Optional[str] = None
 
 
 class Document(BaseModel):
@@ -59,6 +60,7 @@ class Document(BaseModel):
     tags: Optional[str] = None
     difficulty: Optional[str] = None
     pack_id: Optional[str] = None
+    chunk_strategy: Optional[str] = None
     created_at: str
     updated_at: str
 

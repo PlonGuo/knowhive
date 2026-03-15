@@ -75,6 +75,7 @@ _MIGRATION_COLUMNS = [
     ("tags", "TEXT"),
     ("difficulty", "TEXT"),
     ("pack_id", "TEXT"),
+    ("chunk_strategy", "TEXT"),
 ]
 
 

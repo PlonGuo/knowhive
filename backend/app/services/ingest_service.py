@@ -130,7 +130,7 @@ class IngestService:
 
     # ── Full ingest pipeline ─────────────────────────────────────
 
-    async def ingest_file(self, file_path: Path, base_dir: Path) -> dict[str, Any]:
+    async def ingest_file(self, file_path: Path, base_dir: Path, *, force: bool = False) -> dict[str, Any]:
         """Ingest a single file (Markdown or PDF): read, hash, dedup, split, store, update DB."""
         file_path_str = str(file_path)
 
@@ -158,7 +158,7 @@ class IngestService:
                 )
                 existing = await cursor.fetchone()
 
-                if existing and existing["file_hash"] == file_hash:
+                if existing and existing["file_hash"] == file_hash and not force:
                     return {"file_path": file_path_str, "status": "skipped", "chunk_count": 0}
 
                 # Dedup: remove old Chroma chunks for this file
@@ -180,11 +180,15 @@ class IngestService:
                 # Split and store — .md uses heading-aware chunker, .pdf uses fixed split
                 if file_path.suffix.lower() == ".pdf":
                     chunks = self.split_text(content, metadata=chunk_meta)
+                    chunk_strategy = "fixed-split"
                 else:
                     chunks = split_by_headings(content, metadata=chunk_meta)
                     # Fallback: if heading chunker returns nothing (empty body), use fixed split
                     if not chunks:
                         chunks = self.split_text(content, metadata=chunk_meta)
+                        chunk_strategy = "fixed-split"
+                    else:
+                        chunk_strategy = "heading-aware"
                 self.store_chunks(chunks)
                 chunk_count = len(chunks)
                 indexed_at = datetime.now().isoformat()
@@ -196,21 +200,24 @@ class IngestService:
                            SET file_hash = ?, file_size = ?, modified_at = ?,
                                indexed_at = ?, chunk_count = ?, status = 'indexed',
                                error_message = NULL, updated_at = datetime('now'),
-                               title = ?, category = ?, tags = ?, difficulty = ?, pack_id = ?
+                               title = ?, category = ?, tags = ?, difficulty = ?, pack_id = ?,
+                               chunk_strategy = ?
                            WHERE file_path = ?""",
                         (file_hash, file_size, modified_at, indexed_at, chunk_count,
                          frontmatter.title, frontmatter.category, tags_str,
-                         frontmatter.difficulty, frontmatter.pack_id, file_path_str),
+                         frontmatter.difficulty, frontmatter.pack_id, chunk_strategy,
+                         file_path_str),
                     )
                 else:
                     await db.execute(
                         """INSERT INTO documents
                            (file_path, file_name, file_size, file_hash, modified_at, indexed_at,
-                            chunk_count, status, title, category, tags, difficulty, pack_id)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, 'indexed', ?, ?, ?, ?, ?)""",
+                            chunk_count, status, title, category, tags, difficulty, pack_id,
+                            chunk_strategy)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, 'indexed', ?, ?, ?, ?, ?, ?)""",
                         (file_path_str, file_path.name, file_size, file_hash, modified_at, indexed_at,
                          chunk_count, frontmatter.title, frontmatter.category, tags_str,
-                         frontmatter.difficulty, frontmatter.pack_id),
+                         frontmatter.difficulty, frontmatter.pack_id, chunk_strategy),
                     )
                 await db.commit()
 

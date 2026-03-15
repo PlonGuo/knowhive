@@ -183,3 +183,94 @@ async def ingest_resync(background_tasks: BackgroundTasks) -> IngestResponse:
     await _run_ingest_task(task_id, files)
 
     return IngestResponse(task_id=task_id, status="accepted", total_files=len(files))
+
+
+@router.post("/ingest/migrate")
+async def ingest_migrate() -> IngestResponse:
+    """Re-ingest all documents with NULL chunk_strategy (migration to heading-aware chunking)."""
+    service = _get_service()
+    task_id = str(uuid.uuid4())
+
+    # Find documents with NULL chunk_strategy
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT file_path FROM documents WHERE chunk_strategy IS NULL AND status = 'indexed'"
+        )
+        rows = await cursor.fetchall()
+
+    file_paths = [Path(row["file_path"]) for row in rows]
+
+    if not file_paths:
+        # No docs to migrate — create a completed task with 0 files
+        async with get_db() as db:
+            await db.execute(
+                """INSERT INTO ingest_tasks (id, status, total_files, processed_files, completed_at)
+                   VALUES (?, 'completed', 0, 0, datetime('now'))""",
+                (task_id,),
+            )
+            await db.commit()
+        return IngestResponse(task_id=task_id, status="accepted", total_files=0)
+
+    # Create task record
+    async with get_db() as db:
+        await db.execute(
+            "INSERT INTO ingest_tasks (id, status, total_files) VALUES (?, 'pending', ?)",
+            (task_id, len(file_paths)),
+        )
+        await db.commit()
+
+    # Run migration re-ingest with force=True to bypass hash check
+    await _run_migrate_task(task_id, file_paths, service)
+
+    return IngestResponse(task_id=task_id, status="accepted", total_files=len(file_paths))
+
+
+async def _run_migrate_task(task_id: str, file_paths: list[Path], service: "IngestService") -> None:
+    """Re-ingest files for migration, forcing re-chunking even if hash unchanged."""
+    try:
+        async with get_db() as db:
+            await db.execute(
+                "UPDATE ingest_tasks SET status = 'running' WHERE id = ?",
+                (task_id,),
+            )
+            await db.commit()
+
+        processed = 0
+        errors = []
+
+        for fp in file_paths:
+            result = await service.ingest_file(fp, fp.parent, force=True)
+            processed += 1
+            if result["status"] == "error":
+                errors.append(f"{fp}: {result.get('error', 'unknown')}")
+
+        async with get_db() as db:
+            await db.execute(
+                """UPDATE ingest_tasks
+                   SET status = ?, processed_files = ?, errors = ?,
+                       completed_at = datetime('now')
+                   WHERE id = ?""",
+                (
+                    "failed" if errors else "completed",
+                    processed,
+                    "\n".join(errors) if errors else None,
+                    task_id,
+                ),
+            )
+            await db.commit()
+
+        logger.info("Migration task %s completed: %d/%d files", task_id, processed, len(file_paths))
+
+    except Exception as e:
+        logger.error("Migration task %s failed: %s", task_id, e)
+        try:
+            async with get_db() as db:
+                await db.execute(
+                    """UPDATE ingest_tasks
+                       SET status = 'failed', errors = ?, completed_at = datetime('now')
+                       WHERE id = ?""",
+                    (str(e), task_id),
+                )
+                await db.commit()
+        except Exception:
+            pass
