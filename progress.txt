@@ -204,6 +204,26 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 110: Re-ingest migration (chunk_strategy column + POST /ingest/migrate endpoint)
 [x] Task 111: Full integration verification (all backend + frontend tests)
 
+## Phase 8: LeetCode Basics Content Pack
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 8A. Template Guide + Algorithm Docs
+[ ] Task 112: Create TEMPLATE_GUIDE.md + directory structure (knowledge/leetcode-basics/)
+[ ] Task 113: Convert 6 algorithm docs (bfs, dfs, dijkstra, dynamic-programming, interval-dp, digit-dp)
+[ ] Task 114: Convert 6 algorithm docs (rerooting-dp, two-pointer, greedy, heap-priority-queue, difference-array, graph-theory-overview)
+
+### 8B. Problem Docs
+[ ] Task 115: Convert 6 problem docs (lc-0233, lc-0253, lc-0310, lc-0312, lc-0486, lc-0600)
+[ ] Task 116: Convert 6 problem docs (lc-0732, lc-0834, lc-0877, lc-1245, lc-2385, lc-2719)
+
+### 8C. Company Doc + Eval Dataset
+[ ] Task 117: Convert company doc (rippling.md)
+[ ] Task 118: Create eval_dataset_leetcode.json (25-30 Q&A pairs)
+
+### 8D. Verification
+[ ] Task 119: Ingest verification (25 files indexed, heading-aware chunking, pack_id filter)
+[ ] Task 120: Full test suite + eval baseline
+
 === LOG ===
 2026-03-15 — Task 106 complete: Added optional where: dict parameter to RAGService.retrieve(); when provided, passes where kwarg to collection.query() for Chroma metadata filtering; None (default) omits kwarg for full backward compatibility; 4 new tests (with filter, without filter, explicit None, complex $and filter); all 25 RAG service tests pass.
 2026-03-15 — Task 105 complete: Added use_hyde field to AppConfig (default False); updated _chat_stream in chat.py to pass config.use_hyde into prep graph state; 2 new tests (use_hyde=False default skips HyDE, use_hyde=True triggers HyDE and passes hypothetical doc to retrieve); all 14 chat API tests pass.

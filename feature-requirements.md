@@ -151,3 +151,28 @@ pnpm dev:all  # manual: verify Electron window shows {"status":"ok"}
 
 - [ ] Task 110: Re-ingest migration — add `chunk_strategy` column to documents table; `POST /ingest/migrate` endpoint re-ingests all docs with heading-aware chunking; startup sync detects old strategy docs — verified by: `cd backend && uv run pytest tests/test_ingest_migration.py -v` passes
 - [ ] Task 111: Full integration verification — run all backend + frontend tests; verify existing features unbroken — verified by: `cd backend && uv run pytest` all pass + `cd .. && pnpm vitest run` all pass
+
+---
+
+## Phase 8: LeetCode Basics Content Pack
+
+### 8A. Template Guide + Algorithm Docs
+
+- [ ] Task 112: Create `knowledge/TEMPLATE_GUIDE.md` (AI-agent-friendly template guide with instructions, schemas, 3 templates, tag vocabulary, complete examples) + create directory structure `knowledge/leetcode-basics/{algorithms,problems,companies}/` — verified by: TEMPLATE_GUIDE.md exists, directories created
+- [ ] Task 113: Convert 6 algorithm docs (bfs, dfs, dijkstra, dynamic-programming, interval-dp, digit-dp) from `docs/leetcode/刷题知识库/Algorithms/` to standardized frontmatter format in `knowledge/leetcode-basics/algorithms/` — verified by: files exist with valid frontmatter, no `[[` wiki links, no emoji in headers
+- [ ] Task 114: Convert 6 algorithm docs (rerooting-dp, two-pointer, greedy, heap-priority-queue, difference-array, graph-theory-overview) — verified by: same criteria as Task 113
+
+### 8B. Problem Docs
+
+- [ ] Task 115: Convert 6 problem docs (lc-0233, lc-0253, lc-0310, lc-0312, lc-0486, lc-0600) from `docs/leetcode/刷题知识库/Problems/` to `knowledge/leetcode-basics/problems/` — verified by: files exist with valid frontmatter, Python code blocks preserved, no wiki links
+- [ ] Task 116: Convert 6 problem docs (lc-0732, lc-0834, lc-0877, lc-1245, lc-2385, lc-2719) — verified by: same criteria as Task 115
+
+### 8C. Company Doc + Eval Dataset
+
+- [ ] Task 117: Convert company doc (rippling.md) from `docs/leetcode/刷题知识库/Companies/` to `knowledge/leetcode-basics/companies/` — verified by: file exists with valid frontmatter
+- [ ] Task 118: Create `backend/tests/fixtures/eval_dataset_leetcode.json` with 25-30 Q&A pairs grounded in pack content (algorithm concepts, problem solutions, cross-references) — verified by: valid JSON, all ground_truth answers match actual file content
+
+### 8D. Verification
+
+- [ ] Task 119: Ingest verification — write test that ingests `knowledge/leetcode-basics/`, verifies 25 files indexed, heading-aware chunking, pack_id filter, frontmatter in SQLite — verified by: `cd backend && uv run pytest tests/test_leetcode_pack_integration.py -v` passes
+- [ ] Task 120: Full test suite + eval baseline — run all backend + frontend tests, run eval_ragas.py against leetcode pack — verified by: all tests pass, eval produces non-zero scores
