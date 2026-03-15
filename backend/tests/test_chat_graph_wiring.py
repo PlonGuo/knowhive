@@ -100,8 +100,8 @@ def test_chat_stream_uses_prep_graph(mock_config, mock_rag, client, mock_rag_ser
         resp = client.post("/chat", json={"question": "test"})
         assert resp.status_code == 200
 
-        # Verify prep graph was created with the rag service
-        mock_create.assert_called_once_with(mock_rag_service)
+        # Verify prep graph was created with the rag service and config
+        mock_create.assert_called_once_with(mock_rag_service, mock_config.return_value)
         # Verify graph was invoked with question and k
         mock_graph.ainvoke.assert_called_once_with({"question": "test", "k": 5})
 
