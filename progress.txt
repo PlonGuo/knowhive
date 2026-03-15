@@ -237,7 +237,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 125: Rerank node in LangGraph (conditional after retrieve)
 
 ### 9C. Multi-Query
-[ ] Task 126: Multi-query expansion service (LLM generates query variants)
+[x] Task 126: Multi-query expansion service (LLM generates query variants)
 [ ] Task 127: Multi-query retrieval + merge/dedup in LangGraph
 
 ### 9D. Conversation Memory
@@ -249,6 +249,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [ ] Task 131: Full integration verification (all backend + frontend tests)
 
 === LOG ===
+2026-03-15 — Task 126 complete: app/services/multi_query_service.py — expand_queries(question, config) uses LLM to generate 3-5 query variants via MULTI_QUERY_PROMPT; _parse_numbered_lines() extracts numbered lines (1. or 1) format); always includes original question; falls back to [question] on empty/None/error/no-numbered-lines; 15 new tests (6 parser + 9 expand); all 15 pass.
 2026-03-15 — Task 125 complete: Added use_reranker bool to RAGState; added _post_retrieve_route() function (rerank if True, build_prompt otherwise); added rerank node to both create_rag_graph and create_rag_prep_graph (conditional after retrieve, pass-through if reranker_service is None); rerank node calls reranker_service.rerank(question, chunks) and updates sources; both graph factories accept optional reranker_service param; updated chat.py to pass reranker_service and use_reranker from config; updated test_chat_graph_wiring.py assertions; 13 new tests in test_rag_graph_rerank.py (state field, route function, full graph enabled/disabled/default, prep graph enabled/disabled, no service, source updates, original question); all 13 pass; all 23 chat tests pass.
 2026-03-15 — Task 124 complete: app/routers/reranker.py — GET /reranker/status (model info + downloaded/loaded), POST /reranker/download (background task), GET /reranker/download-status (progress dict); init_reranker_router/_reset_reranker_router pattern; wired RerankerService into main.py lifespan + included reranker_router; 10 new tests (status, downloaded, download start, download-status none/downloading/complete/error, 503 x3); all 10 pass.
 2026-03-15 — Task 123 complete: app/services/reranker_service.py — RerankerService class with CrossEncoder download/load pattern (like EmbeddingService); RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2 (80MB); download_model() async with progress tracking, load_model() sync, is_model_downloaded() checks local dir, get_status() returns model/size/downloaded/loaded, get_download_status() returns progress dict; rerank(query, chunks, top_k) builds query-doc pairs, calls model.predict(), sorts by score descending, returns top_k with rerank_score field; raises RuntimeError if model not loaded; 19 new tests; all 19 pass.
