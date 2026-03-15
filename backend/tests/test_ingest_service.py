@@ -377,3 +377,152 @@ async def test_ingest_directory_includes_pdf(service, db, mixed_knowledge_dir):
     cursor = await db.execute("SELECT COUNT(*) as cnt FROM documents")
     row = await cursor.fetchone()
     assert row["cnt"] == 4
+
+
+# ── Frontmatter wiring ──────────────────────────────────────────
+
+
+@pytest.fixture
+def frontmatter_dir(tmp_path):
+    """Create a directory with a Markdown file containing frontmatter."""
+    md = tmp_path / "leetcode-two-sum.md"
+    md.write_text(
+        "---\n"
+        "title: Two Sum\n"
+        "category: algorithms\n"
+        "tags:\n"
+        "  - array\n"
+        "  - hash-table\n"
+        "difficulty: easy\n"
+        "pack_id: leetcode-top-100\n"
+        "---\n"
+        "# Two Sum\n\n"
+        "Given an array of integers nums and an integer target...\n"
+    )
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_frontmatter_stored_in_sqlite(service, db, frontmatter_dir):
+    """Ingesting a .md with frontmatter should store fields in SQLite."""
+    file_path = frontmatter_dir / "leetcode-two-sum.md"
+    result = await service.ingest_file(file_path, frontmatter_dir)
+    assert result["status"] == "indexed"
+
+    cursor = await db.execute(
+        "SELECT title, category, tags, difficulty, pack_id FROM documents WHERE file_path = ?",
+        (str(file_path),),
+    )
+    row = await cursor.fetchone()
+    assert row["title"] == "Two Sum"
+    assert row["category"] == "algorithms"
+    assert row["tags"] == "array,hash-table"
+    assert row["difficulty"] == "easy"
+    assert row["pack_id"] == "leetcode-top-100"
+
+
+@pytest.mark.asyncio
+async def test_frontmatter_stored_in_chroma_metadata(service, db, frontmatter_dir):
+    """Ingesting a .md with frontmatter should include fields in Chroma chunk metadata."""
+    file_path = frontmatter_dir / "leetcode-two-sum.md"
+    await service.ingest_file(file_path, frontmatter_dir)
+
+    chroma_results = service.collection.get(where={"file_path": str(file_path)})
+    assert len(chroma_results["ids"]) >= 1
+    meta = chroma_results["metadatas"][0]
+    assert meta["title"] == "Two Sum"
+    assert meta["category"] == "algorithms"
+    assert meta["tags"] == "array,hash-table"
+    assert meta["difficulty"] == "easy"
+    assert meta["pack_id"] == "leetcode-top-100"
+
+
+@pytest.mark.asyncio
+async def test_frontmatter_body_used_for_chunking(service, db, frontmatter_dir):
+    """Chunking should use body text (without frontmatter YAML block)."""
+    file_path = frontmatter_dir / "leetcode-two-sum.md"
+    await service.ingest_file(file_path, frontmatter_dir)
+
+    chroma_results = service.collection.get(where={"file_path": str(file_path)})
+    for doc in chroma_results["documents"]:
+        # YAML frontmatter delimiters should NOT appear in chunk text
+        assert "---" not in doc or "title:" not in doc
+        assert "pack_id:" not in doc
+
+
+@pytest.mark.asyncio
+async def test_no_frontmatter_stores_nulls(service, db, knowledge_dir):
+    """Ingesting .md without frontmatter should store NULL for frontmatter fields."""
+    file_path = knowledge_dir / "hello.md"
+    result = await service.ingest_file(file_path, knowledge_dir)
+    assert result["status"] == "indexed"
+
+    cursor = await db.execute(
+        "SELECT title, category, tags, difficulty, pack_id FROM documents WHERE file_path = ?",
+        (str(file_path),),
+    )
+    row = await cursor.fetchone()
+    assert row["title"] is None
+    assert row["category"] is None
+    assert row["tags"] is None
+    assert row["difficulty"] is None
+    assert row["pack_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_pdf_skips_frontmatter(service, db, pdf_knowledge_dir):
+    """PDF files should not attempt frontmatter parsing; fields should be NULL."""
+    file_path = pdf_knowledge_dir / "document.pdf"
+    result = await service.ingest_file(file_path, pdf_knowledge_dir)
+    assert result["status"] == "indexed"
+
+    cursor = await db.execute(
+        "SELECT title, category, tags, difficulty, pack_id FROM documents WHERE file_path = ?",
+        (str(file_path),),
+    )
+    row = await cursor.fetchone()
+    assert row["title"] is None
+    assert row["pack_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_frontmatter_updated_on_reingest(service, db, frontmatter_dir):
+    """Re-ingesting a modified file should update frontmatter fields in SQLite."""
+    file_path = frontmatter_dir / "leetcode-two-sum.md"
+    await service.ingest_file(file_path, frontmatter_dir)
+
+    # Modify frontmatter
+    file_path.write_text(
+        "---\n"
+        "title: Two Sum (Revised)\n"
+        "category: data-structures\n"
+        "tags:\n"
+        "  - map\n"
+        "difficulty: medium\n"
+        "pack_id: leetcode-top-100\n"
+        "---\n"
+        "# Two Sum Revised\n\nUpdated solution approach.\n"
+    )
+    result = await service.ingest_file(file_path, frontmatter_dir)
+    assert result["status"] == "indexed"
+
+    cursor = await db.execute(
+        "SELECT title, category, difficulty FROM documents WHERE file_path = ?",
+        (str(file_path),),
+    )
+    row = await cursor.fetchone()
+    assert row["title"] == "Two Sum (Revised)"
+    assert row["category"] == "data-structures"
+    assert row["difficulty"] == "medium"
+
+
+@pytest.mark.asyncio
+async def test_frontmatter_no_chroma_none_values(service, db, knowledge_dir):
+    """Chroma metadata should not contain None values from missing frontmatter."""
+    file_path = knowledge_dir / "hello.md"
+    await service.ingest_file(file_path, knowledge_dir)
+
+    chroma_results = service.collection.get(where={"file_path": str(file_path)})
+    for meta in chroma_results["metadatas"]:
+        for v in meta.values():
+            assert v is not None, "Chroma metadata should not contain None values"

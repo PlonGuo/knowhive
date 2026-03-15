@@ -11,6 +11,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.database import get_db
+from app.services.frontmatter_parser import FrontmatterData, parse_frontmatter
 from app.services.pdf_extractor import extract_pdf_text
 
 logger = logging.getLogger(__name__)
@@ -137,10 +138,13 @@ class IngestService:
                 raise FileNotFoundError(f"File not found: {file_path}")
 
             # Extract text based on file type
+            frontmatter = FrontmatterData()
             if file_path.suffix.lower() == ".pdf":
                 content = extract_pdf_text(file_path)
             else:
-                content = file_path.read_text(encoding="utf-8")
+                raw_content = file_path.read_text(encoding="utf-8")
+                frontmatter, content = parse_frontmatter(raw_content)
+
             file_hash = self.compute_file_hash(file_path)
             file_size = file_path.stat().st_size
             modified_at = datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
@@ -159,28 +163,47 @@ class IngestService:
                 # Dedup: remove old Chroma chunks for this file
                 self.delete_chunks_for_file(file_path_str)
 
+                # Build chunk metadata with frontmatter fields
+                chunk_meta: dict[str, Any] = {"file_path": file_path_str}
+                tags_str = ",".join(frontmatter.tags) if frontmatter.tags else None
+                for key, val in [
+                    ("title", frontmatter.title),
+                    ("category", frontmatter.category),
+                    ("tags", tags_str),
+                    ("difficulty", frontmatter.difficulty),
+                    ("pack_id", frontmatter.pack_id),
+                ]:
+                    if val is not None:
+                        chunk_meta[key] = val
+
                 # Split and store
-                chunks = self.split_text(content, metadata={"file_path": file_path_str})
+                chunks = self.split_text(content, metadata=chunk_meta)
                 self.store_chunks(chunks)
                 chunk_count = len(chunks)
                 indexed_at = datetime.now().isoformat()
 
-                # Upsert DB record
+                # Upsert DB record (including frontmatter fields)
                 if existing:
                     await db.execute(
                         """UPDATE documents
                            SET file_hash = ?, file_size = ?, modified_at = ?,
                                indexed_at = ?, chunk_count = ?, status = 'indexed',
-                               error_message = NULL, updated_at = datetime('now')
+                               error_message = NULL, updated_at = datetime('now'),
+                               title = ?, category = ?, tags = ?, difficulty = ?, pack_id = ?
                            WHERE file_path = ?""",
-                        (file_hash, file_size, modified_at, indexed_at, chunk_count, file_path_str),
+                        (file_hash, file_size, modified_at, indexed_at, chunk_count,
+                         frontmatter.title, frontmatter.category, tags_str,
+                         frontmatter.difficulty, frontmatter.pack_id, file_path_str),
                     )
                 else:
                     await db.execute(
                         """INSERT INTO documents
-                           (file_path, file_name, file_size, file_hash, modified_at, indexed_at, chunk_count, status)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, 'indexed')""",
-                        (file_path_str, file_path.name, file_size, file_hash, modified_at, indexed_at, chunk_count),
+                           (file_path, file_name, file_size, file_hash, modified_at, indexed_at,
+                            chunk_count, status, title, category, tags, difficulty, pack_id)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, 'indexed', ?, ?, ?, ?, ?)""",
+                        (file_path_str, file_path.name, file_size, file_hash, modified_at, indexed_at,
+                         chunk_count, frontmatter.title, frontmatter.category, tags_str,
+                         frontmatter.difficulty, frontmatter.pack_id),
                     )
                 await db.commit()
 

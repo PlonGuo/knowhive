@@ -1,0 +1,1 @@
+2026-03-13 — Task 60 complete: app/services/community_service.py — ContentPack/CommunityManifest/PackFile Pydantic models; CommunityService with fetch_manifest() (httpx GET, 5-min TTL cache via monotonic time), fetch_pack_files(pack) (fetches pack.path/files.json); 7 new tests (models, fetch+parse, TTL cache hit/miss, pack files); 347/348 backend tests pass.
