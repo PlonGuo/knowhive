@@ -214,7 +214,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 
 ### 8B. Problem Docs
 [x] Task 115: Convert 6 problem docs (lc-0233, lc-0253, lc-0310, lc-0312, lc-0486, lc-0600)
-[ ] Task 116: Convert 6 problem docs (lc-0732, lc-0834, lc-0877, lc-1245, lc-2385, lc-2719)
+[x] Task 116: Convert 6 problem docs (lc-0732, lc-0834, lc-0877, lc-1245, lc-2385, lc-2719)
 
 ### 8C. Company Doc + Eval Dataset
 [ ] Task 117: Convert company doc (rippling.md)
