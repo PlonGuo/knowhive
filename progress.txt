@@ -175,6 +175,35 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 96: Replace Langfuse manual tracing with LangChain callbacks
 [x] Task 97: Full integration verification (all backend + frontend tests)
 
+## Phase 7: Knowledge Base Template + Advanced RAG
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 7A. Frontmatter + Template Schema
+[ ] Task 98: Frontmatter parser (FrontmatterData dataclass + parse_frontmatter)
+[ ] Task 99: SQLite schema migration (add title, category, tags, difficulty, pack_id columns)
+[ ] Task 100: Wire frontmatter into IngestService (parse before chunking, store in SQLite + Chroma)
+
+### 7B. Heading-Aware Chunking
+[ ] Task 101: Heading chunker (split_by_headings with merge/sub-split logic)
+[ ] Task 102: Wire heading chunker into IngestService (.md uses headings, .pdf keeps fixed split)
+
+### 7C. HyDE Pre-Retrieval
+[ ] Task 103: HyDE service (generate_hypothetical_doc via LLM)
+[ ] Task 104: Add HyDE node to RAG graph (hyde → retrieve → build_prompt → END)
+[ ] Task 105: Update chat router for HyDE (pass config.use_hyde to graph state)
+
+### 7D. Metadata-Filtered Retrieval
+[ ] Task 106: Add metadata filter to RAGService.retrieve() (optional where param)
+[ ] Task 107: Add pack_id filter to chat API (optional pack_id in ChatRequest)
+
+### 7E. Sample Content + Eval
+[ ] Task 108: Sample knowledge pack (5-10 LeetCode .md files with frontmatter + eval dataset)
+[ ] Task 109: Ingest + eval integration test (verify frontmatter, heading chunks, pack_id filter)
+
+### 7F. Migration + Verification
+[ ] Task 110: Re-ingest migration (chunk_strategy column + POST /ingest/migrate endpoint)
+[ ] Task 111: Full integration verification (all backend + frontend tests)
+
 === LOG ===
 2026-03-14 — Task 97 complete: Full integration verification — 480/481 backend tests pass (1 pre-existing config test isolation failure), 265/265 frontend tests pass, 30/30 test files pass. Phase 6 LangChain+LangGraph migration complete.
 2026-03-14 — Task 96 complete: Replaced manual Langfuse tracing (trace/span/generation) with LangChain CallbackHandler; added get_langfuse_callback() function; removed _langfuse attribute and _init_langfuse(); call_llm/call_llm_stream accept optional callbacks list; rewrote test_langfuse_tracing.py (8 tests) + added test_langchain_langfuse.py (7 tests); all 63 affected tests pass.

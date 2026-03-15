@@ -115,3 +115,39 @@ pnpm dev:all  # manual: verify Electron window shows {"status":"ok"}
 - [ ] Task 95: Wire graph into chat router — update `backend/app/routers/chat.py` `_chat_stream()` to use `graph.ainvoke()` for retrieval+prompt, then `model.astream()` for token streaming; SSE events unchanged — verified by: `cd backend && uv run pytest tests/test_chat_api.py -v` passes
 - [ ] Task 96: Replace Langfuse manual tracing — replace manual span creation in `RAGService.query()` with LangChain `CallbackHandler` from langfuse; keep env-var gating — verified by: `cd backend && uv run pytest tests/test_rag_service.py -v` passes
 - [ ] Task 97: Full integration verification — run all backend + frontend tests; manual smoke test POST /chat with SSE — verified by: `cd backend && uv run pytest` all pass + `cd .. && pnpm vitest run` all pass
+
+---
+
+## Phase 7: Knowledge Base Template + Advanced RAG
+
+### 7A. Frontmatter + Template Schema
+
+- [ ] Task 98: Frontmatter parser — create `backend/app/services/frontmatter_parser.py` with `FrontmatterData` dataclass and `parse_frontmatter(text) -> tuple[FrontmatterData, str]`; handles valid frontmatter, missing frontmatter, empty frontmatter, malformed YAML — verified by: `cd backend && uv run pytest tests/test_frontmatter_parser.py -v` passes
+- [ ] Task 99: SQLite schema migration — add `title`, `category`, `tags`, `difficulty`, `pack_id` columns to documents table in `database.py`; migration-safe (check column existence before ALTER) — verified by: `cd backend && uv run pytest tests/test_database.py -v` passes
+- [ ] Task 100: Wire frontmatter into IngestService — in `ingest_file()`, parse frontmatter before chunking, pass body (without frontmatter) to splitter, store frontmatter fields in SQLite documents table, add `pack_id` to Chroma chunk metadata — verified by: `cd backend && uv run pytest tests/test_ingest_service.py -v` passes
+
+### 7B. Heading-Aware Chunking
+
+- [ ] Task 101: Heading chunker — create `backend/app/services/heading_chunker.py` with `split_by_headings(text, metadata) -> list[Document]`; splits by `##` headings, sub-splits long sections (>1500 chars), merges short sections (<100 chars), adds `section_heading` + `chunk_index` metadata — verified by: `cd backend && uv run pytest tests/test_heading_chunker.py -v` passes
+- [ ] Task 102: Wire heading chunker into IngestService — `.md` files use `split_by_headings()`, `.pdf` files keep `split_text()`; `section_heading` added to Chroma metadata; update existing ingest tests — verified by: `cd backend && uv run pytest tests/test_ingest_service.py -v` passes
+
+### 7C. HyDE Pre-Retrieval
+
+- [ ] Task 103: HyDE service — create `backend/app/services/hyde_service.py` with `generate_hypothetical_doc(question, config) -> str`; uses `create_chat_model()` to generate hypothetical document passage — verified by: `cd backend && uv run pytest tests/test_hyde_service.py -v` passes
+- [ ] Task 104: Add HyDE to RAG graph — add `hyde_query` and `use_hyde` to `RAGState`; add `hyde` node before `retrieve` in `create_rag_prep_graph()`; retrieve uses `hyde_query` for Chroma search, keeps original `question` for prompt; add `use_hyde` to `AppConfig` — verified by: `cd backend && uv run pytest tests/test_rag_graph.py -v` passes
+- [ ] Task 105: Update chat router for HyDE — pass `config.use_hyde` into graph state; update existing chat API tests — verified by: `cd backend && uv run pytest tests/test_chat_api.py -v` passes
+
+### 7D. Metadata-Filtered Retrieval
+
+- [ ] Task 106: Add metadata filter to RAGService.retrieve() — add optional `where: dict` parameter to `retrieve()` method, pass to `collection.query()`; backward compatible (None = no filter) — verified by: `cd backend && uv run pytest tests/test_rag_service.py -v` passes
+- [ ] Task 107: Add pack_id filter to chat API — add optional `pack_id` field to `ChatRequest`; pass to graph state; retrieve node builds `where={"pack_id": ...}` filter — verified by: `cd backend && uv run pytest tests/test_chat_api.py -v` passes
+
+### 7E. Sample Content + Eval
+
+- [ ] Task 108: Sample knowledge pack — create `backend/tests/fixtures/sample_pack/` with 5-10 LeetCode-style `.md` files with frontmatter (title, category, tags, difficulty, pack_id); create `backend/tests/fixtures/eval_dataset.json` with 10-20 question/ground_truth pairs — verified by: files exist and are valid markdown/JSON
+- [ ] Task 109: Ingest + eval integration test — write test that ingests sample_pack, runs queries, verifies frontmatter stored in SQLite, heading chunks have section_heading metadata, pack_id filter works — verified by: `cd backend && uv run pytest tests/test_advanced_rag_integration.py -v` passes
+
+### 7F. Migration + Verification
+
+- [ ] Task 110: Re-ingest migration — add `chunk_strategy` column to documents table; `POST /ingest/migrate` endpoint re-ingests all docs with heading-aware chunking; startup sync detects old strategy docs — verified by: `cd backend && uv run pytest tests/test_ingest_migration.py -v` passes
+- [ ] Task 111: Full integration verification — run all backend + frontend tests; verify existing features unbroken — verified by: `cd backend && uv run pytest` all pass + `cd .. && pnpm vitest run` all pass
