@@ -218,7 +218,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 
 ### 8C. Company Doc + Eval Dataset
 [x] Task 117: Convert company doc (rippling.md)
-[ ] Task 118: Create eval_dataset_leetcode.json (25-30 Q&A pairs)
+[x] Task 118: Create eval_dataset_leetcode.json (25-30 Q&A pairs)
 
 ### 8D. Verification
 [ ] Task 119: Ingest verification (25 files indexed, heading-aware chunking, pack_id filter)
