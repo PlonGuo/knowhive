@@ -29,6 +29,8 @@ from app.routers.review import init_review_router
 from app.routers.review import router as review_router
 from app.routers.embedding import init_embedding_router
 from app.routers.embedding import router as embedding_router
+from app.routers.reranker import init_reranker_router
+from app.routers.reranker import router as reranker_router
 from app.routers.community import init_community_router
 from app.routers.community import router as community_router
 from app.routers.export import init_export_router
@@ -38,6 +40,7 @@ from app.routers.setup import router as setup_router
 from app.routers.watcher import init_watcher_router
 from app.routers.watcher import router as watcher_router
 from app.services.embedding_service import EmbeddingService
+from app.services.reranker_service import RerankerService
 from app.services.community_service import CommunityService
 from app.services.spaced_repetition_service import SpacedRepetitionService
 from app.services.summary_service import SummaryService
@@ -79,6 +82,8 @@ def create_app(
         current_config = load_config(_config_path)
         embedding_service = EmbeddingService()
         init_embedding_router(embedding_service)
+        reranker_service = RerankerService()
+        init_reranker_router(reranker_service)
         embedding_fn = embedding_service.get_embedding_function(current_config.embedding_language)
 
         # Initialize services
@@ -154,6 +159,7 @@ def create_app(
     app.include_router(chat_router)
     app.include_router(watcher_router)
     app.include_router(embedding_router)
+    app.include_router(reranker_router)
     app.include_router(export_router)
     app.include_router(community_router)
     app.include_router(review_router)
