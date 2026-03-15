@@ -180,7 +180,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 
 ### 7A. Frontmatter + Template Schema
 [x] Task 98: Frontmatter parser (FrontmatterData dataclass + parse_frontmatter)
-[ ] Task 99: SQLite schema migration (add title, category, tags, difficulty, pack_id columns)
+[x] Task 99: SQLite schema migration (add title, category, tags, difficulty, pack_id columns)
 [ ] Task 100: Wire frontmatter into IngestService (parse before chunking, store in SQLite + Chroma)
 
 ### 7B. Heading-Aware Chunking
@@ -205,6 +205,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [ ] Task 111: Full integration verification (all backend + frontend tests)
 
 === LOG ===
+2026-03-15 — Task 99 complete: Added title, category, tags, difficulty, pack_id columns to documents table in database.py (CREATE TABLE + ALTER TABLE migration for existing DBs); updated DocumentCreate and Document Pydantic models with Optional frontmatter fields; _migrate_documents_table() checks PRAGMA table_info before ALTER; 11 new tests (column existence x5, defaults NULL, insert with frontmatter, migration idempotent, model tests x3); all 29 database tests pass; 506/507 backend tests pass (1 pre-existing config test isolation failure).
 2026-03-15 — Task 98 complete: app/services/frontmatter_parser.py — FrontmatterData dataclass (title, category, tags, difficulty, pack_id) + parse_frontmatter(text) → (FrontmatterData, body); regex-based frontmatter extraction with yaml.safe_load; handles missing/empty/malformed YAML, CRLF, inline/string tags normalization, extra fields ignored; 15 new tests; all 15 pass.
 2026-03-14 — Task 97 complete: Full integration verification — 480/481 backend tests pass (1 pre-existing config test isolation failure), 265/265 frontend tests pass, 30/30 test files pass. Phase 6 LangChain+LangGraph migration complete.
 2026-03-14 — Task 96 complete: Replaced manual Langfuse tracing (trace/span/generation) with LangChain CallbackHandler; added get_langfuse_callback() function; removed _langfuse attribute and _init_langfuse(); call_llm/call_llm_stream accept optional callbacks list; rewrote test_langfuse_tracing.py (8 tests) + added test_langchain_langfuse.py (7 tests); all 63 affected tests pass.

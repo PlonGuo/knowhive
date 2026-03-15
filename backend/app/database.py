@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS documents (
     chunk_count     INTEGER DEFAULT 0,
     status          TEXT DEFAULT 'pending',
     error_message   TEXT,
+    title           TEXT,
+    category        TEXT,
+    tags            TEXT,
+    difficulty      TEXT,
+    pack_id         TEXT,
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now'))
 );
@@ -64,6 +69,27 @@ CREATE TABLE IF NOT EXISTS review_items (
 """
 
 
+_MIGRATION_COLUMNS = [
+    ("title", "TEXT"),
+    ("category", "TEXT"),
+    ("tags", "TEXT"),
+    ("difficulty", "TEXT"),
+    ("pack_id", "TEXT"),
+]
+
+
+async def _migrate_documents_table(conn: aiosqlite.Connection) -> None:
+    """Add frontmatter columns to documents table if they don't exist."""
+    cursor = await conn.execute("PRAGMA table_info(documents)")
+    existing = {row[1] for row in await cursor.fetchall()}
+    for col_name, col_type in _MIGRATION_COLUMNS:
+        if col_name not in existing:
+            await conn.execute(
+                f"ALTER TABLE documents ADD COLUMN {col_name} {col_type}"
+            )
+    await conn.commit()
+
+
 async def init_db(db_path: str = "knowhive.db") -> None:
     """Initialize the database connection and create tables."""
     global _db_path, _connection
@@ -72,6 +98,7 @@ async def init_db(db_path: str = "knowhive.db") -> None:
     _connection.row_factory = aiosqlite.Row
     await _connection.executescript(SQL_CREATE_TABLES)
     await _connection.commit()
+    await _migrate_documents_table(_connection)
 
 
 async def close_db() -> None:

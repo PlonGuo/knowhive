@@ -36,6 +36,11 @@ class DocumentCreate(BaseModel):
     file_size: Optional[int] = None
     file_hash: Optional[str] = None
     modified_at: str
+    title: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[str] = None
+    difficulty: Optional[str] = None
+    pack_id: Optional[str] = None
 
 
 class Document(BaseModel):
@@ -49,6 +54,11 @@ class Document(BaseModel):
     chunk_count: int = 0
     status: DocumentStatus = DocumentStatus.PENDING
     error_message: Optional[str] = None
+    title: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[str] = None
+    difficulty: Optional[str] = None
+    pack_id: Optional[str] = None
     created_at: str
     updated_at: str
 
