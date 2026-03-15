@@ -176,3 +176,33 @@ pnpm dev:all  # manual: verify Electron window shows {"status":"ok"}
 
 - [ ] Task 119: Ingest verification — write test that ingests `knowledge/leetcode-basics/`, verifies 25 files indexed, heading-aware chunking, pack_id filter, frontmatter in SQLite — verified by: `cd backend && uv run pytest tests/test_leetcode_pack_integration.py -v` passes
 - [ ] Task 120: Full test suite + eval baseline — run all backend + frontend tests, run eval_ragas.py against leetcode pack — verified by: all tests pass, eval produces non-zero scores
+
+---
+
+## Phase 9: Advanced RAG (Re-ranking, Multi-Query, Conversation Memory)
+
+### 9A. Config + Routing
+
+- [ ] Task 121: AppConfig — add `PreRetrievalStrategy` enum (none/hyde/multi_query), replace `use_hyde` with `pre_retrieval_strategy`, add `use_reranker: bool`, `chat_memory_turns: int`, Pydantic validator for `use_hyde` migration — verified by: `cd backend && uv run pytest tests/test_config_phase9.py -v`
+- [ ] Task 122: RAGState + graph routing — replace `use_hyde` with `pre_retrieval_strategy` in RAGState, `_should_hyde()` → `_pre_retrieval_route()` (3-way routing), update both graph variants + chat router + existing tests — verified by: `cd backend && uv run pytest tests/test_rag_graph_routing.py tests/test_rag_graph_hyde.py tests/test_chat_graph_wiring.py -v`
+
+### 9B. Re-ranking
+
+- [ ] Task 123: RerankerService — `CrossEncoder` download/load pattern (like EmbeddingService), `rerank(query, chunks, top_k)` method — verified by: `cd backend && uv run pytest tests/test_reranker_service.py -v`
+- [ ] Task 124: Reranker API router — GET /reranker/status, POST /reranker/download, GET /reranker/download-status, wire into main.py — verified by: `cd backend && uv run pytest tests/test_reranker_api.py -v`
+- [ ] Task 125: Rerank node in LangGraph — conditional node after retrieve, reads `use_reranker` from state, pass-through if disabled, wire reranker_service into chat router — verified by: `cd backend && uv run pytest tests/test_rag_graph_rerank.py -v`
+
+### 9C. Multi-Query
+
+- [ ] Task 126: Multi-query expansion service — `expand_queries(question, config) → list[str]`, LLM prompt to generate 3-5 variants, parse numbered lines, fallback to `[question]` on error — verified by: `cd backend && uv run pytest tests/test_multi_query_service.py -v`
+- [ ] Task 127: Multi-query node in LangGraph — calls `expand_queries()`, retrieves per variant, merge/dedup by `(file_path, chunk_index)`, wire into 3-way routing — verified by: `cd backend && uv run pytest tests/test_rag_graph_multi_query.py -v`
+
+### 9D. Conversation Memory
+
+- [ ] Task 128: Query rewriter service — `fetch_chat_history(n_turns)` from SQLite, `rewrite_query(question, history, config)` via LLM, fallback to original on error — verified by: `cd backend && uv run pytest tests/test_query_rewriter.py -v`
+- [ ] Task 129: Rewrite_query node in LangGraph — conditional at START, `chat_memory_turns > 0` triggers rewrite, updated question flows to pre-retrieval routing — verified by: `cd backend && uv run pytest tests/test_rag_graph_memory.py -v`
+
+### 9E. Frontend + Verification
+
+- [ ] Task 130: Frontend settings — pre_retrieval_strategy dropdown (None/HyDE/Multi-Query), reranker toggle + download button, chat_memory_turns input — verified by: `cd .. && pnpm vitest run tests/src/settings-phase9.test.tsx`
+- [ ] Task 131: Full integration verification — all backend + frontend tests pass — verified by: `cd backend && uv run pytest -v && cd .. && pnpm vitest run`

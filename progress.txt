@@ -224,6 +224,30 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 119: Ingest verification (25 files indexed, heading-aware chunking, pack_id filter)
 [x] Task 120: Full test suite + eval baseline
 
+## Phase 9: Advanced RAG (Re-ranking, Multi-Query, Conversation Memory)
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 9A. Config + Routing
+[ ] Task 121: AppConfig pre_retrieval_strategy enum + use_reranker + chat_memory_turns (replace use_hyde)
+[ ] Task 122: RAGState + graph routing update (3-way pre-retrieval, update existing tests)
+
+### 9B. Re-ranking
+[ ] Task 123: RerankerService (CrossEncoder download + rerank method)
+[ ] Task 124: Reranker API router (status/download endpoints)
+[ ] Task 125: Rerank node in LangGraph (conditional after retrieve)
+
+### 9C. Multi-Query
+[ ] Task 126: Multi-query expansion service (LLM generates query variants)
+[ ] Task 127: Multi-query retrieval + merge/dedup in LangGraph
+
+### 9D. Conversation Memory
+[ ] Task 128: Query rewriter service (LLM rewrites with history context)
+[ ] Task 129: Rewrite_query node in LangGraph (conditional at START)
+
+### 9E. Frontend + Verification
+[ ] Task 130: Frontend settings (strategy dropdown, reranker toggle+download, memory turns)
+[ ] Task 131: Full integration verification (all backend + frontend tests)
+
 === LOG ===
 2026-03-15 — Task 106 complete: Added optional where: dict parameter to RAGService.retrieve(); when provided, passes where kwarg to collection.query() for Chroma metadata filtering; None (default) omits kwarg for full backward compatibility; 4 new tests (with filter, without filter, explicit None, complex $and filter); all 25 RAG service tests pass.
 2026-03-15 — Task 105 complete: Added use_hyde field to AppConfig (default False); updated _chat_stream in chat.py to pass config.use_hyde into prep graph state; 2 new tests (use_hyde=False default skips HyDE, use_hyde=True triggers HyDE and passes hypothetical doc to retrieve); all 14 chat API tests pass.
