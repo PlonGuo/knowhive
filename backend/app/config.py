@@ -26,6 +26,7 @@ class AppConfig(BaseModel):
     api_key: Optional[str] = None
     embedding_language: EmbeddingLanguage = EmbeddingLanguage.ENGLISH
     first_run_complete: bool = False
+    use_hyde: bool = False
 
 
 def load_config(config_path: Path) -> AppConfig:

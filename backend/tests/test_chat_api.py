@@ -157,6 +157,53 @@ class TestPostChat:
 
     @patch("app.routers.chat._get_rag_service")
     @patch("app.routers.chat._get_config")
+    def test_chat_passes_use_hyde_false_by_default(self, mock_config, mock_rag, client, mock_rag_service):
+        """POST /chat passes use_hyde=False to graph state by default."""
+        from app.config import AppConfig
+
+        mock_config.return_value = AppConfig()
+        mock_rag.return_value = mock_rag_service
+
+        async def fake_stream(messages, config):
+            yield "ok"
+
+        mock_rag_service.call_llm_stream = fake_stream
+
+        resp = client.post("/chat", json={"question": "test"})
+        assert resp.status_code == 200
+        # With use_hyde=False (default), retrieve is called with the original question
+        mock_rag_service.retrieve.assert_called_once_with("test", k=5)
+
+    @patch("app.services.rag_graph.generate_hypothetical_doc")
+    @patch("app.routers.chat._get_rag_service")
+    @patch("app.routers.chat._get_config")
+    def test_chat_passes_use_hyde_true_from_config(
+        self, mock_config, mock_rag, mock_hyde, client, mock_rag_service
+    ):
+        """POST /chat passes use_hyde=True when config has use_hyde=True."""
+        from app.config import AppConfig
+
+        mock_config.return_value = AppConfig(use_hyde=True)
+        mock_rag.return_value = mock_rag_service
+
+        # Mock HyDE to return a hypothetical doc
+        async def fake_hyde(question, config):
+            return "hypothetical answer about test"
+
+        mock_hyde.side_effect = fake_hyde
+
+        async def fake_stream(messages, config):
+            yield "ok"
+
+        mock_rag_service.call_llm_stream = fake_stream
+
+        resp = client.post("/chat", json={"question": "test"})
+        assert resp.status_code == 200
+        # With use_hyde=True, retrieve is called with the hypothetical doc
+        mock_rag_service.retrieve.assert_called_once_with("hypothetical answer about test", k=5)
+
+    @patch("app.routers.chat._get_rag_service")
+    @patch("app.routers.chat._get_config")
     def test_chat_handles_llm_error(self, mock_config, mock_rag, client, mock_rag_service):
         """POST /chat sends error event if LLM stream fails."""
         from app.config import AppConfig

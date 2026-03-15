@@ -74,7 +74,7 @@ async def _chat_stream(question: str, k: int) -> AsyncGenerator[str, None]:
 
     # Use LangGraph prep graph for retrieve + build_prompt
     prep_graph = create_rag_prep_graph(rag, config)
-    prep_result = await prep_graph.ainvoke({"question": question, "k": k})
+    prep_result = await prep_graph.ainvoke({"question": question, "k": k, "use_hyde": config.use_hyde})
     sources = prep_result["sources"]
     messages = prep_result["messages"]
 

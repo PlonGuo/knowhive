@@ -190,7 +190,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 ### 7C. HyDE Pre-Retrieval
 [x] Task 103: HyDE service (generate_hypothetical_doc via LLM)
 [x] Task 104: Add HyDE node to RAG graph (hyde → retrieve → build_prompt → END)
-[ ] Task 105: Update chat router for HyDE (pass config.use_hyde to graph state)
+[x] Task 105: Update chat router for HyDE (pass config.use_hyde to graph state)
 
 ### 7D. Metadata-Filtered Retrieval
 [ ] Task 106: Add metadata filter to RAGService.retrieve() (optional where param)
@@ -205,6 +205,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [ ] Task 111: Full integration verification (all backend + frontend tests)
 
 === LOG ===
+2026-03-15 — Task 105 complete: Added use_hyde field to AppConfig (default False); updated _chat_stream in chat.py to pass config.use_hyde into prep graph state; 2 new tests (use_hyde=False default skips HyDE, use_hyde=True triggers HyDE and passes hypothetical doc to retrieve); all 14 chat API tests pass.
 2026-03-15 — Task 104 complete: Added HyDE node to RAG graph — rag_graph.py updated with conditional hyde→retrieve routing via _should_hyde(); RAGState gains use_hyde and hypothetical_doc fields; both create_rag_graph and create_rag_prep_graph support HyDE (prep graph now accepts config param); hyde node calls generate_hypothetical_doc, stores result in state, retrieve uses hypothetical_doc for Chroma query while build_prompt preserves original question; chat router updated to pass config to prep graph; 8 new tests (state field, full graph with/without/default hyde, prep graph with/without hyde, original question in prompt, hypothetical_doc in state); updated 1 existing wiring test; all 554/555 backend tests pass (1 pre-existing config test isolation failure).
 2026-03-15 — Task 103 complete: app/services/hyde_service.py — generate_hypothetical_doc(question, config) uses create_chat_model() to generate a hypothetical document passage for improved retrieval; HYDE_PROMPT_TEMPLATE instructs LLM to write 2-4 sentence factual passage; graceful fallback to original question on empty/None response or LLM error; 9 new tests (prompt template, return type, question in prompt, factory called, whitespace strip, empty fallback, None fallback, error fallback, message structure); all 9 pass.
 2026-03-15 — Task 102 complete: Wired heading chunker into IngestService.ingest_file() — .md files now use split_by_headings() (heading-aware chunking with section_heading metadata), .pdf files keep fixed-size split_text(); fallback to split_text() if heading chunker returns empty; 5 new tests (md uses heading chunker, pdf uses fixed split, chunk_index preserved, frontmatter metadata preserved, md without headings); all 537/538 backend tests pass (1 pre-existing config test isolation failure).
