@@ -96,3 +96,22 @@ pnpm lint
 # Dev mode smoke test
 pnpm dev:all  # manual: verify Electron window shows {"status":"ok"}
 ```
+
+---
+
+## Phase 6: LangChain + LangGraph Migration
+
+### 6A. LangChain ChatModel Integration
+
+- [ ] Task 89: Add LangChain provider deps — add `langchain-ollama>=0.3.0`, `langchain-openai>=0.3.0`, `langchain-anthropic>=0.3.0`, `langgraph>=0.4.0` to `backend/pyproject.toml`; `uv sync` — verified by: `cd backend && uv run python -c "from langchain_ollama import ChatOllama; from langchain_openai import ChatOpenAI; from langchain_anthropic import ChatAnthropic; from langgraph.graph import StateGraph; print('ok')"`
+- [ ] Task 90: LLM factory — create `backend/app/services/llm_factory.py` with `create_chat_model(config: AppConfig) -> BaseChatModel` (Ollama→ChatOllama, OpenAI→ChatOpenAI, Anthropic→ChatAnthropic) and `dicts_to_messages()` helper — verified by: `cd backend && uv run pytest tests/test_llm_factory.py -v` passes
+- [ ] Task 91: Refactor RAGService LLM calls — replace httpx `call_llm()` and `call_llm_stream()` with LangChain `model.ainvoke()` / `model.astream()` via `create_chat_model()`; remove `import httpx` and `_prepare_anthropic()`; keep method signatures identical — verified by: `cd backend && uv run pytest tests/test_rag_service.py -v` passes
+- [ ] Task 92: Update RAG service tests — rewrite `test_rag_service.py` LLM mocks from `httpx.AsyncClient` patches to `create_chat_model` patches with `AIMessage`/`AIMessageChunk` returns; remove Anthropic header/body tests — verified by: `cd backend && uv run pytest tests/test_rag_service.py -v` all 28 tests pass
+- [ ] Task 93: Verify downstream callers — run full test suite to confirm `chat_api`, `summary_service`, `eval_ragas` tests still pass with unchanged signatures — verified by: `cd backend && uv run pytest` all 320+ tests pass
+
+### 6B. LangGraph StateGraph
+
+- [ ] Task 94: RAG graph — create `backend/app/services/rag_graph.py` with `RAGState` TypedDict and `build_rag_graph(rag_service)` returning `CompiledGraph` (nodes: retrieve → build_prompt → END) — verified by: `cd backend && uv run pytest tests/test_rag_graph.py -v` passes
+- [ ] Task 95: Wire graph into chat router — update `backend/app/routers/chat.py` `_chat_stream()` to use `graph.ainvoke()` for retrieval+prompt, then `model.astream()` for token streaming; SSE events unchanged — verified by: `cd backend && uv run pytest tests/test_chat_api.py -v` passes
+- [ ] Task 96: Replace Langfuse manual tracing — replace manual span creation in `RAGService.query()` with LangChain `CallbackHandler` from langfuse; keep env-var gating — verified by: `cd backend && uv run pytest tests/test_rag_service.py -v` passes
+- [ ] Task 97: Full integration verification — run all backend + frontend tests; manual smoke test POST /chat with SSE — verified by: `cd backend && uv run pytest` all pass + `cd .. && pnpm vitest run` all pass

@@ -159,6 +159,22 @@ Plan: ~/.claude/plans/tender-hatching-hopcroft.md
 [x] Task 87: README.md rewrite (features, prerequisites, installation, dev setup)
 [x] Task 88: CONTRIBUTING.md (dev setup, test commands, contribution guide)
 
+## Phase 6: LangChain + LangGraph Migration
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 6A. LangChain ChatModel Integration
+[ ] Task 89: Add LangChain provider deps (langchain-ollama, langchain-openai, langchain-anthropic, langgraph)
+[ ] Task 90: LLM factory (create_chat_model + dicts_to_messages helper)
+[ ] Task 91: Refactor RAGService call_llm/call_llm_stream to use LangChain
+[ ] Task 92: Update test_rag_service.py mocks (httpx → LangChain)
+[ ] Task 93: Verify all downstream callers pass (full test suite)
+
+### 6B. LangGraph StateGraph
+[ ] Task 94: RAG graph (rag_graph.py with StateGraph: retrieve → build_prompt → END)
+[ ] Task 95: Wire graph into chat router (_chat_stream uses graph.ainvoke)
+[ ] Task 96: Replace Langfuse manual tracing with LangChain callbacks
+[ ] Task 97: Full integration verification (all backend + frontend tests)
+
 === LOG ===
 2026-03-12 — Task 18 complete: Added langchain-core, langchain-community, langchain-text-splitters, chromadb, sentence-transformers, aiosqlite, pyyaml, pytest-asyncio to pyproject.toml; uv sync installs 93 new packages; 7 new import tests; all 21 tests pass.
 2026-03-12 — Task 19 complete: app/database.py with async SQLite connection manager (aiosqlite), 3 tables (documents, chat_messages, ingest_tasks) matching PRD schema; app/models.py with Pydantic models + StrEnum types; 18 database tests; all 39 tests pass.
