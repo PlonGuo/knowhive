@@ -173,9 +173,10 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 94: RAG graph (rag_graph.py with StateGraph: retrieve → build_prompt → END)
 [x] Task 95: Wire graph into chat router (_chat_stream uses graph.ainvoke)
 [x] Task 96: Replace Langfuse manual tracing with LangChain callbacks
-[ ] Task 97: Full integration verification (all backend + frontend tests)
+[x] Task 97: Full integration verification (all backend + frontend tests)
 
 === LOG ===
+2026-03-14 — Task 97 complete: Full integration verification — 480/481 backend tests pass (1 pre-existing config test isolation failure), 265/265 frontend tests pass, 30/30 test files pass. Phase 6 LangChain+LangGraph migration complete.
 2026-03-14 — Task 96 complete: Replaced manual Langfuse tracing (trace/span/generation) with LangChain CallbackHandler; added get_langfuse_callback() function; removed _langfuse attribute and _init_langfuse(); call_llm/call_llm_stream accept optional callbacks list; rewrote test_langfuse_tracing.py (8 tests) + added test_langchain_langfuse.py (7 tests); all 63 affected tests pass.
 2026-03-14 — Task 95 complete: Added create_rag_prep_graph (retrieve→build_prompt→END) to rag_graph.py; updated chat.py _chat_stream to use prep graph.ainvoke for retrieval+prompt, then stream LLM tokens; 6 new wiring tests + all 12 existing chat tests pass; 18 total pass.
 2026-03-14 — Task 94 complete: app/services/rag_graph.py — RAGState TypedDict, create_rag_graph(rag_service, config) builds StateGraph with retrieve→build_prompt→generate→END nodes; delegates to RAGService methods; 9 new tests (imports, construction, execution, sources, k param, defaults); all 9 pass.
