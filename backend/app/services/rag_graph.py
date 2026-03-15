@@ -51,3 +51,31 @@ def create_rag_graph(rag_service: RAGService, config: AppConfig):
     graph.add_edge("generate", END)
 
     return graph.compile()
+
+
+def create_rag_prep_graph(rag_service: RAGService):
+    """Build a prep-only graph: retrieve → build_prompt → END.
+
+    Returns chunks, sources, and messages without calling the LLM.
+    Use this for streaming chat where LLM tokens are streamed separately.
+    """
+
+    async def retrieve(state: RAGState) -> dict:
+        k = state.get("k", 5)
+        chunks = rag_service.retrieve(state["question"], k=k)
+        sources = rag_service.extract_sources(chunks)
+        return {"chunks": chunks, "sources": sources}
+
+    async def build_prompt(state: RAGState) -> dict:
+        messages = rag_service.build_prompt(state["question"], state["chunks"])
+        return {"messages": messages}
+
+    graph = StateGraph(RAGState)
+    graph.add_node("retrieve", retrieve)
+    graph.add_node("build_prompt", build_prompt)
+
+    graph.set_entry_point("retrieve")
+    graph.add_edge("retrieve", "build_prompt")
+    graph.add_edge("build_prompt", END)
+
+    return graph.compile()

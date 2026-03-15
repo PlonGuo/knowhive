@@ -9,6 +9,7 @@ from pydantic import BaseModel, field_validator
 
 from app.config import AppConfig, load_config
 from app.database import get_db
+from app.services.rag_graph import create_rag_prep_graph
 from app.services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
@@ -71,10 +72,11 @@ async def _chat_stream(question: str, k: int) -> AsyncGenerator[str, None]:
     rag = _get_rag_service()
     config = _get_config()
 
-    # Retrieve context chunks
-    chunks = rag.retrieve(question, k=k)
-    sources = rag.extract_sources(chunks)
-    messages = rag.build_prompt(question, chunks)
+    # Use LangGraph prep graph for retrieve + build_prompt
+    prep_graph = create_rag_prep_graph(rag)
+    prep_result = await prep_graph.ainvoke({"question": question, "k": k})
+    sources = prep_result["sources"]
+    messages = prep_result["messages"]
 
     # Save user message to DB
     async with get_db() as db:
