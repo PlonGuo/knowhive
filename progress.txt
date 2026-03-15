@@ -228,7 +228,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 Plan: ~/.claude/plans/eventual-skipping-reddy.md
 
 ### 9A. Config + Routing
-[ ] Task 121: AppConfig pre_retrieval_strategy enum + use_reranker + chat_memory_turns (replace use_hyde)
+[x] Task 121: AppConfig pre_retrieval_strategy enum + use_reranker + chat_memory_turns (replace use_hyde)
 [ ] Task 122: RAGState + graph routing update (3-way pre-retrieval, update existing tests)
 
 ### 9B. Re-ranking
@@ -249,6 +249,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [ ] Task 131: Full integration verification (all backend + frontend tests)
 
 === LOG ===
+2026-03-15 — Task 121 complete: Added PreRetrievalStrategy enum (none/hyde/multi_query) to config.py; replaced use_hyde bool with pre_retrieval_strategy field; added use_reranker (default False) and chat_memory_turns (default 0); load_config() migrates legacy use_hyde YAML to pre_retrieval_strategy; updated chat.py to derive use_hyde from pre_retrieval_strategy; updated test_chat_api.py to use new config fields; 18 new tests in test_config_phase9.py (enum values, defaults, migration, serialization, validation); all 18 pass; 618/619 backend tests pass (1 pre-existing config test isolation failure).
 2026-03-15 — Task 106 complete: Added optional where: dict parameter to RAGService.retrieve(); when provided, passes where kwarg to collection.query() for Chroma metadata filtering; None (default) omits kwarg for full backward compatibility; 4 new tests (with filter, without filter, explicit None, complex $and filter); all 25 RAG service tests pass.
 2026-03-15 — Task 105 complete: Added use_hyde field to AppConfig (default False); updated _chat_stream in chat.py to pass config.use_hyde into prep graph state; 2 new tests (use_hyde=False default skips HyDE, use_hyde=True triggers HyDE and passes hypothetical doc to retrieve); all 14 chat API tests pass.
 2026-03-15 — Task 104 complete: Added HyDE node to RAG graph — rag_graph.py updated with conditional hyde→retrieve routing via _should_hyde(); RAGState gains use_hyde and hypothetical_doc fields; both create_rag_graph and create_rag_prep_graph support HyDE (prep graph now accepts config param); hyde node calls generate_hypothetical_doc, stores result in state, retrieve uses hypothetical_doc for Chroma query while build_prompt preserves original question; chat router updated to pass config to prep graph; 8 new tests (state field, full graph with/without/default hyde, prep graph with/without hyde, original question in prompt, hypothetical_doc in state); updated 1 existing wiring test; all 554/555 backend tests pass (1 pre-existing config test isolation failure).

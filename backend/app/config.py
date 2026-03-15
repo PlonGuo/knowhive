@@ -19,6 +19,12 @@ class EmbeddingLanguage(StrEnum):
     MIXED = "mixed"
 
 
+class PreRetrievalStrategy(StrEnum):
+    NONE = "none"
+    HYDE = "hyde"
+    MULTI_QUERY = "multi_query"
+
+
 class AppConfig(BaseModel):
     llm_provider: LLMProvider = LLMProvider.OLLAMA
     model_name: str = "llama3"
@@ -26,14 +32,23 @@ class AppConfig(BaseModel):
     api_key: Optional[str] = None
     embedding_language: EmbeddingLanguage = EmbeddingLanguage.ENGLISH
     first_run_complete: bool = False
-    use_hyde: bool = False
+    pre_retrieval_strategy: PreRetrievalStrategy = PreRetrievalStrategy.NONE
+    use_reranker: bool = False
+    chat_memory_turns: int = 0
 
 
 def load_config(config_path: Path) -> AppConfig:
-    """Load config from YAML file. Returns defaults if file doesn't exist."""
+    """Load config from YAML file. Returns defaults if file doesn't exist.
+
+    Handles migration from legacy use_hyde field to pre_retrieval_strategy.
+    """
     if not config_path.exists():
         return AppConfig()
     raw = yaml.safe_load(config_path.read_text()) or {}
+    # Migrate legacy use_hyde → pre_retrieval_strategy
+    if "use_hyde" in raw and "pre_retrieval_strategy" not in raw:
+        raw["pre_retrieval_strategy"] = "hyde" if raw["use_hyde"] else "none"
+    raw.pop("use_hyde", None)
     return AppConfig(**raw)
 
 

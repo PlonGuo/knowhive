@@ -158,10 +158,10 @@ class TestPostChat:
     @patch("app.routers.chat._get_rag_service")
     @patch("app.routers.chat._get_config")
     def test_chat_passes_use_hyde_false_by_default(self, mock_config, mock_rag, client, mock_rag_service):
-        """POST /chat passes use_hyde=False to graph state by default."""
+        """POST /chat passes use_hyde=False to graph state by default (pre_retrieval_strategy=none)."""
         from app.config import AppConfig
 
-        mock_config.return_value = AppConfig()
+        mock_config.return_value = AppConfig()  # pre_retrieval_strategy defaults to "none"
         mock_rag.return_value = mock_rag_service
 
         async def fake_stream(messages, config):
@@ -180,10 +180,10 @@ class TestPostChat:
     def test_chat_passes_use_hyde_true_from_config(
         self, mock_config, mock_rag, mock_hyde, client, mock_rag_service
     ):
-        """POST /chat passes use_hyde=True when config has use_hyde=True."""
-        from app.config import AppConfig
+        """POST /chat passes use_hyde=True when config has pre_retrieval_strategy=hyde."""
+        from app.config import AppConfig, PreRetrievalStrategy
 
-        mock_config.return_value = AppConfig(use_hyde=True)
+        mock_config.return_value = AppConfig(pre_retrieval_strategy=PreRetrievalStrategy.HYDE)
         mock_rag.return_value = mock_rag_service
 
         # Mock HyDE to return a hypothetical doc
