@@ -3,6 +3,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from app.config import AppConfig
 from app.services.rag_service import RAGService
@@ -90,17 +91,11 @@ async def test_query_creates_trace_when_enabled(mock_collection, default_config,
     with patch("app.services.rag_service.Langfuse", return_value=mock_lf):
         svc = RAGService(mock_collection)
 
-    # Mock LLM call
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"message": {"content": "Answer"}}
+    # Mock LLM call via LangChain
+    mock_model = AsyncMock()
+    mock_model.ainvoke.return_value = AIMessage(content="Answer")
 
-    with patch("app.services.rag_service.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
-
+    with patch("app.services.rag_service.create_chat_model", return_value=mock_model):
         result = await svc.query("What is Python?", default_config)
 
     # Trace was created
@@ -129,16 +124,10 @@ async def test_query_no_trace_when_disabled(mock_collection, default_config, mon
 
     svc = RAGService(mock_collection)
 
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"message": {"content": "Answer"}}
+    mock_model = AsyncMock()
+    mock_model.ainvoke.return_value = AIMessage(content="Answer")
 
-    with patch("app.services.rag_service.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
-
+    with patch("app.services.rag_service.create_chat_model", return_value=mock_model):
         result = await svc.query("What is Python?", default_config)
 
     assert result["answer"] == "Answer"
@@ -162,16 +151,10 @@ async def test_trace_records_output(mock_collection, default_config, monkeypatch
     with patch("app.services.rag_service.Langfuse", return_value=mock_lf):
         svc = RAGService(mock_collection)
 
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"message": {"content": "The answer is 42"}}
+    mock_model = AsyncMock()
+    mock_model.ainvoke.return_value = AIMessage(content="The answer is 42")
 
-    with patch("app.services.rag_service.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
-
+    with patch("app.services.rag_service.create_chat_model", return_value=mock_model):
         await svc.query("What is the answer?", default_config)
 
     # Generation end should record the output
@@ -195,16 +178,10 @@ async def test_trace_error_does_not_break_query(mock_collection, default_config,
     with patch("app.services.rag_service.Langfuse", return_value=mock_lf):
         svc = RAGService(mock_collection)
 
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"message": {"content": "Still works"}}
+    mock_model = AsyncMock()
+    mock_model.ainvoke.return_value = AIMessage(content="Still works")
 
-    with patch("app.services.rag_service.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
-
+    with patch("app.services.rag_service.create_chat_model", return_value=mock_model):
         result = await svc.query("test", default_config)
 
     assert result["answer"] == "Still works"
@@ -227,16 +204,10 @@ async def test_retrieval_span_records_chunk_count(mock_collection, default_confi
     with patch("app.services.rag_service.Langfuse", return_value=mock_lf):
         svc = RAGService(mock_collection)
 
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"message": {"content": "Answer"}}
+    mock_model = AsyncMock()
+    mock_model.ainvoke.return_value = AIMessage(content="Answer")
 
-    with patch("app.services.rag_service.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
-
+    with patch("app.services.rag_service.create_chat_model", return_value=mock_model):
         await svc.query("test", default_config, k=3)
 
     # Check retrieval span was created with input

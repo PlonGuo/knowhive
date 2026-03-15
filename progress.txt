@@ -167,7 +167,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 90: LLM factory (create_chat_model + dicts_to_messages helper)
 [x] Task 91: Refactor RAGService call_llm/call_llm_stream to use LangChain
 [x] Task 92: Update test_rag_service.py mocks (httpx → LangChain)
-[ ] Task 93: Verify all downstream callers pass (full test suite)
+[x] Task 93: Verify all downstream callers pass (full test suite)
 
 ### 6B. LangGraph StateGraph
 [ ] Task 94: RAG graph (rag_graph.py with StateGraph: retrieve → build_prompt → END)
@@ -176,6 +176,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [ ] Task 97: Full integration verification (all backend + frontend tests)
 
 === LOG ===
+2026-03-14 — Task 93 complete: Updated test_langfuse_tracing.py — replaced httpx.AsyncClient mocks with create_chat_model + AIMessage mocks to match LangChain refactor; all 9 langfuse tests pass; 459/460 backend tests pass (1 pre-existing config test isolation failure).
 2026-03-14 — Tasks 91+92 complete: Refactored rag_service.py — removed httpx import and _prepare_anthropic() method; call_llm() now uses create_chat_model(config) → model.ainvoke(lc_messages); call_llm_stream() uses model.astream(lc_messages); method signatures unchanged; rewrote test_rag_service.py mocks from httpx.AsyncClient patches to create_chat_model patches with AIMessage/AIMessageChunk returns; 21 tests (4 retrieval, 2 source extraction, 2 prompt assembly, 6 call_llm, 4 streaming, 3 query pipeline); all 21 pass.
 2026-03-14 — Task 90 complete: app/services/llm_factory.py with create_chat_model(config) mapping Ollama→ChatOllama, OpenAI→ChatOpenAI, Anthropic→ChatAnthropic; dicts_to_messages() converts role/content dicts to LangChain SystemMessage/HumanMessage/AIMessage; 20 new tests (13 factory + 7 message conversion); all 20 pass.
 2026-03-14 — Task 89 complete: Added langchain-ollama>=0.3.0, langchain-openai>=0.3.0, langchain-anthropic>=0.3.0, langgraph>=0.4.0 to pyproject.toml; uv sync installs anthropic, langchain-anthropic, langchain-ollama, ollama + transitive deps; 4 new import tests (ChatOllama, ChatOpenAI, ChatAnthropic, StateGraph); all 17 import tests pass.
