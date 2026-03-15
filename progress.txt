@@ -222,7 +222,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 
 ### 8D. Verification
 [x] Task 119: Ingest verification (25 files indexed, heading-aware chunking, pack_id filter)
-[ ] Task 120: Full test suite + eval baseline
+[x] Task 120: Full test suite + eval baseline
 
 === LOG ===
 2026-03-15 — Task 106 complete: Added optional where: dict parameter to RAGService.retrieve(); when provided, passes where kwarg to collection.query() for Chroma metadata filtering; None (default) omits kwarg for full backward compatibility; 4 new tests (with filter, without filter, explicit None, complex $and filter); all 25 RAG service tests pass.
