@@ -198,7 +198,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 
 ### 7E. Sample Content + Eval
 [x] Task 108: Sample knowledge pack (5-10 LeetCode .md files with frontmatter + eval dataset)
-[ ] Task 109: Ingest + eval integration test (verify frontmatter, heading chunks, pack_id filter)
+[x] Task 109: Ingest + eval integration test (verify frontmatter, heading chunks, pack_id filter)
 
 ### 7F. Migration + Verification
 [ ] Task 110: Re-ingest migration (chunk_strategy column + POST /ingest/migrate endpoint)
@@ -288,3 +288,4 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 2026-03-13 — Task 87 complete: README.md rewritten — features list, prerequisites table, install/dev/test/build instructions, tech stack table, project structure tree.
 2026-03-13 — Task 88 complete: CONTRIBUTING.md written — dev setup, test commands (Vitest + pytest), code style, architecture notes, PR/issue guide.
 2026-03-15 — Task 107 complete: Added optional pack_id field to ChatRequest; pack_id flows through RAGState → retrieve node as where={"pack_id": pack_id} Chroma metadata filter; None/absent pack_id omits where kwarg for full backward compatibility; fixed pre-existing wiring test assertions for use_hyde state field; 3 new tests (with pack_id, without pack_id, null pack_id); all 563/564 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 109 complete: Integration test for sample pack ingest pipeline — 18 tests covering: ingest results (all files indexed, no errors, chunks created), frontmatter in SQLite (title, category, difficulty, pack_id, tags as CSV), heading-aware chunking (section_heading metadata, chunk_index, multiple chunks per file), pack_id Chroma filter (retrieve with/without filter, nonexistent pack empty, metadata stored), frontmatter in Chroma (category, difficulty, title); all 18 pass.
