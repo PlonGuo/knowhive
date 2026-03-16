@@ -39,6 +39,10 @@ class TestAppConfigPhase9Defaults:
         cfg = AppConfig()
         assert cfg.chat_memory_turns == 0
 
+    def test_custom_system_prompt_default_empty(self):
+        cfg = AppConfig()
+        assert cfg.custom_system_prompt == ""
+
     def test_use_hyde_removed(self):
         """use_hyde field should no longer exist on AppConfig."""
         cfg = AppConfig()
@@ -131,3 +135,33 @@ class TestAppConfigPhase9Validation:
     def test_chat_memory_turns_accepts_zero(self):
         cfg = AppConfig(chat_memory_turns=0)
         assert cfg.chat_memory_turns == 0
+
+
+class TestAppConfigCustomSystemPrompt:
+    def test_roundtrip_custom_system_prompt(self, tmp_path: Path):
+        config_path = tmp_path / "config.yaml"
+        cfg = AppConfig(custom_system_prompt="You are a helpful coding tutor.")
+        save_config(cfg, config_path)
+        loaded = load_config(config_path)
+        assert loaded.custom_system_prompt == "You are a helpful coding tutor."
+
+    def test_yaml_contains_custom_system_prompt(self, tmp_path: Path):
+        config_path = tmp_path / "config.yaml"
+        cfg = AppConfig(custom_system_prompt="Be concise.")
+        save_config(cfg, config_path)
+        raw = yaml.safe_load(config_path.read_text())
+        assert raw["custom_system_prompt"] == "Be concise."
+
+    def test_missing_custom_system_prompt_defaults_empty(self, tmp_path: Path):
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("model_name: llama3\n")
+        cfg = load_config(config_path)
+        assert cfg.custom_system_prompt == ""
+
+    def test_multiline_custom_system_prompt(self, tmp_path: Path):
+        config_path = tmp_path / "config.yaml"
+        prompt = "Line one.\nLine two.\nLine three."
+        cfg = AppConfig(custom_system_prompt=prompt)
+        save_config(cfg, config_path)
+        loaded = load_config(config_path)
+        assert loaded.custom_system_prompt == prompt

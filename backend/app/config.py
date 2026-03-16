@@ -38,6 +38,7 @@ class AppConfig(BaseModel):
     use_reranker: bool = False
     chat_memory_turns: int = 0
     memory_compression_threshold: int = 20
+    custom_system_prompt: str = ""
 
 
 def load_config(config_path: Path) -> AppConfig:
