@@ -1,0 +1,41 @@
+appId: com.plonguo.knowhive
+productName: KnowHive
+copyright: Copyright © 2026 PlonGuo
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**/*
+  - "!**/.DS_Store"
+  - "!**/node_modules/.cache/**"
+
+extraResources:
+  - from: backend
+    to: app.unpacked/backend
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/.venv/**"
+      - "!**/chroma_data/**"
+      - "!**/knowhive.db"
+      - "!**/logs/**"
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

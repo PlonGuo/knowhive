@@ -1,0 +1,28 @@
+node_modules/
+out/
+dist/
+.DS_Store
+
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.egg-info/
+*.pyc
+backend/logs/
+
+# Runtime data
+backend/chroma_data/
+backend/config.yaml
+backend/knowhive.db
+logs/
+
+# Build artifacts
+extraResources/
+tsconfig.web.tsbuildinfo
+
+# IDE
+.vscode/
+
+# Ralph loop
+.ralph.log

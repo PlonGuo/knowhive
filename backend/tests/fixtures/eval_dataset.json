@@ -1,0 +1,62 @@
+[
+  {
+    "question": "How do you solve the Two Sum problem efficiently?",
+    "ground_truth": "Use a hash map to store each number's index. For each element, check if target minus the current number exists in the map. This gives O(n) time complexity."
+  },
+  {
+    "question": "What data structure is used to solve the Valid Parentheses problem?",
+    "ground_truth": "A stack is used. Push opening brackets onto the stack and when encountering a closing bracket, check if the top of the stack is the matching opening bracket."
+  },
+  {
+    "question": "What is the time complexity of merging two sorted linked lists?",
+    "ground_truth": "O(n + m) where n and m are the lengths of the two lists, since each node is visited exactly once."
+  },
+  {
+    "question": "Explain the binary search algorithm and its time complexity.",
+    "ground_truth": "Binary search maintains left and right pointers, compares the middle element with the target, and narrows the search space by half each iteration. Time complexity is O(log n)."
+  },
+  {
+    "question": "How is the Climbing Stairs problem related to the Fibonacci sequence?",
+    "ground_truth": "The number of ways to reach step n is the sum of ways to reach step n-1 and step n-2, which follows the Fibonacci sequence pattern. It can be solved in O(n) time with O(1) space."
+  },
+  {
+    "question": "What is Kadane's Algorithm and what problem does it solve?",
+    "ground_truth": "Kadane's Algorithm solves the Maximum Subarray problem. It tracks the maximum sum ending at each position. If the running sum becomes negative, it resets to start a new subarray. Time complexity is O(n)."
+  },
+  {
+    "question": "How do you find the maximum profit from buying and selling a stock once?",
+    "ground_truth": "Track the minimum price seen so far while iterating through prices. At each step, calculate the profit if selling at the current price and update the maximum profit. This runs in O(n) time with O(1) space."
+  },
+  {
+    "question": "What is the approach for solving the Longest Common Subsequence problem?",
+    "ground_truth": "Use a 2D DP table where dp[i][j] represents the LCS length for the first i characters of text1 and first j characters of text2. If characters match, extend the diagonal value. Otherwise, take the max of skipping either character. Time complexity is O(m*n)."
+  },
+  {
+    "question": "How do you reverse a singly linked list iteratively?",
+    "ground_truth": "Use three pointers: prev, current, and next. For each node, save the next pointer, reverse the link to point to prev, advance prev to current, and advance current to the saved next. Time and space complexity are O(n) and O(1)."
+  },
+  {
+    "question": "How does the Coin Change problem use dynamic programming?",
+    "ground_truth": "Build a DP array where dp[i] is the minimum number of coins needed for amount i. For each amount from 1 to target, try every coin denomination and take the minimum. Time complexity is O(amount * number of coins)."
+  },
+  {
+    "question": "What categories of problems are covered in the leetcode-fundamentals pack?",
+    "ground_truth": "The pack covers Arrays, Stacks, Linked Lists, Searching, and Dynamic Programming categories."
+  },
+  {
+    "question": "Which problems in the pack are classified as medium difficulty?",
+    "ground_truth": "Maximum Subarray, Longest Common Subsequence, and Coin Change are classified as medium difficulty."
+  },
+  {
+    "question": "What is the space complexity of the Two Sum hash map approach?",
+    "ground_truth": "O(n) because the hash map may store up to n elements, one for each number in the input array."
+  },
+  {
+    "question": "How does the Valid Parentheses solution handle mismatched brackets?",
+    "ground_truth": "When encountering a closing bracket, it checks if the stack is empty or if the top element is not the matching opening bracket. If either condition is true, it returns false. After processing all characters, it checks if the stack is empty."
+  },
+  {
+    "question": "Can the Longest Common Subsequence space complexity be optimized?",
+    "ground_truth": "Yes, the space complexity can be optimized from O(m*n) to O(min(m,n)) by using only two rows of the DP table instead of the full 2D table, since each row only depends on the previous row."
+  }
+]

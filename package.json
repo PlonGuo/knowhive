@@ -1,0 +1,58 @@
+{
+  "name": "knowhive",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Local-first AI knowledge base desktop app",
+  "main": "out/main/index.js",
+  "author": "PlonGuo",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:all": "concurrently -k -n backend,electron \"cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 18200\" \"wait-on http://127.0.0.1:18200/health && BACKEND_URL=http://127.0.0.1:18200 electron-vite dev\"",
+    "build": "tsc --noEmit && electron-vite build",
+    "build:dry": "electron-builder --config electron-builder.yml --dir --publish never",
+    "package": "electron-builder --config electron-builder.yml --publish never",
+    "build:mac": "pnpm build && electron-builder --config electron-builder.yml --mac --publish never",
+    "build:win": "pnpm build && electron-builder --config electron-builder.yml --win --publish never",
+    "preview": "electron-vite preview",
+    "lint": "eslint src electron --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "get-port": "^7.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.19",
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "eslint": "^8.57.0",
+    "happy-dom": "^20.8.4",
+    "jsdom": "^28.1.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.2",
+    "vite": "^5.3.1",
+    "vitest": "^2.1.9",
+    "wait-on": "^7.2.0",
+    "yaml": "^2.8.2"
+  }
+}

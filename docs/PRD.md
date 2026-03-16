@@ -2,7 +2,7 @@
 
 **版本**: v1.0
 **日期**: 2026-03-09
-**仓库**: `/Users/plonguo/Git/Local-AI-knowledge-base-tool`
+**仓库**: `github.com/PlonGuo/knowhive`
 
 ---
 
@@ -14,7 +14,7 @@ KnowHive 是一款**本地优先 (local-first)** 的通用 AI 知识库桌面工
 
 ### 1.2 核心理念
 
-- **隐私优先**: 所有数据存储在本地，不上传任何服务器
+- **隐私优先 / 离线可用**: 所有数据存储在本地，使用本地 LLM 时无需网络连接
 - **通用知识库**: LeetCode 题解作为开发阶段测试内容，设计为通用工具
 - **开源透明**: MIT License，社区驱动
 - **LLM 灵活配置**: 支持本地 (Ollama) 与云端 (OpenAI Compatible)
@@ -31,7 +31,7 @@ KnowHive 是一款**本地优先 (local-first)** 的通用 AI 知识库桌面工
 |------|------|------|----------|
 | 刷题求职者 | 积累大量 LeetCode 笔记 | 笔记分散，复习找不到 | 快速检索 + AI 总结 |
 | 技术文档管理者 | 维护大量技术笔记 | 全文搜索不够智能 | 语义搜索 + 上下文关联 |
-| 隐私敏感学习者 | 笔记含敏感内容 | 不信任云端 AI | 100% 离线可用 |
+| 隐私敏感学习者 | 笔记含敏感内容 | 不信任云端 AI | 本地 LLM 全离线可用 |
 
 ---
 
@@ -106,10 +106,9 @@ KnowHive 是一款**本地优先 (local-first)** 的通用 AI 知识库桌面工
 | Electron 基础壳 | 双击 .app 可见窗口 |
 | FastAPI sidecar 启动 | health check 返回 200 |
 | 前后端通信 | 页面显示 FastAPI 返回内容 |
-| 打包验证 | 无 Python 环境的 macOS 机器上可运行 |
 | 动态端口 | 多实例不冲突 |
 
-技术要点: `python-build-standalone` 嵌入 Python，Electron Builder extraResources 打包
+技术要点: 要求用户系统安装 Python 3.11+ 和 uv，Electron 通过 sidecar 启动 FastAPI
 
 ### Phase 2: 核心 RAG (MVP)
 
@@ -302,12 +301,7 @@ CREATE TABLE ingest_tasks (
     completed_at    TEXT
 );
 
--- 应用配置缓存
-CREATE TABLE app_config (
-    key             TEXT PRIMARY KEY,
-    value           TEXT NOT NULL,
-    updated_at      TEXT DEFAULT (datetime('now'))
-);
+-- 注: 配置存储于 config.yaml (唯一配置源)，不使用 SQLite 存配置
 ```
 
 Chroma Collection: `knowhive_docs`，Document ID: `{file_path}::chunk_{index}`

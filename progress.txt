@@ -1,0 +1,415 @@
+Project: KnowHive (local-first AI knowledge base desktop app)
+Start: 2026-03-12
+Tech stack: Electron 28+ (React 18 + TypeScript + shadcn/ui + Tailwind) + FastAPI sidecar (Python 3.11, langchain-core, Chroma, SQLite) + Ollama/OpenAI Compatible LLM
+Package managers: pnpm (frontend), uv (Python)
+Plan: v1.1 (~/.claude/plans/lovely-knitting-hopper.md)
+
+=== TASKS ===
+
+## Phase 0: Project Rename
+[x] Task 1: Rename GitHub repo to `knowhive` (done via gh CLI)
+[x] Task 2: Update git remote URL to git@github.com:PlonGuo/knowhive.git (local dir rename is optional/manual)
+[x] Task 3: Update PRD repo path reference + v1.1 alignment
+
+## Phase 1: POC — Electron + FastAPI Architecture Validation
+
+### 1A. Scaffolding
+[x] Task 4: Initialize frontend scaffold (package.json, Vite, Electron, Tailwind, shadcn/ui)
+[x] Task 5: Initialize backend scaffold (pyproject.toml, FastAPI, uv sync)
+
+### 1B. FastAPI Backend
+[x] Task 6: FastAPI entry point with CLI --port arg + 127.0.0.1 binding
+[x] Task 7: GET /health endpoint (with unit tests)
+[x] Task 8: File-based logging (logs/backend.log, daily rotation, 7-day retention)
+
+### 1C. Electron Main Process
+[x] Task 9: Electron main process + BrowserWindow
+[x] Task 10: Dynamic port selection with get-port
+[x] Task 11: FastAPI sidecar manager (spawn, health poll, logging, shutdown, auto-restart)
+[x] Task 12: IPC bridge via preload.ts contextBridge
+
+### 1D. React Frontend (POC)
+[x] Task 13: Minimal React app calling /health and displaying result
+[x] Task 14: pnpm dev:all script (Vite + uvicorn + Electron in parallel)
+
+### 1E. Packaging (REVISED — system Python, no bundling)
+[x] Task 15: electron-builder.yml configuration (simplified: removed extraResources for python/backend)
+[—] Task 16: OBSOLETE — deleted build-backend.sh (no longer bundling Python)
+[x] Task 17: Sidecar simplified — uses system uv in all modes
+
+## Phase 2: Core RAG (MVP)
+
+### 2A. Backend Infrastructure
+[x] Task 18: Add RAG dependencies (langchain-core, chromadb, sentence-transformers, aiosqlite)
+[x] Task 19: SQLite database setup (documents, chat_messages, ingest_tasks tables + Pydantic models)
+[x] Task 20: Config system (config.yaml read/write + /config endpoints + /config/test-llm)
+
+### 2B. Ingest Pipeline
+[x] Task 21: Ingest service (Markdown load, text split, embed, Chroma store, dedup)
+[x] Task 22: Ingest API endpoints (POST /ingest/files, GET /ingest/status, POST /ingest/resync)
+
+### 2C. Knowledge & Chat
+[x] Task 23: Knowledge API (GET /knowledge/tree, GET /knowledge/file)
+[x] Task 24: RAG query service (Chroma retrieval + prompt assembly + LLM call)
+[x] Task 25: Chat API with SSE streaming (POST /chat, GET/DELETE /chat/history)
+[x] Task 26: Startup sync service (scan knowledge/, diff with DB, re-embed changes)
+
+### 2D. React Frontend
+[x] Task 27: App layout shell (sidebar + chat + status bar)
+[x] Task 28: Settings page (LLM config, embedding language, test connection)
+[x] Task 29: File tree sidebar (knowledge/ browser, import button)
+[x] Task 30: Chat interface (messages, input, SSE streaming, source citations)
+[x] Task 31: Import flow (file picker, ingest API, progress bar)
+
+### 2E. Integration
+[x] Task 32: End-to-end wiring (IPC bridge updates, startup sync, full flow)
+
+## Phase 3: Complete Features
+Plan: ~/.claude/plans/zany-percolating-key.md
+
+### 3A. File Management
+[x] Task 33: DELETE /knowledge/file endpoint (disk + DB + Chroma cleanup, path traversal protection)
+[x] Task 34: PUT /knowledge/file rename endpoint (disk rename + DB update + Chroma metadata)
+[x] Task 35: Frontend context menu (right-click delete/rename on FileTree)
+
+### 3B. PDF Support
+[x] Task 36: PyMuPDF dependency + PDF text extractor utility
+[x] Task 37: Extend IngestService for PDF (find_ingestable_files, PDF ingest branch)
+[x] Task 38: Router + frontend PDF support (resync + file picker filter)
+
+### 3C. Anthropic Claude Provider
+[x] Task 39: Config — add ANTHROPIC provider enum + default base_url
+[x] Task 40: RAGService — Anthropic LLM call + stream (/v1/messages, x-api-key)
+[x] Task 41: test-llm — Anthropic connection test support
+[x] Task 42: Frontend — Anthropic option in Settings page
+
+### 3D. File Editor
+[x] Task 43: PUT /knowledge/file/content endpoint (save + re-ingest)
+[x] Task 44: Frontend MarkdownEditor component (textarea + Save/Cancel)
+[x] Task 45: Wire FileTree click to editor view
+
+### 3E. File Watcher
+[x] Task 46: watchdog dependency + FileWatcher service (debounce, extension filter)
+[x] Task 47: FileWatcher + IngestService integration (async bridge)
+[x] Task 48: Lifespan integration + watcher API (GET /watcher/status, POST /watcher/toggle)
+[x] Task 49: Frontend watcher status indicator in StatusBar
+
+### 3F. LLM Dynamic Switch UI
+[x] Task 50: StatusBar LLM display + hot-reload on settings save
+
+### 3G. RAGAs + Langfuse (dev-only)
+[x] Task 51: Add ragas/langfuse dev dependencies
+[x] Task 52: RAGAs evaluation script (CLI tool)
+[x] Task 53: Langfuse tracing in RAGService (env var gated)
+
+## Phase 4: Experience Optimization
+Plan: ~/.claude/plans/zany-percolating-key.md
+
+### 4A. Embedding Model Management
+[x] Task 54: EmbeddingService class with model registry
+[x] Task 55: Embedding download with progress tracking
+[x] Task 56: Embedding API router (GET /embedding/models, POST /embedding/download, GET /embedding/status)
+[x] Task 57: Wire EmbeddingService into IngestService + lifespan
+[x] Task 58: Re-embedding on model change (config PUT triggers re-index)
+[x] Task 59: Frontend embedding download UI (SettingsPage progress bar)
+
+### 4C. Data Export
+[x] Task 64: Export service (ZIP: knowledge + chat_history.json + config.yaml)
+[x] Task 65: Export API router (POST /export/full, /export/chat, /export/file)
+[x] Task 66: Frontend export IPC (Electron save dialog)
+[x] Task 67: Frontend export UI (SettingsPage Data Management section)
+
+### 4B. Community Content
+[x] Task 60: Community manifest schema + fetch service (httpx, cache TTL)
+[x] Task 61: Community import service (download pack to knowledge/)
+[x] Task 62: Community API router (GET /community/packs, POST /community/import)
+[x] Task 63: Frontend community browser (pack cards, import, search/filter)
+
+### 4D. Spaced Repetition
+[x] Task 68: review_items DB table + models (SM-2 fields, ReviewQuality enum)
+[x] Task 69: SpacedRepetitionService (SM-2 algorithm, due items, record review)
+[x] Task 70: Review API router (GET /review/due, POST /review/record, GET /review/stats)
+[x] Task 71: Frontend review badge (StatusBar due count, click to review)
+[x] Task 72: Frontend review page (card-flip, quality buttons, progress)
+
+### 4E. AI Review Summaries
+[x] Task 73: Summary generation service (LLM summarization, DB caching)
+[x] Task 74: Summary DB table + API router (GET/POST /summary/file, /summary/topic, /summary/batch)
+[x] Task 75: Review page + AI summaries integration (Show AI Summary button)
+[x] Task 76: Knowledge overview with summaries (document list + summaries)
+
+## Phase 5: 打包发布 + Onboarding + 文档
+Plan: ~/.claude/plans/tender-hatching-hopcroft.md
+
+### 5A. Packaging Fix
+[x] Task 77: Backend main.py — add --data-dir CLI arg; derive all data paths from it
+[x] Task 78: Electron sidecar.ts — fix packaged backend dir resolution + pass --data-dir
+[x] Task 79: electron-builder.yml + package.json — include backend/ via extraResources + add build:mac/win scripts
+[x] Task 80: Electron IPC — check-setup handler (uv --version probe) + preload.ts checkSetup()
+[x] Task 81: Backend GET /setup/status endpoint (python_ok, uv_ok, ollama_ok, first_run)
+
+### 5B. Onboarding Flow
+[x] Task 82: Backend AppConfig.first_run_complete field + POST /setup/complete endpoint
+[x] Task 83: Frontend OnboardingPage Step 1 — dependency check UI
+[x] Task 84: Frontend OnboardingPage Step 2 — LLM configuration
+[x] Task 85: Frontend OnboardingPage Step 3 — ready + POST /setup/complete call
+[x] Task 86: Wire OnboardingPage into App.tsx + AppLayout.tsx
+
+### 5C. Documentation
+[x] Task 87: README.md rewrite (features, prerequisites, installation, dev setup)
+[x] Task 88: CONTRIBUTING.md (dev setup, test commands, contribution guide)
+
+## Phase 6: LangChain + LangGraph Migration
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 6A. LangChain ChatModel Integration
+[x] Task 89: Add LangChain provider deps (langchain-ollama, langchain-openai, langchain-anthropic, langgraph)
+[x] Task 90: LLM factory (create_chat_model + dicts_to_messages helper)
+[x] Task 91: Refactor RAGService call_llm/call_llm_stream to use LangChain
+[x] Task 92: Update test_rag_service.py mocks (httpx → LangChain)
+[x] Task 93: Verify all downstream callers pass (full test suite)
+
+### 6B. LangGraph StateGraph
+[x] Task 94: RAG graph (rag_graph.py with StateGraph: retrieve → build_prompt → END)
+[x] Task 95: Wire graph into chat router (_chat_stream uses graph.ainvoke)
+[x] Task 96: Replace Langfuse manual tracing with LangChain callbacks
+[x] Task 97: Full integration verification (all backend + frontend tests)
+
+## Phase 7: Knowledge Base Template + Advanced RAG
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 7A. Frontmatter + Template Schema
+[x] Task 98: Frontmatter parser (FrontmatterData dataclass + parse_frontmatter)
+[x] Task 99: SQLite schema migration (add title, category, tags, difficulty, pack_id columns)
+[x] Task 100: Wire frontmatter into IngestService (parse before chunking, store in SQLite + Chroma)
+
+### 7B. Heading-Aware Chunking
+[x] Task 101: Heading chunker (split_by_headings with merge/sub-split logic)
+[x] Task 102: Wire heading chunker into IngestService (.md uses headings, .pdf keeps fixed split)
+
+### 7C. HyDE Pre-Retrieval
+[x] Task 103: HyDE service (generate_hypothetical_doc via LLM)
+[x] Task 104: Add HyDE node to RAG graph (hyde → retrieve → build_prompt → END)
+[x] Task 105: Update chat router for HyDE (pass config.use_hyde to graph state)
+
+### 7D. Metadata-Filtered Retrieval
+[x] Task 106: Add metadata filter to RAGService.retrieve() (optional where param)
+[x] Task 107: Add pack_id filter to chat API (optional pack_id in ChatRequest)
+
+### 7E. Sample Content + Eval
+[x] Task 108: Sample knowledge pack (5-10 LeetCode .md files with frontmatter + eval dataset)
+[x] Task 109: Ingest + eval integration test (verify frontmatter, heading chunks, pack_id filter)
+
+### 7F. Migration + Verification
+[x] Task 110: Re-ingest migration (chunk_strategy column + POST /ingest/migrate endpoint)
+[x] Task 111: Full integration verification (all backend + frontend tests)
+
+## Phase 8: LeetCode Basics Content Pack
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 8A. Template Guide + Algorithm Docs
+[x] Task 112: Create TEMPLATE_GUIDE.md + directory structure (knowledge/leetcode-basics/)
+[x] Task 113: Convert 6 algorithm docs (bfs, dfs, dijkstra, dynamic-programming, interval-dp, digit-dp)
+[x] Task 114: Convert 6 algorithm docs (rerooting-dp, two-pointer, greedy, heap-priority-queue, difference-array, graph-theory-overview)
+
+### 8B. Problem Docs
+[x] Task 115: Convert 6 problem docs (lc-0233, lc-0253, lc-0310, lc-0312, lc-0486, lc-0600)
+[x] Task 116: Convert 6 problem docs (lc-0732, lc-0834, lc-0877, lc-1245, lc-2385, lc-2719)
+
+### 8C. Company Doc + Eval Dataset
+[x] Task 117: Convert company doc (rippling.md)
+[x] Task 118: Create eval_dataset_leetcode.json (25-30 Q&A pairs)
+
+### 8D. Verification
+[x] Task 119: Ingest verification (25 files indexed, heading-aware chunking, pack_id filter)
+[x] Task 120: Full test suite + eval baseline
+
+## Phase 9: Advanced RAG (Re-ranking, Multi-Query, Conversation Memory)
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 9A. Config + Routing
+[x] Task 121: AppConfig pre_retrieval_strategy enum + use_reranker + chat_memory_turns (replace use_hyde)
+[x] Task 122: RAGState + graph routing update (3-way pre-retrieval, update existing tests)
+
+### 9B. Re-ranking
+[x] Task 123: RerankerService (CrossEncoder download + rerank method)
+[x] Task 124: Reranker API router (status/download endpoints)
+[x] Task 125: Rerank node in LangGraph (conditional after retrieve)
+
+### 9C. Multi-Query
+[x] Task 126: Multi-query expansion service (LLM generates query variants)
+[x] Task 127: Multi-query retrieval + merge/dedup in LangGraph
+
+### 9D. Conversation Memory
+[x] Task 128: Query rewriter service (LLM rewrites with history context)
+[x] Task 129: Rewrite_query node in LangGraph (conditional at START)
+
+### 9E. Frontend + Verification
+[x] Task 130: Frontend settings (strategy dropdown, reranker toggle+download, memory turns)
+[x] Task 131: Full integration verification (all backend + frontend tests)
+
+## Phase 10: Layered Conversation Memory
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 10A. Database + Config
+[x] Task 132: chat_summaries table in database.py (CREATE TABLE IF NOT EXISTS)
+[x] Task 133: memory_compression_threshold config field (default 20, 0=disabled)
+
+### 10B. Compression Service
+[x] Task 134: Memory compression service — summarize_messages() LLM function
+[x] Task 135: Memory compression service — compress_if_needed() orchestrator
+
+### 10C. Query Rewriter Integration
+[x] Task 136: fetch_chat_context() + updated rewrite_query() with summary support
+
+### 10D. Chat Router Integration
+[x] Task 137: Trigger compression after chat response + clear summaries on DELETE
+
+### 10E. Verification
+[x] Task 138: Full integration verification (all backend + frontend tests)
+
+## Phase 11: Auto Pre-Retrieval Strategy Selection
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 11A. Config
+[x] Task 139: Add AUTO + AUTO_LLM to PreRetrievalStrategy enum
+
+### 11B. Rule-based Classifier
+[x] Task 140: Create strategy_classifier.py with classify_query() — EN + CN heuristics
+
+### 11C. LLM-based Classifier
+[x] Task 141: Add classify_query_llm() to strategy_classifier.py — LLM classification
+
+### 11D. Graph Wiring
+[x] Task 142: Wire classifiers into route_pre_retrieval node + _pre_retrieval_route()
+
+### 11E. Frontend
+[x] Task 143: Add Auto options to Settings dropdown with trade-off descriptions
+
+### 11F. Verification
+[x] Task 144: Full integration verification (all backend + frontend tests)
+
+## Phase 12: User Custom System Prompt
+
+### 12A. Config
+[x] Task 145: Add custom_system_prompt: str = "" to AppConfig
+
+### 12B. Prompt Integration
+[x] Task 146: Update RAGService.build_prompt() to append custom_system_prompt to system message
+
+### 12C. Frontend
+[x] Task 147: Add "Custom Instructions" text area to Settings page
+
+### 12D. Verification
+[x] Task 148: Full test suite pass (all backend + frontend tests)
+
+=== LOG ===
+2026-03-15 — Task 148 complete: Full integration verification — 877/878 backend tests pass (1 pre-existing config test isolation failure), 287/287 frontend tests pass, 31/31 test files pass. Phase 12 User Custom System Prompt complete.
+2026-03-15 — Task 144 complete: Full integration verification — 870/871 backend tests pass (1 pre-existing config test isolation failure), 283/283 frontend tests pass, 31/31 test files pass. Phase 11 Auto Pre-Retrieval Strategy Selection complete.
+2026-03-15 — Task 143 complete: Added Auto and Auto (LLM) options to pre-retrieval strategy dropdown in SettingsPage.tsx; updated AppConfig interface with 'auto' | 'auto_llm' union types; each option includes trade-off description text (Auto: rule-based/fast/no LLM call; Auto LLM: LLM picks strategy/slower/more accurate); 5 new tests in settings-phase9.test.tsx (load auto, load auto_llm, switch to auto, trade-off descriptions in option text, save auto_llm); all 18 settings-phase9 tests pass; all 283 frontend tests pass (31/31 test files).
+2026-03-15 — Task 142 complete: Wired classify_query and classify_query_llm into route_pre_retrieval node in rag_graph.py; when pre_retrieval_strategy is "auto", node calls classify_query() (rule-based) and updates state with resolved strategy; when "auto_llm", calls classify_query_llm() (LLM-based) with config; explicit strategies (none/hyde/multi_query) bypass classifiers; 12 new tests in test_rag_graph_auto_strategy.py (3 auto resolve, 3 auto_llm resolve, 2 bypass, 2 full graph, 2 config value); all 12 pass; all 82 existing graph/chat tests pass.
+2026-03-15 — Task 141 complete: classify_query_llm() async function in strategy_classifier.py; LLM classifies queries into hyde/multi_query/none with system prompt; falls back to rule-based classify_query() on empty/invalid/error; strips whitespace, lowercases response; skips LLM for empty queries; 14 new tests (3 basic + 7 edge + 3 prompt + 1 case); all 64 strategy classifier tests pass.
+2026-03-15 — Task 138 complete: Full integration verification — 794/795 backend tests pass (1 pre-existing config test isolation failure), 278/278 frontend tests pass, 31/31 test files pass. Phase 10 Layered Conversation Memory complete.
+2026-03-15 — Task 137 complete: chat.py — asyncio.create_task(compress_if_needed(config)) after assistant message saved; DELETE /chat/history also clears chat_summaries; 3 new tests (summaries cleared, compress triggered, config passed); all 20 chat API tests pass.
+2026-03-15 — Task 136 complete: query_rewriter.py — added fetch_chat_context(n_turns) returns (summaries, recent_messages) tuple; updated rewrite_query() with optional summaries param; updated REWRITE_PROMPT with {summaries_section}; updated rewrite_query_node in rag_graph.py to use fetch_chat_context and pass summaries; 7 new tests (3 fetch_context + 4 rewrite_with_summaries); updated 7 existing graph tests for new mock return type; all 51 query+graph tests pass.
+2026-03-15 — Task 135 complete: memory_compression_service.py — compress_if_needed(config) orchestrator; watermark via MAX(last_message_id) from chat_summaries; counts unsummarized messages; fetches+summarizes if count >= threshold; INSERTs summary row; threshold=0 disables; graceful on empty summary or errors; 9 new integration tests with real SQLite; all 20 compression tests pass.
+2026-03-15 — Task 134 complete: memory_compression_service.py — summarize_messages(messages, config) uses create_chat_model pattern; SUMMARIZE_SYSTEM_PROMPT instructs 3rd-person concise summary; _format_messages() helper; graceful fallback to empty string on empty/None/error; 11 tests (2 format + 9 summarize); all 11 pass.
+2026-03-15 — Task 133 complete: Added memory_compression_threshold int field to AppConfig (default 20, 0=disabled); YAML roundtrip, missing-from-yaml defaults; 9 new tests; all 9 pass.
+2026-03-15 — Task 132 complete: chat_summaries table + ChatSummary Pydantic models.
+2026-03-15 — Task 131 complete: Full integration verification — 748/749 backend tests pass (1 pre-existing config test isolation failure), 278/278 frontend tests pass, 31/31 test files pass. Phase 9 Advanced RAG (Re-ranking, Multi-Query, Conversation Memory) complete.
+2026-03-15 — Task 130 complete: SettingsPage.tsx — added RAG Settings section with: pre-retrieval strategy dropdown (None/HyDE/Multi-Query), reranker toggle (switch button with aria-checked), reranker model download section (shows when toggle on, with model name/size, download button or ready indicator, progress bar), chat memory turns number input (0-50 with help text); extended AppConfig interface with pre_retrieval_strategy/use_reranker/chat_memory_turns; added RerankerStatus/RerankerDownloadStatus interfaces; fetches /reranker/status on mount; reranker download with polling; 13 new tests in settings-phase9.test.tsx; all 13 pass; all 19 existing settings tests pass.
+2026-03-15 — Task 129 complete: Added chat_memory_turns to RAGState; added _start_route() (rewrite_query if turns > 0, else route_pre_retrieval); added rewrite_query_node and route_pre_retrieval pass-through node; refactored rag_graph.py with _build_graph_nodes() helper and _add_common_edges() to reduce duplication; graph flow: START → [rewrite_query →] route_pre_retrieval → [hyde|multi_query →] retrieve → [rerank →] build_prompt → [generate →] END; updated chat.py to pass chat_memory_turns from config; updated test_chat_graph_wiring.py; 12 new tests in test_rag_graph_memory.py (state field, route function, full/prep graph called/skipped, combo with hyde/multi_query); all 12 pass; all 67 existing graph+chat tests pass.
+2026-03-15 — Task 128 complete: app/services/query_rewriter.py — fetch_chat_history(n_turns) queries SQLite chat_messages for last N messages (oldest-first); _format_history() formats as "Role: content" lines; rewrite_query(question, history, config) uses LLM to rewrite follow-up question into standalone question; falls back to original on empty history/response/error; 13 new tests (2 format, 3 fetch, 8 rewrite); all 13 pass.
+2026-03-15 — Task 127 complete: Replaced multi_query placeholder in rag_graph.py with real implementation — calls expand_queries() for query variants, retrieves per variant, merges with _dedup_chunks() by (file_path, chunk_index); multi_query now does its own retrieval (skips standard retrieve node), routes directly to post-retrieve conditional (rerank or build_prompt); added _dedup_chunks() helper; supports pack_id filter; 11 new tests in test_rag_graph_multi_query.py (5 dedup, 6 graph); all 11 pass; all 33 existing routing/hyde/rerank tests pass.
+2026-03-15 — Task 126 complete: app/services/multi_query_service.py — expand_queries(question, config) uses LLM to generate 3-5 query variants via MULTI_QUERY_PROMPT; _parse_numbered_lines() extracts numbered lines (1. or 1) format); always includes original question; falls back to [question] on empty/None/error/no-numbered-lines; 15 new tests (6 parser + 9 expand); all 15 pass.
+2026-03-15 — Task 125 complete: Added use_reranker bool to RAGState; added _post_retrieve_route() function (rerank if True, build_prompt otherwise); added rerank node to both create_rag_graph and create_rag_prep_graph (conditional after retrieve, pass-through if reranker_service is None); rerank node calls reranker_service.rerank(question, chunks) and updates sources; both graph factories accept optional reranker_service param; updated chat.py to pass reranker_service and use_reranker from config; updated test_chat_graph_wiring.py assertions; 13 new tests in test_rag_graph_rerank.py (state field, route function, full graph enabled/disabled/default, prep graph enabled/disabled, no service, source updates, original question); all 13 pass; all 23 chat tests pass.
+2026-03-15 — Task 124 complete: app/routers/reranker.py — GET /reranker/status (model info + downloaded/loaded), POST /reranker/download (background task), GET /reranker/download-status (progress dict); init_reranker_router/_reset_reranker_router pattern; wired RerankerService into main.py lifespan + included reranker_router; 10 new tests (status, downloaded, download start, download-status none/downloading/complete/error, 503 x3); all 10 pass.
+2026-03-15 — Task 123 complete: app/services/reranker_service.py — RerankerService class with CrossEncoder download/load pattern (like EmbeddingService); RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2 (80MB); download_model() async with progress tracking, load_model() sync, is_model_downloaded() checks local dir, get_status() returns model/size/downloaded/loaded, get_download_status() returns progress dict; rerank(query, chunks, top_k) builds query-doc pairs, calls model.predict(), sorts by score descending, returns top_k with rerank_score field; raises RuntimeError if model not loaded; 19 new tests; all 19 pass.
+2026-03-15 — Task 122 complete: Replaced use_hyde bool with pre_retrieval_strategy str in RAGState; replaced _should_hyde() with _pre_retrieval_route() (3-way routing: none→retrieve, hyde→hyde, multi_query→multi_query); added multi_query placeholder node to both create_rag_graph and create_rag_prep_graph; updated chat.py to pass config.pre_retrieval_strategy.value instead of derived use_hyde bool; updated test_rag_graph_hyde.py (7 tests), test_chat_graph_wiring.py (2 assertions), test_chat_api.py (2 tests renamed+updated); created test_rag_graph_routing.py with 13 new tests (state fields, route function, full graph 3-way, prep graph 3-way); all 655/656 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 121 complete: Added PreRetrievalStrategy enum (none/hyde/multi_query) to config.py; replaced use_hyde bool with pre_retrieval_strategy field; added use_reranker (default False) and chat_memory_turns (default 0); load_config() migrates legacy use_hyde YAML to pre_retrieval_strategy; updated chat.py to derive use_hyde from pre_retrieval_strategy; updated test_chat_api.py to use new config fields; 18 new tests in test_config_phase9.py (enum values, defaults, migration, serialization, validation); all 18 pass; 618/619 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 106 complete: Added optional where: dict parameter to RAGService.retrieve(); when provided, passes where kwarg to collection.query() for Chroma metadata filtering; None (default) omits kwarg for full backward compatibility; 4 new tests (with filter, without filter, explicit None, complex $and filter); all 25 RAG service tests pass.
+2026-03-15 — Task 105 complete: Added use_hyde field to AppConfig (default False); updated _chat_stream in chat.py to pass config.use_hyde into prep graph state; 2 new tests (use_hyde=False default skips HyDE, use_hyde=True triggers HyDE and passes hypothetical doc to retrieve); all 14 chat API tests pass.
+2026-03-15 — Task 104 complete: Added HyDE node to RAG graph — rag_graph.py updated with conditional hyde→retrieve routing via _should_hyde(); RAGState gains use_hyde and hypothetical_doc fields; both create_rag_graph and create_rag_prep_graph support HyDE (prep graph now accepts config param); hyde node calls generate_hypothetical_doc, stores result in state, retrieve uses hypothetical_doc for Chroma query while build_prompt preserves original question; chat router updated to pass config to prep graph; 8 new tests (state field, full graph with/without/default hyde, prep graph with/without hyde, original question in prompt, hypothetical_doc in state); updated 1 existing wiring test; all 554/555 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 103 complete: app/services/hyde_service.py — generate_hypothetical_doc(question, config) uses create_chat_model() to generate a hypothetical document passage for improved retrieval; HYDE_PROMPT_TEMPLATE instructs LLM to write 2-4 sentence factual passage; graceful fallback to original question on empty/None response or LLM error; 9 new tests (prompt template, return type, question in prompt, factory called, whitespace strip, empty fallback, None fallback, error fallback, message structure); all 9 pass.
+2026-03-15 — Task 102 complete: Wired heading chunker into IngestService.ingest_file() — .md files now use split_by_headings() (heading-aware chunking with section_heading metadata), .pdf files keep fixed-size split_text(); fallback to split_text() if heading chunker returns empty; 5 new tests (md uses heading chunker, pdf uses fixed split, chunk_index preserved, frontmatter metadata preserved, md without headings); all 537/538 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 101 complete: app/services/heading_chunker.py — split_by_headings(text, metadata) splits Markdown by heading lines (# through ######) into langchain Documents; merges short sections (<100 chars) into next section; sub-splits long sections (>1500 chars) via RecursiveCharacterTextSplitter; adds section_heading + chunk_index metadata; handles preamble, empty text, no-headings cases; 19 new tests; all 19 pass.
+2026-03-15 — Task 100 complete: Wired frontmatter parsing into IngestService.ingest_file() — .md files: parse_frontmatter() extracts FrontmatterData before chunking, body (without YAML block) used for splitting; frontmatter fields (title, category, tags as comma-separated string, difficulty, pack_id) stored in both SQLite (INSERT/UPDATE) and Chroma chunk metadata (only non-None values to avoid Chroma null errors); PDF files skip frontmatter parsing; 7 new tests (SQLite storage, Chroma metadata, body-only chunking, NULL for no-frontmatter, PDF skips, update on reingest, no None in Chroma); all 513/514 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 99 complete: Added title, category, tags, difficulty, pack_id columns to documents table in database.py (CREATE TABLE + ALTER TABLE migration for existing DBs); updated DocumentCreate and Document Pydantic models with Optional frontmatter fields; _migrate_documents_table() checks PRAGMA table_info before ALTER; 11 new tests (column existence x5, defaults NULL, insert with frontmatter, migration idempotent, model tests x3); all 29 database tests pass; 506/507 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 98 complete: app/services/frontmatter_parser.py — FrontmatterData dataclass (title, category, tags, difficulty, pack_id) + parse_frontmatter(text) → (FrontmatterData, body); regex-based frontmatter extraction with yaml.safe_load; handles missing/empty/malformed YAML, CRLF, inline/string tags normalization, extra fields ignored; 15 new tests; all 15 pass.
+2026-03-14 — Task 97 complete: Full integration verification — 480/481 backend tests pass (1 pre-existing config test isolation failure), 265/265 frontend tests pass, 30/30 test files pass. Phase 6 LangChain+LangGraph migration complete.
+2026-03-14 — Task 96 complete: Replaced manual Langfuse tracing (trace/span/generation) with LangChain CallbackHandler; added get_langfuse_callback() function; removed _langfuse attribute and _init_langfuse(); call_llm/call_llm_stream accept optional callbacks list; rewrote test_langfuse_tracing.py (8 tests) + added test_langchain_langfuse.py (7 tests); all 63 affected tests pass.
+2026-03-14 — Task 95 complete: Added create_rag_prep_graph (retrieve→build_prompt→END) to rag_graph.py; updated chat.py _chat_stream to use prep graph.ainvoke for retrieval+prompt, then stream LLM tokens; 6 new wiring tests + all 12 existing chat tests pass; 18 total pass.
+2026-03-14 — Task 94 complete: app/services/rag_graph.py — RAGState TypedDict, create_rag_graph(rag_service, config) builds StateGraph with retrieve→build_prompt→generate→END nodes; delegates to RAGService methods; 9 new tests (imports, construction, execution, sources, k param, defaults); all 9 pass.
+2026-03-14 — Task 93 complete: Updated test_langfuse_tracing.py — replaced httpx.AsyncClient mocks with create_chat_model + AIMessage mocks to match LangChain refactor; all 9 langfuse tests pass; 459/460 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-14 — Tasks 91+92 complete: Refactored rag_service.py — removed httpx import and _prepare_anthropic() method; call_llm() now uses create_chat_model(config) → model.ainvoke(lc_messages); call_llm_stream() uses model.astream(lc_messages); method signatures unchanged; rewrote test_rag_service.py mocks from httpx.AsyncClient patches to create_chat_model patches with AIMessage/AIMessageChunk returns; 21 tests (4 retrieval, 2 source extraction, 2 prompt assembly, 6 call_llm, 4 streaming, 3 query pipeline); all 21 pass.
+2026-03-14 — Task 90 complete: app/services/llm_factory.py with create_chat_model(config) mapping Ollama→ChatOllama, OpenAI→ChatOpenAI, Anthropic→ChatAnthropic; dicts_to_messages() converts role/content dicts to LangChain SystemMessage/HumanMessage/AIMessage; 20 new tests (13 factory + 7 message conversion); all 20 pass.
+2026-03-14 — Task 89 complete: Added langchain-ollama>=0.3.0, langchain-openai>=0.3.0, langchain-anthropic>=0.3.0, langgraph>=0.4.0 to pyproject.toml; uv sync installs anthropic, langchain-anthropic, langchain-ollama, ollama + transitive deps; 4 new import tests (ChatOllama, ChatOpenAI, ChatAnthropic, StateGraph); all 17 import tests pass.
+2026-03-12 — Task 18 complete: Added langchain-core, langchain-community, langchain-text-splitters, chromadb, sentence-transformers, aiosqlite, pyyaml, pytest-asyncio to pyproject.toml; uv sync installs 93 new packages; 7 new import tests; all 21 tests pass.
+2026-03-12 — Task 19 complete: app/database.py with async SQLite connection manager (aiosqlite), 3 tables (documents, chat_messages, ingest_tasks) matching PRD schema; app/models.py with Pydantic models + StrEnum types; 18 database tests; all 39 tests pass.
+2026-03-12 — Task 20 complete: app/config.py with AppConfig Pydantic model (LLMProvider, EmbeddingLanguage enums), YAML read/write; app/routers/config.py with GET/PUT /config + POST /config/test-llm (Ollama + OpenAI-compatible); httpx added; 20 config tests; all 59 tests pass.
+2026-03-12 — Ralph loop initialized. Phase 0 + Phase 1 tasks defined.
+2026-03-12 — Task 4 complete: frontend scaffold created. electron-vite build passes, tsc clean.
+2026-03-12 — Phase 0 complete: Tasks 1-3 done. GitHub repo renamed to knowhive, remote updated, PRD aligned with v1.1.
+2026-03-12 — Task 5 complete: backend scaffold created. pyproject.toml with FastAPI 0.135.1, uvicorn, pydantic; uv sync passes; 3 import tests pass.
+2026-03-12 — Tasks 6+7 complete: app/main.py with create_app(), --port CLI arg, 127.0.0.1 binding, GET /health → {"status":"ok","version":"0.1.0"}; 4 tests pass; curl smoke test passes.
+2026-03-12 — Task 8 complete: app/logging_config.py with TimedRotatingFileHandler (midnight rotation, 7-day retention), uvicorn log routing; 7 logging tests pass; backend/logs/ in .gitignore.
+2026-03-12 — Task 9 complete: electron/main.ts already implemented in Task 4 scaffold; BrowserWindow 1280x800, preload with contextIsolation, dev/prod URL loading. tsc clean.
+2026-03-12 — Task 10 complete: electron/port.ts with findSidecarPort() using get-port (range 18200-18300); vitest added; 4 tests pass.
+2026-03-12 — Task 11 complete: electron/sidecar.ts SidecarManager class with spawn, /health polling, stdout/stderr logging to logs/electron.log, SIGTERM→SIGKILL shutdown, auto-restart (max 3); 5 tests pass (real subprocess integration tests).
+2026-03-12 — Task 12 complete: preload.ts uses ipcRenderer.invoke for getBackendUrl/getSidecarStatus; main.ts registers ipcMain.handle, integrates SidecarManager, starts sidecar before window; App.tsx updated for async API; tsc clean, 9 tests pass.
+2026-03-12 — Task 13 complete: App.tsx already calls /health via IPC bridge and displays status/error; added vitest.config.ts with React plugin + jsdom; 5 component tests (loading, success, error, fallback URL, UI elements); all 14 tests pass; tsc clean.
+2026-03-12 — Task 14 complete: Fixed dev:all script to use electron-vite dev + standalone uvicorn with --reload; added BACKEND_URL env var support to main.ts (skips sidecar when set); wait-on ensures backend health before Electron starts; 10 new tests; all 19 tests pass; tsc clean.
+2026-03-12 — Task 15 complete: electron-builder.yml already configured with extraResources (python/ + backend/), macOS dmg target (arm64+x64), hardened runtime, entitlements; created build/entitlements.mac.plist with JIT, network, file access; 9 builder-config tests; pnpm build:dry validates successfully; all 33 tests pass.
+2026-03-12 — Task 16 complete: scripts/build-backend.sh downloads python-build-standalone 3.11.11, extracts to extraResources/python/, copies backend app + runs uv sync --no-dev into extraResources/backend/; platform detection (macOS/Linux, arm64/x64); 12 tests (structure + integration); all 45 tests pass.
+2026-03-12 — Task 17 complete: sidecar.ts updated for packaged mode — logs to userData (not asar), VIRTUAL_ENV+PYTHONPATH+PATH env vars for venv site-packages, cross-platform python path (win32 python.exe), 16 packaged-mode tests; all 49 tests pass; tsc clean.
+2026-03-12 — ARCHITECTURE DECISION: Switch from bundled Python (python-build-standalone) to system Python. Rationale: target users are developers who already need Ollama; bundling Python adds complexity (C extensions, size, cross-platform) without proportional benefit for an open-source dev tool. Task 16 obsolete, Tasks 15/17 need simplification. Skipping POC packaging validation — moving directly to Phase 2.
+2026-03-12 — Cleanup complete: deleted build-backend.sh + tests, deleted sidecar-packaged.test.ts, simplified sidecar.ts (removed extraResources/VIRTUAL_ENV/PYTHONPATH logic), simplified electron-builder.yml (removed extraResources), updated PRD + feature-requirements. tsc clean, 28/28 tests pass.
+2026-03-12 — Task 21 complete: app/services/ingest_service.py with IngestService class — find_markdown_files (recursive .md discovery), split_text (RecursiveCharacterTextSplitter chunk_size=1000 overlap=200), compute_file_hash (SHA-256), Chroma store/delete, ingest_file (full pipeline with DB upsert, dedup by hash, skip unchanged), ingest_directory; 15 new tests; all 74 tests pass.
+2026-03-12 — Task 22 complete: app/routers/ingest.py with POST /ingest/files (accept file paths, create ingest_tasks record, run ingestion, return task_id), GET /ingest/status/{id} (progress tracking), POST /ingest/resync (re-ingest all .md in knowledge dir); init_ingest_router() pattern; Pydantic request/response models; 11 new tests; all 85 tests pass.
+2026-03-12 — Task 23 complete: app/routers/knowledge.py with GET /knowledge/tree (recursive file tree JSON, dirs-first sorting) and GET /knowledge/file?path= (read-only content with path traversal protection); init_knowledge_router() pattern; 15 new tests; all 100 tests pass.
+2026-03-12 — Task 24 complete: app/services/rag_service.py with RAGService class — retrieve() (Chroma top-k similarity search, default k=5), extract_sources() (unique file paths), build_prompt() (system prompt + context chunks + user question), call_llm() (Ollama /api/chat + OpenAI-compatible /chat/completions via httpx), query() (full pipeline); 15 new tests; all 115 tests pass.
+2026-03-12 — Task 25 complete: app/routers/chat.py with POST /chat (SSE streaming — token/sources/done/error events), GET /chat/history (limit/offset pagination), DELETE /chat/history; call_llm_stream() added to RAGService for Ollama + OpenAI-compatible streaming; messages saved to chat_messages table; 12 new tests; all 127 tests pass.
+2026-03-12 — Task 26 complete: app/services/sync_service.py with SyncService class — scan knowledge/ dir, diff file_path+file_hash with SQLite documents table, new→ingest, modified→re-embed, deleted→remove from Chroma+DB; 9 new tests; all 136 tests pass.
+2026-03-12 — Task 27 complete: App layout shell with Sidebar (KnowHive branding, Knowledge placeholder, Settings button), ChatArea (placeholder), StatusBar (backend health status); AppLayout composes all three; App.tsx refactored to use layout; 9 new layout tests + 5 updated App tests; all 42 frontend tests pass; tsc clean.
+2026-03-13 — Task 28 complete: SettingsPage component with LLM provider selector (ollama/openai-compatible), model name, base URL, conditional API key input, embedding language selector, save button (PUT /config), test connection button (POST /config/test-llm) with success/error feedback; AppLayout toggles between ChatArea and SettingsPage via Sidebar settings button; fixed jsdom→happy-dom for component tests; 13 new settings tests; all 55 frontend tests pass; tsc clean.
+2026-03-13 — Task 30 complete: ChatArea component with message list (user/assistant styling, whitespace-pre-wrap), textarea input (Enter send, Shift+Enter newline), SSE streaming (ReadableStream reader, token/sources/done/error events), source citations (badge display), chat history load (GET /chat/history), clear history (DELETE /chat/history); AppLayout passes backendUrl to ChatArea; defensive null check on history response; 16 new chat tests; all 85 tests pass; tsc clean.
+2026-03-13 — Task 29 complete: FileTree component with collapsible tree (fetches GET /knowledge/tree, expand/collapse dirs, file selection, selected highlight, refresh callback, error/empty states); Sidebar updated with FileTree integration + Import button (triggers IPC selectFiles → POST /ingest/files); AppLayout passes backendUrl to Sidebar; env.d.ts updated with selectFiles IPC type; 14 new tests (9 filetree + 5 sidebar-filetree); all 69 tests pass; tsc clean.
+2026-03-13 — Task 31 complete: Import flow with file picker (selectFiles IPC via Electron dialog.showOpenDialog), POST /ingest/files call, progress bar with status polling (GET /ingest/status/{id} at 500ms intervals), completion detection, file tree auto-refresh, error display; preload.ts + main.ts updated with select-files IPC handler; Sidebar refactored with ImportState tracking; 10 new import-flow tests; all 95 frontend tests pass; tsc clean.
+2026-03-13 — Task 32 complete: FastAPI lifespan in main.py wires all services end-to-end — init_db() creates tables, IngestService + RAGService instantiated, all router init_*() functions called with dependencies, SyncService.sync() runs on startup (ingests existing knowledge/ files), close_db() on shutdown; create_app() accepts db_path/chroma_path/knowledge_dir params for testability; 14 new e2e wiring tests; all 150 backend + 95 frontend tests pass; tsc clean.
+2026-03-13 — Task 34 complete: PUT /knowledge/file rename endpoint — RenameRequest model (old_path, new_path), path traversal protection on both paths, disk rename with parent dir creation, DB file_path+file_name update, Chroma metadata update via new rename_chunks_file_path() method on IngestService; 409 on target exists, 400 on directory; 15 new tests (rename 200, response body, content preserved, nested, move to dir, create parent dirs, 404, 409 conflict, traversal blocked x2, absolute blocked x2, directory blocked, DB update, Chroma metadata update); all 40 knowledge tests pass; 174/175 backend tests pass (1 pre-existing config test failure).
+2026-03-13 — Task 33 complete: DELETE /knowledge/file endpoint — path traversal protection (reused into _resolve_safe_path helper), disk deletion, DB document record cleanup, Chroma chunk cleanup via IngestService.delete_chunks_for_file(); init_knowledge_router now accepts optional ingest_service param; main.py passes ingest_service; 10 new tests (delete 200, response body, nested, 404, traversal, absolute, missing param, DB cleanup, Chroma cleanup, directory blocked); all 25 knowledge tests pass; 159/160 backend tests pass (1 pre-existing config test failure).
+2026-03-13 — Task 35 complete: FileTree context menu — right-click on files shows Rename/Delete menu (directories excluded); Delete triggers confirm() dialog then DELETE /knowledge/file with auto-refresh; Rename shows inline input (Enter submit, Escape cancel, blur cancel), PUT /knowledge/file with old/new paths, auto-refresh; outside click closes menu; 10 new tests; all 105 frontend tests pass; tsc clean.
+2026-03-13 — Task 36 complete: Added pymupdf>=1.24.0 to pyproject.toml; app/services/pdf_extractor.py with extract_pdf_text(path) using PyMuPDF (fitz) — concatenates all pages, raises FileNotFoundError/ValueError; 6 new tests (single page, multi page, empty PDF, file not found, invalid PDF, return type); all 6 pass.
+2026-03-13 — Task 37 complete: Extended IngestService with find_ingestable_files() (.md + .pdf discovery), PDF ingest branch in ingest_file() using extract_pdf_text(), updated ingest_directory/sync_service/ingest router to use find_ingestable_files; 7 new tests (find includes md+pdf, excludes others, empty dir, backward compat, PDF ingest, PDF skip unchanged, directory includes PDF); all 187 backend tests pass (1 pre-existing config failure).
+2026-03-13 — Task 38 complete: Updated Electron file picker filter to accept .md + .pdf (was .md only); added 2 backend tests (resync includes PDF, ingest PDF via API) and 1 frontend test (PDF import alongside Markdown); all 13 ingest API tests pass, all 11 import flow tests pass; tsc clean.
+2026-03-13 — Task 39 complete: Added ANTHROPIC to LLMProvider enum in config.py; updated config router test-llm endpoint with Anthropic branch (x-api-key header, /v1/models endpoint); default base_url https://api.anthropic.com; 4 new tests (anthropic model, enum value, PUT config anthropic, test-llm anthropic with header verification); all 192 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-13 — Task 42 complete: Added 'anthropic' to AppConfig llm_provider type union, added "Anthropic Claude" option to provider dropdown, API key field now shows for both openai-compatible and anthropic providers; 4 new tests (anthropic option exists, API key shown on load, API key shown on switch, label text); all 110 frontend tests pass; tsc clean.
+2026-03-13 — Task 43 complete: PUT /knowledge/file/content endpoint — SaveContentRequest model (path, content), path traversal protection, disk write + re-ingest via IngestService.ingest_file(); 10 new tests (200, response body, disk write, nested, 404, traversal, absolute, directory blocked, re-ingest Chroma, DB update); all 50 knowledge tests pass.
+2026-03-13 — Task 44 complete: MarkdownEditor component with textarea editor, Save (PUT /knowledge/file/content) and Cancel buttons, loading/error/saved feedback states, filename header display, content refetch on filePath change; 11 new tests; all 121 frontend tests pass; tsc clean.
+2026-03-13 — Task 45 complete: Wired FileTree click to MarkdownEditor view — AppLayout gains 'editor' view state + selectedFilePath, Sidebar passes onFileSelect/selectedPath, clicking file opens editor, Cancel returns to chat, settings still accessible; 7 new tests; all 128 frontend tests pass; tsc clean.
+2026-03-13 — Task 46 complete: Added watchdog>=4.0.0 to pyproject.toml; app/services/file_watcher.py with FileWatcher class — watchdog Observer, _DebouncedHandler (threading.Timer debounce, extension filter, asyncio bridge), start/stop/status, case-insensitive extension matching; 19 new tests (init, extension filter, start/stop, debounce coalescing, ignore non-watched, detect new/delete, status); all 19 pass.
+2026-03-13 — Task 49 complete: StatusBar watcher indicator — polls GET /watcher/status every 10s, displays "Watching"/"Watcher off"/"Syncing…" with color coding, click to toggle via POST /watcher/toggle; AppLayout passes backendUrl to StatusBar; 9 new tests; all 109 frontend tests pass; tsc clean.
+2026-03-13 — Task 50 complete: StatusBar LLM display — fetches GET /config on mount and shows "provider / model" indicator; hot-reload via configVersion prop (AppLayout increments on SettingsPage save, StatusBar refetches config); SettingsPage gains onConfigSaved callback; 7 new statusbar-llm tests + 2 new settings tests; all 118 frontend tests pass; tsc clean.
+2026-03-13 — Task 51 complete: Added ragas>=0.2.0 and langfuse>=2.0.0 to dev dependency-groups in pyproject.toml; uv sync installs ragas 0.4.3 + langfuse 4.0.0 with transitive deps (openai, pandas, pyarrow, tiktoken, etc.); 3 new import tests (ragas, langfuse, ragas.metrics); all 13 import tests pass; 255/256 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-13 — Task 52 complete: app/eval_ragas.py CLI tool — load JSON/JSONL eval datasets (question+ground_truth), run through RAG pipeline (retrieve+generate), build RAGAs SingleTurnSample objects, evaluate with faithfulness/answer_relevancy/context_precision/context_recall metrics, output JSON results; supports --config, --chroma-path, --output, --k flags; llm_factory wrapper for Ollama/OpenAI-compatible/Anthropic providers; 11 new tests (dataset loading, pipeline exec, sample building, CLI entry point); all 11 pass.
+2026-03-13 — Task 53 complete: Langfuse tracing in RAGService gated by LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY env vars; optional import with graceful degradation if langfuse not installed; trace per query() with retrieval span (input query/k, output chunks/sources), generation span (model, messages, output), trace-level output update; all tracing wrapped in try/except so failures never break queries; 9 new tests; all 28 RAG+langfuse tests pass.
+2026-03-13 — Task 54 complete: app/services/embedding_service.py with MODEL_REGISTRY (english→all-MiniLM-L6-v2 80MB, chinese→text2vec-base-chinese 400MB, mixed→bge-m3 1.2GB), EmbeddingService class with get_available_models(), is_model_downloaded(), get_download_status(), get_embedding_function() returning chromadb SentenceTransformerEmbeddingFunction, in-memory _download_progress tracking; 12 new tests; 287/288 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-13 — Task 55 complete: async download_model(language) in EmbeddingService using asyncio.to_thread(SentenceTransformer, model_name, cache_folder); sets _download_progress to 'downloading'→'complete' or 'error'; 8 new tests (progress states, error handling, correct model name, cache_folder path, runs in thread); 295/296 backend tests pass.
+2026-03-13 — Task 56 complete: app/routers/embedding.py with GET /embedding/models (model list + download status), POST /embedding/download (background task trigger, returns {status, language}), GET /embedding/status?language= (progress dict); init_embedding_router/reset pattern; 10 new tests; 305/306 backend tests pass.
+2026-03-13 — Task 57 complete: IngestService accepts optional embedding_function param (passed to get_or_create_collection if not None); main.py lifespan creates EmbeddingService, calls get_embedding_function(config.embedding_language), passes to IngestService, mounts embedding_router; 9 new tests (IngestService ef param, Chroma passthrough, None skipped, lifespan integration x3, config-aware ef, backward compat ingest); 314/315 backend tests pass.
+2026-03-13 — Task 58 complete: EmbeddingService.reembed_all(new_language, ingest_service, knowledge_dir, embedding_function) re-ingests all files; config router PUT /config detects embedding_language change, triggers background reembed_all(), returns reembedding=true; init_reembed_dependencies(ingest_service, embedding_service, knowledge_dir) registered in main.py lifespan; 6 new tests (reembed_all behavior x2, no reembed when unchanged, triggers on change, response flag, graceful when no deps); 320/321 backend tests pass.
+2026-03-13 — Task 59 complete: SettingsPage embeds GET /embedding/models fetch on mount, shows model name+size for selected language, Download button (POST /embedding/download) when not downloaded, Ready indicator when downloaded, progress bar polling (GET /embedding/status?language=) while downloading, warning on save if model not downloaded; IngestService fallback on Chroma EF conflict (graceful backward compat); 10 new frontend tests; all 156 frontend + 320/321 backend tests pass; tsc clean.
+2026-03-13 — Task 64 complete: app/services/export_service.py with ExportService class — export_chat_history() (SELECT all chat_messages ordered by created_at, return list of dicts), export_full() (in-memory ZIP with knowledge/ tree, config.yaml, chat_history.json); zipfile.ZIP_DEFLATED; 9 new tests; 329/330 backend tests pass.
+2026-03-13 — Task 65 complete: app/routers/export.py with POST /export/full (StreamingResponse ZIP, Content-Disposition attachment), POST /export/chat (JSONResponse list), POST /export/file (path traversal protection, 404/400/503); init_export_router + _reset_export_router; main.py mounts ExportService + export_router; 11 new tests; 340/341 backend tests pass.
+2026-03-13 — Task 66 complete: preload.ts saveFile(defaultName) ipcRenderer.invoke('save-file', defaultName) → Promise<string|null>; main.ts 'save-file' handler dialog.showSaveDialog, returns null on cancel; env.d.ts Window.api type updated; 9 new tests (static source checks); all 165 frontend tests pass; tsc clean.
+2026-03-13 — Task 67 complete: SettingsPage Data Management section with Export All (POST /export/full → blob → URL.createObjectURL → anchor download + saveFile IPC) and Export Chat (POST /export/chat → JSON blob download) buttons; exportStatus feedback message; 7 new frontend tests; all 172 frontend tests pass; tsc clean.
+2026-03-13 — Task 60 complete: app/services/community_service.py — ContentPack/CommunityManifest/PackFile Pydantic models; CommunityService with fetch_manifest() (httpx GET, 5-min TTL cache via monotonic time), fetch_pack_files(pack) (fetches pack.path/files.json); 7 new tests (models, fetch+parse, TTL cache hit/miss, pack files); 347/348 backend tests pass.
+2026-03-13 — Task 84 complete: OnboardingPage Step 2 — LLM config form with provider selector (ollama/openai-compatible/anthropic), model name, base URL, API key (conditional), Test Connection button with success/error feedback, Next saves config via PUT /config and advances to Step 3 placeholder; 11 new tests; all 254 frontend+electron tests pass; tsc clean.
+2026-03-13 — Task 85 complete: OnboardingPage Step 3 — ready screen with green checkmark, All Set! heading, setup summary card (python/uv/ollama status + LLM provider/model), Get Started button calls POST /setup/complete then onComplete(); 6 new tests; all 260 tests pass; tsc clean.
+2026-03-13 — Task 86 complete: App.tsx fetches /health + /setup/status in parallel on init; renders OnboardingPage when first_run=true, AppLayout otherwise; onComplete sets firstRun=false to reveal main app; 5 new wiring tests (first_run=true shows onboarding, false shows layout, completes to layout, hides after completion); all 265 tests pass; tsc clean.
+2026-03-13 — Task 87 complete: README.md rewritten — features list, prerequisites table, install/dev/test/build instructions, tech stack table, project structure tree.
+2026-03-13 — Task 88 complete: CONTRIBUTING.md written — dev setup, test commands (Vitest + pytest), code style, architecture notes, PR/issue guide.
+2026-03-15 — Task 107 complete: Added optional pack_id field to ChatRequest; pack_id flows through RAGState → retrieve node as where={"pack_id": pack_id} Chroma metadata filter; None/absent pack_id omits where kwarg for full backward compatibility; fixed pre-existing wiring test assertions for use_hyde state field; 3 new tests (with pack_id, without pack_id, null pack_id); all 563/564 backend tests pass (1 pre-existing config test isolation failure).
+2026-03-15 — Task 109 complete: Integration test for sample pack ingest pipeline — 18 tests covering: ingest results (all files indexed, no errors, chunks created), frontmatter in SQLite (title, category, difficulty, pack_id, tags as CSV), heading-aware chunking (section_heading metadata, chunk_index, multiple chunks per file), pack_id Chroma filter (retrieve with/without filter, nonexistent pack empty, metadata stored), frontmatter in Chroma (category, difficulty, title); all 18 pass.
+2026-03-15 — Task 111 complete: Full integration verification — 607/608 backend tests pass (1 pre-existing config test isolation failure), 265/265 frontend tests pass, 30/30 test files pass. Phase 7 Knowledge Base Template + Advanced RAG complete.
+2026-03-15 — Task 110 complete: Added chunk_strategy TEXT column to documents table (migration via _MIGRATION_COLUMNS); DocumentCreate/Document models gain chunk_strategy field; IngestService.ingest_file() tracks "heading-aware" or "fixed-split" strategy in DB INSERT/UPDATE; added force=True param to bypass hash-skip for migration; POST /ingest/migrate endpoint queries docs with NULL chunk_strategy, re-ingests with force=True; 15 new tests (column exists, default null, md/pdf strategy, migrate endpoint, re-ingest null docs, skip migrated, no-ops, task completion, model fields, ALTER TABLE migration); all 607/608 backend tests pass (1 pre-existing config test isolation failure).
