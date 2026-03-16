@@ -35,6 +35,7 @@ class AppConfig(BaseModel):
     pre_retrieval_strategy: PreRetrievalStrategy = PreRetrievalStrategy.NONE
     use_reranker: bool = False
     chat_memory_turns: int = 0
+    memory_compression_threshold: int = 20
 
 
 def load_config(config_path: Path) -> AppConfig:
