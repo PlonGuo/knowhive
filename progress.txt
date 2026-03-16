@@ -278,7 +278,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 140: Create strategy_classifier.py with classify_query() — EN + CN heuristics
 
 ### 11C. LLM-based Classifier
-[ ] Task 141: Add classify_query_llm() to strategy_classifier.py — LLM classification
+[x] Task 141: Add classify_query_llm() to strategy_classifier.py — LLM classification
 
 ### 11D. Graph Wiring
 [ ] Task 142: Wire classifiers into route_pre_retrieval node + _pre_retrieval_route()
@@ -290,6 +290,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [ ] Task 144: Full integration verification (all backend + frontend tests)
 
 === LOG ===
+2026-03-15 — Task 141 complete: classify_query_llm() async function in strategy_classifier.py; LLM classifies queries into hyde/multi_query/none with system prompt; falls back to rule-based classify_query() on empty/invalid/error; strips whitespace, lowercases response; skips LLM for empty queries; 14 new tests (3 basic + 7 edge + 3 prompt + 1 case); all 64 strategy classifier tests pass.
 2026-03-15 — Task 138 complete: Full integration verification — 794/795 backend tests pass (1 pre-existing config test isolation failure), 278/278 frontend tests pass, 31/31 test files pass. Phase 10 Layered Conversation Memory complete.
 2026-03-15 — Task 137 complete: chat.py — asyncio.create_task(compress_if_needed(config)) after assistant message saved; DELETE /chat/history also clears chat_summaries; 3 new tests (summaries cleared, compress triggered, config passed); all 20 chat API tests pass.
 2026-03-15 — Task 136 complete: query_rewriter.py — added fetch_chat_context(n_turns) returns (summaries, recent_messages) tuple; updated rewrite_query() with optional summaries param; updated REWRITE_PROMPT with {summaries_section}; updated rewrite_query_node in rag_graph.py to use fetch_chat_context and pass summaries; 7 new tests (3 fetch_context + 4 rewrite_with_summaries); updated 7 existing graph tests for new mock return type; all 51 query+graph tests pass.

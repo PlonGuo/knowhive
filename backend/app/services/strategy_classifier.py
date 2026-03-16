@@ -5,7 +5,15 @@ Classifies user queries to determine the optimal pre-retrieval strategy:
 - "multi_query": ambiguous/broad/comparative queries → multi-query expansion
 - "none": specific keyword lookups or commands → direct retrieval
 """
+import logging
 import re
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from app.config import AppConfig
+from app.services.llm_factory import create_chat_model
+
+logger = logging.getLogger(__name__)
 
 
 # --- EN comparison patterns ---
@@ -130,3 +138,51 @@ def classify_query(query: str) -> str:
 
     # 3. Fallback
     return "none"
+
+
+_VALID_STRATEGIES = {"hyde", "multi_query", "none"}
+
+_CLASSIFY_SYSTEM_PROMPT = (
+    "You are a query classifier for a RAG knowledge-base system. "
+    "Given a user query, classify it into exactly ONE of three pre-retrieval strategies:\n\n"
+    "- hyde: The query is a factual or knowledge-seeking question (e.g., 'What is X?', "
+    "'How does Y work?', 'Explain Z'). HyDE generates a hypothetical answer to improve retrieval.\n"
+    "- multi_query: The query is ambiguous, broad, comparative, or very short/keyword-style "
+    "(e.g., 'React vs Vue', 'sorting algorithms', 'difference between X and Y'). "
+    "Multi-query expands into multiple search variants.\n"
+    "- none: The query is a specific lookup, file path, command, or already precise enough "
+    "for direct retrieval (e.g., 'src/App.tsx error', 'list files').\n\n"
+    "Reply with ONLY the strategy name: hyde, multi_query, or none. "
+    "Do not include any explanation or extra text."
+)
+
+
+async def classify_query_llm(query: str, config: AppConfig) -> str:
+    """Classify a query using an LLM for more nuanced strategy selection.
+
+    Falls back to rule-based classify_query() on empty/invalid LLM response or errors.
+
+    Returns: "hyde", "multi_query", or "none"
+    """
+    if not query or not query.strip():
+        return "none"
+
+    try:
+        model = create_chat_model(config)
+        messages = [
+            SystemMessage(content=_CLASSIFY_SYSTEM_PROMPT),
+            HumanMessage(content=f"Query: {query.strip()}"),
+        ]
+        response = await model.ainvoke(messages)
+        content = response.content
+        if not content or not content.strip():
+            logger.warning("LLM classifier returned empty response, falling back to rule-based")
+            return classify_query(query)
+        result = content.strip().lower()
+        if result not in _VALID_STRATEGIES:
+            logger.warning("LLM classifier returned invalid strategy '%s', falling back to rule-based", result)
+            return classify_query(query)
+        return result
+    except Exception:
+        logger.warning("LLM classifier failed, falling back to rule-based", exc_info=True)
+        return classify_query(query)

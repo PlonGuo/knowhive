@@ -1,7 +1,9 @@
-"""Tests for strategy_classifier — rule-based classify_query()."""
+"""Tests for strategy_classifier — rule-based and LLM-based classify_query()."""
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
-from app.services.strategy_classifier import classify_query
+from app.services.strategy_classifier import classify_query, classify_query_llm
 
 
 class TestClassifyQueryEmpty:
@@ -193,3 +195,141 @@ class TestClassifyQueryPriority:
     def test_short_overrides_none(self):
         # 2-word query without patterns → short → multi_query
         assert classify_query("data structures") == "multi_query"
+
+
+# ===== LLM-based classifier tests =====
+
+
+def _make_config():
+    """Create a minimal AppConfig for LLM tests."""
+    from app.config import AppConfig
+    return AppConfig()
+
+
+class TestClassifyQueryLlmBasic:
+    """Basic LLM classifier behavior."""
+
+    @pytest.mark.asyncio
+    async def test_returns_hyde(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "hyde"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("What is dependency injection?", _make_config())
+        assert result == "hyde"
+
+    @pytest.mark.asyncio
+    async def test_returns_multi_query(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "multi_query"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("React vs Vue", _make_config())
+        assert result == "multi_query"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_strategy(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "none"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("src/App.tsx line 42", _make_config())
+        assert result == "none"
+
+
+class TestClassifyQueryLlmEdgeCases:
+    """Edge cases: fallback, whitespace, invalid responses."""
+
+    @pytest.mark.asyncio
+    async def test_strips_whitespace(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "  hyde  \n"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("How does GC work?", _make_config())
+        assert result == "hyde"
+
+    @pytest.mark.asyncio
+    async def test_invalid_response_falls_back_to_rule_based(self):
+        """If LLM returns an invalid strategy, fall back to rule-based classify_query."""
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "invalid_strategy"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("What is dependency injection?", _make_config())
+        # Rule-based would return "hyde" for this interrogative query
+        assert result == "hyde"
+
+    @pytest.mark.asyncio
+    async def test_empty_response_falls_back(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = ""
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("What is React?", _make_config())
+        assert result == "hyde"
+
+    @pytest.mark.asyncio
+    async def test_none_response_falls_back(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = None
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("What is React?", _make_config())
+        assert result == "hyde"
+
+    @pytest.mark.asyncio
+    async def test_llm_error_falls_back(self):
+        """If LLM call raises, fall back to rule-based."""
+        mock_model = AsyncMock()
+        mock_model.ainvoke.side_effect = Exception("LLM unavailable")
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("What is dependency injection?", _make_config())
+        assert result == "hyde"
+
+    @pytest.mark.asyncio
+    async def test_empty_query_returns_none(self):
+        """Empty query should return 'none' without calling LLM."""
+        mock_model = AsyncMock()
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("", _make_config())
+        assert result == "none"
+        mock_model.ainvoke.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_none_query_returns_none(self):
+        mock_model = AsyncMock()
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm(None, _make_config())
+        assert result == "none"
+        mock_model.ainvoke.assert_not_called()
+
+
+class TestClassifyQueryLlmPrompt:
+    """Verify the LLM receives a well-structured prompt."""
+
+    @pytest.mark.asyncio
+    async def test_prompt_contains_query(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "hyde"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            await classify_query_llm("How does garbage collection work?", _make_config())
+        call_args = mock_model.ainvoke.call_args[0][0]
+        # Should have system + human messages
+        assert len(call_args) == 2
+        # Human message should contain the query
+        assert "How does garbage collection work?" in call_args[1].content
+
+    @pytest.mark.asyncio
+    async def test_prompt_mentions_strategies(self):
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "hyde"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            await classify_query_llm("test query here", _make_config())
+        call_args = mock_model.ainvoke.call_args[0][0]
+        system_content = call_args[0].content
+        assert "hyde" in system_content
+        assert "multi_query" in system_content
+        assert "none" in system_content
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive_response(self):
+        """LLM may return uppercase — should be lowercased."""
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value.content = "HYDE"
+        with patch("app.services.strategy_classifier.create_chat_model", return_value=mock_model):
+            result = await classify_query_llm("What is React?", _make_config())
+        assert result == "hyde"
