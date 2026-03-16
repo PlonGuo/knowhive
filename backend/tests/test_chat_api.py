@@ -1,4 +1,5 @@
 """Tests for Chat API — POST /chat (SSE streaming), GET/DELETE /chat/history."""
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -398,6 +399,88 @@ class TestDeleteChatHistory:
         # Verify empty
         resp2 = client.get("/chat/history")
         assert resp2.json()["total"] == 0
+
+    def test_delete_clears_chat_summaries(self, client, db):
+        """DELETE /chat/history also clears chat_summaries table."""
+        import asyncio
+
+        async def seed():
+            async with get_db() as conn:
+                await conn.execute(
+                    "INSERT INTO chat_messages (role, content) VALUES (?, ?)",
+                    ("user", "hello"),
+                )
+                await conn.execute(
+                    "INSERT INTO chat_summaries (summary, first_message_id, last_message_id) "
+                    "VALUES (?, ?, ?)",
+                    ("Summary of conversation", 1, 1),
+                )
+                await conn.commit()
+
+        asyncio.get_event_loop().run_until_complete(seed())
+
+        resp = client.delete("/chat/history")
+        assert resp.status_code == 200
+
+        # Verify summaries also cleared
+        async def check():
+            async with get_db() as conn:
+                cursor = await conn.execute("SELECT COUNT(*) FROM chat_summaries")
+                row = await cursor.fetchone()
+                return row[0]
+
+        count = asyncio.get_event_loop().run_until_complete(check())
+        assert count == 0
+
+
+# ── Memory compression trigger ───────────────────────────────
+
+
+class TestMemoryCompressionTrigger:
+    @patch("app.routers.chat.compress_if_needed", new_callable=AsyncMock, return_value=False)
+    @patch("app.routers.chat._get_rag_service")
+    @patch("app.routers.chat._get_config")
+    def test_compress_triggered_after_response(
+        self, mock_config, mock_rag, mock_compress, client, mock_rag_service
+    ):
+        """compress_if_needed is called via asyncio.create_task after response saved."""
+        from app.config import AppConfig
+
+        mock_config.return_value = AppConfig()
+        mock_rag.return_value = mock_rag_service
+
+        async def fake_stream(messages, config):
+            yield "answer"
+
+        mock_rag_service.call_llm_stream = fake_stream
+
+        resp = client.post("/chat", json={"question": "test"})
+        assert resp.status_code == 200
+
+        mock_compress.assert_called_once()
+
+    @patch("app.routers.chat.compress_if_needed", new_callable=AsyncMock, return_value=False)
+    @patch("app.routers.chat._get_rag_service")
+    @patch("app.routers.chat._get_config")
+    def test_compress_receives_config(
+        self, mock_config, mock_rag, mock_compress, client, mock_rag_service
+    ):
+        """compress_if_needed receives the current AppConfig."""
+        from app.config import AppConfig
+
+        config = AppConfig(memory_compression_threshold=10)
+        mock_config.return_value = config
+        mock_rag.return_value = mock_rag_service
+
+        async def fake_stream(messages, cfg):
+            yield "answer"
+
+        mock_rag_service.call_llm_stream = fake_stream
+
+        resp = client.post("/chat", json={"question": "test"})
+        assert resp.status_code == 200
+
+        mock_compress.assert_called_once_with(config)
 
 
 # ── SSE parsing helper ────────────────────────────────────────

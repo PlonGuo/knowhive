@@ -1,4 +1,5 @@
 """Chat API — POST /chat (SSE streaming), GET/DELETE /chat/history."""
+import asyncio
 import json
 import logging
 from typing import AsyncGenerator, Optional
@@ -9,6 +10,7 @@ from pydantic import BaseModel, field_validator
 
 from app.config import AppConfig, load_config
 from app.database import get_db
+from app.services.memory_compression_service import compress_if_needed
 from app.services.rag_graph import create_rag_prep_graph
 from app.services.rag_service import RAGService
 
@@ -119,6 +121,9 @@ async def _chat_stream(question: str, k: int, pack_id: Optional[str] = None) -> 
             )
             await db.commit()
 
+        # Trigger memory compression in the background
+        asyncio.create_task(compress_if_needed(config))
+
     except Exception as e:
         logger.error("Chat stream error: %s", e)
         yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
@@ -191,6 +196,7 @@ async def delete_history() -> DeleteHistoryResponse:
         count = row[0]
 
         await db.execute("DELETE FROM chat_messages")
+        await db.execute("DELETE FROM chat_summaries")
         await db.commit()
 
     return DeleteHistoryResponse(deleted=count)

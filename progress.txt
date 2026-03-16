@@ -263,7 +263,7 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 [x] Task 136: fetch_chat_context() + updated rewrite_query() with summary support
 
 ### 10D. Chat Router Integration
-[ ] Task 137: Trigger compression after chat response + clear summaries on DELETE
+[x] Task 137: Trigger compression after chat response + clear summaries on DELETE
 
 ### 10E. Verification
 [ ] Task 138: Full integration verification (all backend + frontend tests)
