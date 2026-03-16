@@ -232,3 +232,33 @@ pnpm dev:all  # manual: verify Electron window shows {"status":"ok"}
 ### 10E. Verification
 
 - [ ] Task 138: Full integration verification — all backend + frontend tests pass — verified by: `cd backend && uv run pytest -v && cd .. && pnpm vitest run`
+
+---
+
+## Phase 11: Auto Pre-Retrieval Strategy Selection
+
+Two "auto" modes: rule-based (free, fast) and LLM-based (accurate, extra API call). Users choose in Settings with trade-off descriptions.
+
+### 11A. Config
+
+- [ ] Task 139: Add `AUTO = "auto"` and `AUTO_LLM = "auto_llm"` to `PreRetrievalStrategy` enum, update enum count tests — verified by: `cd backend && uv run pytest tests/test_config_phase9.py -v`
+
+### 11B. Rule-based Classifier
+
+- [ ] Task 140: Create `strategy_classifier.py` with `classify_query()` — EN + CN regex heuristics (interrogative→hyde, comparison/short→multi_query, fallback→none) — verified by: `cd backend && uv run pytest tests/test_strategy_classifier.py -v`
+
+### 11C. LLM-based Classifier
+
+- [ ] Task 141: Add `classify_query_llm()` to `strategy_classifier.py` — LLM classification prompt, create_chat_model pattern, fallback to "none" — verified by: `cd backend && uv run pytest tests/test_strategy_classifier.py -v`
+
+### 11D. Graph Wiring
+
+- [ ] Task 142: Wire both classifiers into `route_pre_retrieval` node — resolve "auto"/"auto_llm" → concrete strategy before `_pre_retrieval_route()` reads it — verified by: `cd backend && uv run pytest tests/test_rag_graph_routing.py tests/test_chat_graph_wiring.py -v`
+
+### 11E. Frontend
+
+- [ ] Task 143: Add "Auto (rule-based)" and "Auto (LLM)" options to Settings dropdown with trade-off help text — verified by: `pnpm vitest run`
+
+### 11F. Verification
+
+- [ ] Task 144: Full integration verification — all backend + frontend tests pass — verified by: `cd backend && uv run pytest -v && cd .. && pnpm vitest run`

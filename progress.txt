@@ -268,6 +268,27 @@ Plan: ~/.claude/plans/eventual-skipping-reddy.md
 ### 10E. Verification
 [x] Task 138: Full integration verification (all backend + frontend tests)
 
+## Phase 11: Auto Pre-Retrieval Strategy Selection
+Plan: ~/.claude/plans/eventual-skipping-reddy.md
+
+### 11A. Config
+[ ] Task 139: Add AUTO + AUTO_LLM to PreRetrievalStrategy enum
+
+### 11B. Rule-based Classifier
+[ ] Task 140: Create strategy_classifier.py with classify_query() — EN + CN heuristics
+
+### 11C. LLM-based Classifier
+[ ] Task 141: Add classify_query_llm() to strategy_classifier.py — LLM classification
+
+### 11D. Graph Wiring
+[ ] Task 142: Wire classifiers into route_pre_retrieval node + _pre_retrieval_route()
+
+### 11E. Frontend
+[ ] Task 143: Add Auto options to Settings dropdown with trade-off descriptions
+
+### 11F. Verification
+[ ] Task 144: Full integration verification (all backend + frontend tests)
+
 === LOG ===
 2026-03-15 — Task 138 complete: Full integration verification — 794/795 backend tests pass (1 pre-existing config test isolation failure), 278/278 frontend tests pass, 31/31 test files pass. Phase 10 Layered Conversation Memory complete.
 2026-03-15 — Task 137 complete: chat.py — asyncio.create_task(compress_if_needed(config)) after assistant message saved; DELETE /chat/history also clears chat_summaries; 3 new tests (summaries cleared, compress triggered, config passed); all 20 chat API tests pass.
