@@ -10,6 +10,7 @@ from app.services.hyde_service import generate_hypothetical_doc
 from app.services.multi_query_service import expand_queries
 from app.services.query_rewriter import fetch_chat_context, rewrite_query
 from app.services.rag_service import RAGService
+from app.services.strategy_classifier import classify_query, classify_query_llm
 
 
 class RAGState(TypedDict, total=False):
@@ -76,7 +77,14 @@ def _build_graph_nodes(rag_service, config, reranker_service=None):
         return {"question": rewritten}
 
     async def route_pre_retrieval(state: RAGState) -> dict:
-        """Pass-through node that serves as a routing fan-out point."""
+        """Routing fan-out point. Resolves auto/auto_llm to a concrete strategy."""
+        strategy = state.get("pre_retrieval_strategy", "none")
+        if strategy == "auto":
+            resolved = classify_query(state["question"])
+            return {"pre_retrieval_strategy": resolved}
+        if strategy == "auto_llm":
+            resolved = await classify_query_llm(state["question"], config)
+            return {"pre_retrieval_strategy": resolved}
         return {}
 
     async def hyde(state: RAGState) -> dict:
