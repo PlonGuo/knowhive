@@ -1,4 +1,6 @@
 """LLM factory — map AppConfig to LangChain ChatModel instances."""
+import os
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -13,6 +15,7 @@ def create_chat_model(config: AppConfig) -> BaseChatModel:
         return ChatOllama(
             model=config.model_name,
             base_url=config.base_url,
+            num_ctx=8192,
         )
     elif config.llm_provider == LLMProvider.OPENAI_COMPATIBLE:
         from langchain_openai import ChatOpenAI
@@ -20,7 +23,7 @@ def create_chat_model(config: AppConfig) -> BaseChatModel:
         return ChatOpenAI(
             model=config.model_name,
             base_url=config.base_url,
-            api_key=config.api_key or "not-needed",
+            api_key=config.api_key or os.environ.get("OPENAI_API_KEY", "not-needed"),
         )
     elif config.llm_provider == LLMProvider.ANTHROPIC:
         from langchain_anthropic import ChatAnthropic

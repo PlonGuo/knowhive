@@ -33,11 +33,17 @@ function mockFetch(opts: { summary?: string | null; tree?: object } = {}) {
     if (url.includes('/knowledge/tree')) {
       return { ok: true, json: () => Promise.resolve(tree) } as Response
     }
-    if (url.includes('/summary/file')) {
+    if (url.includes('/summary/cached') && method === 'POST') {
       if (summary === null) {
-        return { ok: false, status: 404, json: () => Promise.resolve({ detail: 'Not found' }) } as Response
+        return { ok: true, json: () => Promise.resolve([]) } as Response
       }
-      return { ok: true, json: () => Promise.resolve({ summary, cached: true }) } as Response
+      // Return cached summaries for all requested files
+      const body = JSON.parse(init?.body as string)
+      const results = (body.file_paths as string[]).map((fp: string) => ({
+        file_path: fp,
+        summary,
+      }))
+      return { ok: true, json: () => Promise.resolve(results) } as Response
     }
     if (url.includes('/summary/generate') && method === 'POST') {
       return { ok: true, json: () => Promise.resolve({ summary: 'Generated summary.' }) } as Response

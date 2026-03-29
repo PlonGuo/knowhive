@@ -13,9 +13,21 @@ backend/logs/
 
 # Runtime data
 backend/chroma_data/
+backend/Collection*/
 backend/config.yaml
 backend/knowhive.db
 logs/
+
+# Models (large binary files)
+backend/embedding_models/
+backend/reranker_models/
+
+# Eval outputs
+backend/eval_results/
+backend/eval_dataset.json
+
+# Misc
+docs/leetcode/
 
 # Build artifacts
 extraResources/
@@ -26,3 +38,6 @@ tsconfig.web.tsbuildinfo
 
 # Ralph loop
 .ralph.log
+
+# env
+.env
