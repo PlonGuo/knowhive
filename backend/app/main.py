@@ -12,6 +12,7 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import close_db, init_db
 from app.logging_config import setup_logging
@@ -151,6 +152,13 @@ def create_app(
         logger.info("KnowHive backend shut down")
 
     app = FastAPI(title="KnowHive Backend", version=APP_VERSION, lifespan=lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.include_router(setup_router)
     app.include_router(config_router)

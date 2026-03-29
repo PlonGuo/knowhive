@@ -81,6 +81,18 @@ async def get_summary(file_path: str) -> dict[str, Any]:
     return {"file_path": file_path, "summary": summary, "cached": True}
 
 
+@router.post("/summary/cached")
+async def cached_summaries(body: BatchRequest) -> list[dict[str, Any]]:
+    """Return only already-cached summaries for a list of files (no LLM calls)."""
+    svc = _get_service()
+    results = []
+    for fp in body.file_paths:
+        summary = await svc.get_cached_summary(fp)
+        if summary is not None:
+            results.append({"file_path": fp, "summary": summary})
+    return results
+
+
 @router.post("/summary/generate")
 async def generate_summary(body: GenerateRequest) -> dict[str, Any]:
     """Generate (or return cached) summary for a file."""

@@ -29,26 +29,33 @@ export default function KnowledgeOverview({ backendUrl, onBack }: KnowledgeOverv
   const [error, setError] = useState<string | null>(null)
   const [summaries, setSummaries] = useState<Record<string, string>>({})
   const [generating, setGenerating] = useState<Record<string, boolean>>({})
+  const [generateError, setGenerateError] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetch(`${backendUrl}/knowledge/tree`)
       .then((r) => r.json())
-      .then((tree: FileNode) => {
+      .then(async (tree: FileNode) => {
         const flat = flattenFiles(tree)
         setFiles(flat)
         setLoading(false)
-        // Fetch cached summaries for all files
-        flat.forEach(async (f) => {
-          try {
-            const resp = await fetch(`${backendUrl}/summary/file?file_path=${encodeURIComponent(f.path)}`)
-            if (resp.ok) {
-              const data = await resp.json()
-              setSummaries((prev) => ({ ...prev, [f.path]: data.summary }))
+        // Fetch all cached summaries in one batch request
+        try {
+          const resp = await fetch(`${backendUrl}/summary/cached`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_paths: flat.map((f) => f.path) }),
+          })
+          if (resp.ok) {
+            const data: { file_path: string; summary: string }[] = await resp.json()
+            const map: Record<string, string> = {}
+            for (const item of data) {
+              map[item.file_path] = item.summary
             }
-          } catch {
-            // No cached summary — that's fine
+            setSummaries(map)
           }
-        })
+        } catch {
+          // No cached summaries available — that's fine
+        }
       })
       .catch(() => {
         setError('Failed to load knowledge files.')
@@ -58,6 +65,7 @@ export default function KnowledgeOverview({ backendUrl, onBack }: KnowledgeOverv
 
   const handleGenerate = async (filePath: string) => {
     setGenerating((prev) => ({ ...prev, [filePath]: true }))
+    setGenerateError((prev) => ({ ...prev, [filePath]: '' }))
     try {
       const resp = await fetch(`${backendUrl}/summary/generate`, {
         method: 'POST',
@@ -67,7 +75,12 @@ export default function KnowledgeOverview({ backendUrl, onBack }: KnowledgeOverv
       if (resp.ok) {
         const data = await resp.json()
         setSummaries((prev) => ({ ...prev, [filePath]: data.summary }))
+      } else {
+        const data = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+        setGenerateError((prev) => ({ ...prev, [filePath]: data.detail || `Error ${resp.status}` }))
       }
+    } catch (e) {
+      setGenerateError((prev) => ({ ...prev, [filePath]: e instanceof Error ? e.message : 'Network error' }))
     } finally {
       setGenerating((prev) => ({ ...prev, [filePath]: false }))
     }
@@ -116,6 +129,10 @@ export default function KnowledgeOverview({ backendUrl, onBack }: KnowledgeOverv
                   </button>
                 )}
               </div>
+
+              {generateError[file.path] && (
+                <p className="mt-2 text-xs text-destructive">{generateError[file.path]}</p>
+              )}
 
               {summaries[file.path] && (
                 <p className="mt-2 text-sm text-muted-foreground">{summaries[file.path]}</p>

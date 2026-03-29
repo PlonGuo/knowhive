@@ -29,7 +29,7 @@ class PreRetrievalStrategy(StrEnum):
 
 class AppConfig(BaseModel):
     llm_provider: LLMProvider = LLMProvider.OLLAMA
-    model_name: str = "llama3"
+    model_name: str = "llama3.2"
     base_url: str = "http://localhost:11434"
     api_key: Optional[str] = None
     embedding_language: EmbeddingLanguage = EmbeddingLanguage.ENGLISH

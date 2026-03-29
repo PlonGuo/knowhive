@@ -66,12 +66,35 @@ async def run_rag_pipeline(
     rag_service: RAGService,
     config: AppConfig,
     k: int = 5,
+    reranker_service: Any = None,
 ) -> dict[str, Any]:
     """Run a single question through the RAG pipeline.
 
+    Supports multi-query expansion and reranking when configured.
     Returns dict with 'answer' (str) and 'contexts' (list[str]).
     """
-    chunks = rag_service.retrieve(question, k=k)
+    from app.config import PreRetrievalStrategy
+
+    # Multi-query: expand queries, retrieve per variant, dedup
+    if config.pre_retrieval_strategy == PreRetrievalStrategy.MULTI_QUERY:
+        from app.services.multi_query_service import expand_queries
+
+        variants = await expand_queries(question, config)
+        seen = set()
+        chunks = []
+        for q in variants:
+            for chunk in rag_service.retrieve(q, k=k):
+                key = (chunk.get("metadata", {}).get("file_path", ""), chunk.get("metadata", {}).get("chunk_index", 0))
+                if key not in seen:
+                    seen.add(key)
+                    chunks.append(chunk)
+    else:
+        chunks = rag_service.retrieve(question, k=k)
+
+    # Reranker: rerank and take top-k
+    if config.use_reranker and reranker_service is not None:
+        chunks = reranker_service.rerank(question, chunks, top_k=k)
+
     contexts = [c["content"] for c in chunks]
     messages = rag_service.build_prompt(question, chunks, custom_system_prompt=config.custom_system_prompt)
     answer = await rag_service.call_llm(messages, config)
@@ -109,16 +132,23 @@ async def run_evaluation(
     chroma_path: str,
     output_path: Path | None,
     k: int,
+    evaluator_model: str = "gpt-4o-mini",
 ) -> dict[str, Any]:
     """Run the full RAGAs evaluation pipeline."""
+    import warnings
+
+    import chromadb
     from ragas import EvaluationDataset, evaluate
-    from ragas.llms import llm_factory
-    from ragas.metrics.collections import (
-        answer_relevancy,
-        context_precision,
-        context_recall,
-        faithfulness,
-    )
+
+    # Use legacy metric singletons (they are Metric instances accepted by evaluate())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from ragas.metrics import (
+            answer_relevancy,
+            context_precision,
+            context_recall,
+            faithfulness,
+        )
 
     # Load config and dataset
     config = load_config(config_path)
@@ -126,17 +156,30 @@ async def run_evaluation(
     print(f"Loaded {len(eval_data)} evaluation samples")
 
     # Initialize Chroma + RAG service
-    import chromadb
-
     chroma_client = chromadb.PersistentClient(path=chroma_path)
     collection = chroma_client.get_or_create_collection(name="knowhive")
     rag_service = RAGService(collection)
 
+    # Initialize reranker if configured
+    reranker_service = None
+    if config.use_reranker:
+        from app.services.reranker_service import RerankerService
+
+        reranker_service = RerankerService()
+        if reranker_service.is_model_downloaded():
+            reranker_service.load_model()
+            print("Reranker model loaded")
+        else:
+            print("Reranker model not downloaded, downloading...")
+            await reranker_service.download_model()
+            reranker_service.load_model()
+            print("Reranker model downloaded and loaded")
+
     # Run each question through the pipeline
-    print("Running RAG pipeline...")
+    print(f"Running RAG pipeline (strategy={config.pre_retrieval_strategy}, reranker={config.use_reranker})...")
     pipeline_results = []
     for i, sample in enumerate(eval_data):
-        result = await run_rag_pipeline(sample["question"], rag_service, config, k=k)
+        result = await run_rag_pipeline(sample["question"], rag_service, config, k=k, reranker_service=reranker_service)
         pipeline_results.append(result)
         print(f"  [{i + 1}/{len(eval_data)}] {sample['question'][:60]}...")
 
@@ -144,30 +187,28 @@ async def run_evaluation(
     ragas_samples = build_ragas_samples(eval_data, pipeline_results)
     dataset = EvaluationDataset(samples=ragas_samples)
 
-    # Create evaluator LLM (uses the same LLM from config as the judge)
-    evaluator_llm = _create_evaluator_llm(config)
+    # Create OpenAI evaluator LLM and embeddings (separate from the RAG pipeline LLM)
+    evaluator_llm = _create_evaluator_llm(evaluator_model)
+    evaluator_embeddings = _create_evaluator_embeddings()
 
-    # Run RAGAs evaluation
-    print("Running RAGAs evaluation...")
-    metrics = [
-        faithfulness.Faithfulness(),
-        answer_relevancy.AnswerRelevancy(),
-        context_precision.LLMContextPrecisionWithReference(),
-        context_recall.LLMContextRecall(),
-    ]
+    # Run RAGAs evaluation with legacy singleton metrics
+    print(f"Running RAGAs evaluation (evaluator: {evaluator_model})...")
     result = evaluate(
         dataset=dataset,
-        metrics=metrics,
+        metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
         llm=evaluator_llm,
+        embeddings=evaluator_embeddings,
         show_progress=True,
     )
 
-    # Format output
+    # Format output — result.scores is List[Dict[str, Any]], one dict per sample
+    df = result.to_pandas()
+    avg_scores = {col: round(df[col].mean(), 4) for col in df.columns if col not in ("user_input", "response", "retrieved_contexts", "reference")}
     output = {
         "dataset": str(dataset_path),
         "num_samples": len(eval_data),
-        "scores": {k: round(v, 4) for k, v in result.scores.items()},
-        "per_sample": result.to_pandas().to_dict(orient="records"),
+        "scores": avg_scores,
+        "per_sample": df.to_dict(orient="records"),
     }
 
     if output_path:
@@ -179,35 +220,24 @@ async def run_evaluation(
     return output
 
 
-def _create_evaluator_llm(config: AppConfig):
-    """Create a RAGAs-compatible LLM wrapper from KnowHive config."""
+def _create_evaluator_embeddings():
+    """Create OpenAI embeddings for RAGAS evaluation.
+
+    Uses OPENAI_API_KEY env var. Legacy metrics need embed_query/embed_documents.
+    """
+    from langchain_openai import OpenAIEmbeddings
+    from ragas.embeddings.base import LangchainEmbeddingsWrapper
+
+    return LangchainEmbeddingsWrapper(OpenAIEmbeddings())
+
+
+def _create_evaluator_llm(model: str = "gpt-4o-mini"):
+    """Create OpenAI LLM for RAGAS evaluation. Uses OPENAI_API_KEY env var."""
+    from openai import OpenAI
     from ragas.llms import llm_factory
 
-    if config.llm_provider == "anthropic":
-        from anthropic import Anthropic
-
-        client = Anthropic(
-            api_key=config.api_key or "",
-            base_url=config.base_url if config.base_url != "https://api.anthropic.com" else None,
-        )
-        return llm_factory(config.model_name, provider="anthropic", client=client)
-    elif config.llm_provider == "ollama":
-        from openai import OpenAI
-
-        client = OpenAI(
-            api_key="ollama",
-            base_url=f"{config.base_url.rstrip('/')}/v1",
-        )
-        return llm_factory(config.model_name, client=client)
-    else:
-        # OpenAI-compatible
-        from openai import OpenAI
-
-        client = OpenAI(
-            api_key=config.api_key or "no-key",
-            base_url=config.base_url,
-        )
-        return llm_factory(config.model_name, client=client)
+    client = OpenAI()
+    return llm_factory(model, client=client, max_tokens=8192)
 
 
 # ── CLI ──────────────────────────────────────────────────────
@@ -247,12 +277,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=5,
         help="Number of chunks to retrieve per query (default: 5)",
     )
+    parser.add_argument(
+        "--evaluator-model",
+        type=str,
+        default="gpt-4o-mini",
+        help="OpenAI model for RAGAS evaluation judge (default: gpt-4o-mini)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    # Load .env file (for OPENAI_API_KEY used by evaluator)
+    from dotenv import load_dotenv
+    load_dotenv()
 
     try:
         asyncio.run(
@@ -262,6 +302,7 @@ def main(argv: list[str] | None = None) -> None:
                 chroma_path=args.chroma_path,
                 output_path=args.output,
                 k=args.k,
+                evaluator_model=args.evaluator_model,
             )
         )
     except FileNotFoundError as e:

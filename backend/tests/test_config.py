@@ -27,7 +27,7 @@ class TestConfigModel:
     def test_defaults(self):
         cfg = AppConfig()
         assert cfg.llm_provider == LLMProvider.OLLAMA
-        assert cfg.model_name == "llama3"
+        assert cfg.model_name == "llama3.2"
         assert cfg.base_url == "http://localhost:11434"
         assert cfg.api_key is None
         assert cfg.embedding_language == EmbeddingLanguage.ENGLISH
@@ -157,7 +157,7 @@ class TestConfigEndpoints:
         assert resp.status_code == 200
         data = resp.json()
         assert data["llm_provider"] == "ollama"
-        assert data["model_name"] == "llama3"
+        assert data["model_name"] == "llama3.2"
         assert data["base_url"] == "http://localhost:11434"
         assert data["api_key"] is None
         assert data["embedding_language"] == "english"
@@ -189,7 +189,7 @@ class TestConfigEndpoints:
             "/config",
             json={
                 "llm_provider": "ollama",
-                "model_name": "llama3",
+                "model_name": "llama3.2",
                 "base_url": "http://localhost:11434",
                 "embedding_language": "english",
             },
@@ -254,7 +254,7 @@ class TestTestLLMEndpoint:
             AppConfig(
                 llm_provider=LLMProvider.OLLAMA,
                 base_url="http://localhost:11434",
-                model_name="llama3",
+                model_name="llama3.2",
             ),
             config_path,
         )
@@ -265,7 +265,7 @@ class TestTestLLMEndpoint:
     def test_test_llm_success_ollama(self, mock_client_cls, client: TestClient):
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"models": [{"name": "llama3"}]}
+        mock_response.json.return_value = {"models": [{"name": "llama3.2"}]}
 
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)

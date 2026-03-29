@@ -6,9 +6,9 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Default cross-encoder model
-RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-RERANKER_SIZE_MB = 80
+# Default cross-encoder model (multilingual, matches bge-m3 embedding family)
+RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+RERANKER_SIZE_MB = 2200
 
 
 class RerankerService:

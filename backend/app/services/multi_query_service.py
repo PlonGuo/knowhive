@@ -13,6 +13,7 @@ MULTI_QUERY_PROMPT = (
     "Generate 3 to 5 different versions of the following question. "
     "Each version should approach the topic from a different angle or use different terminology, "
     "but all should seek the same information. "
+    "IMPORTANT: Generate variants in the SAME LANGUAGE as the original question. "
     "Output each variant on its own line, numbered (1. 2. 3. etc.). "
     "Do not include any other text.\n\n"
     "Original question: {question}"
