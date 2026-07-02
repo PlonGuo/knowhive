@@ -12,6 +12,7 @@ import { configRoutes } from "./configRoutes.ts";
 import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
 import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
+import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { runTestLlm } from "./testLlm.ts";
@@ -66,6 +67,18 @@ app.route(
       console.log(`[config] re-embedded ${results.length} files after language change`);
     },
     testLlm: runTestLlm,
+  }),
+);
+
+// Knowledge tree + file CRUD over the knowledge dir (edits re-index through the live embedder).
+app.route(
+  "/",
+  knowledgeRoutes({
+    knowledgeDir,
+    db,
+    reingest: async (absPath, content) => {
+      await ingestText(db, absPath, content, embedder);
+    },
   }),
 );
 

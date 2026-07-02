@@ -24,6 +24,11 @@ export function deleteChunksForFile(db: Database, filePath: string): void {
   db.run("DELETE FROM chunks WHERE file_path = ?", [filePath]);
 }
 
+/** Point a file's chunks at its new path after a rename (embeddings stay valid). */
+export function renameChunksFilePath(db: Database, oldPath: string, newPath: string): void {
+  db.run("UPDATE chunks SET file_path = ? WHERE file_path = ?", [newPath, oldPath]);
+}
+
 /** Insert chunks + their embeddings for a file, in one transaction. */
 export function storeChunks(
   db: Database,
