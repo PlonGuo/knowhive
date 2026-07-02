@@ -16,6 +16,7 @@ import { ingestRoutes } from "./ingestRoutes.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
+import { reviewRoutes } from "./reviewRoutes.ts";
 import { syncKnowledgeDir } from "./sync.ts";
 import { runTestLlm } from "./testLlm.ts";
 import { FileWatcher } from "./watcher.ts";
@@ -103,6 +104,9 @@ const watcher = new FileWatcher({
   },
 });
 app.route("/", watcherRoutes({ watcher }));
+
+// SM-2 spaced-repetition review: GET /review/due, POST /review/record, GET /review/stats.
+app.route("/", reviewRoutes({ db }));
 
 // Ingest with task tracking: POST /ingest/files, GET /ingest/status/:id, POST /ingest/resync.
 app.route(
