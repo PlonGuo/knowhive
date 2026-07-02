@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { streamText, type ModelMessage, type UIMessage } from "ai";
+import { generateText, streamText, type ModelMessage, type UIMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { parseArgs } from "./args.ts";
 import { loadConfig } from "./config.ts";
@@ -17,6 +17,8 @@ import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { reviewRoutes } from "./reviewRoutes.ts";
+import { SUMMARIZE_SYSTEM_PROMPT } from "./summary.ts";
+import { summaryRoutes } from "./summaryRoutes.ts";
 import { syncKnowledgeDir } from "./sync.ts";
 import { runTestLlm } from "./testLlm.ts";
 import { FileWatcher } from "./watcher.ts";
@@ -107,6 +109,23 @@ app.route("/", watcherRoutes({ watcher }));
 
 // SM-2 spaced-repetition review: GET /review/due, POST /review/record, GET /review/stats.
 app.route("/", reviewRoutes({ db }));
+
+// Cached LLM document summaries: GET /summary/file, POST /summary/{cached,generate,batch}.
+app.route(
+  "/",
+  summaryRoutes({
+    db,
+    knowledgeDir,
+    generate: async (content, filePath) => {
+      const { text } = await generateText({
+        model: chatModel(),
+        system: SUMMARIZE_SYSTEM_PROMPT,
+        prompt: `Document: ${filePath}\n\n${content}`,
+      });
+      return text;
+    },
+  }),
+);
 
 // Ingest with task tracking: POST /ingest/files, GET /ingest/status/:id, POST /ingest/resync.
 app.route(
