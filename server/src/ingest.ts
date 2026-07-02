@@ -2,7 +2,8 @@
 // vectors + FTS) → record the document. Ported from backend/app/services/ingest_service.py.
 // The embedder is injected so the pipeline is unit-testable without Ollama.
 import type { Database } from "bun:sqlite";
-import { basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
 import { splitByHeadings } from "./chunker.ts";
 import { deleteChunksForFile, storeChunks } from "./store.ts";
@@ -36,6 +37,24 @@ export async function ingestText(
   upsertDocument(db, filePath, data.title, chunks.length, "indexed");
 
   return { filePath, chunkCount: chunks.length };
+}
+
+/** Recursively ingest all .md files under `directory` (used by re-embed and resync).
+ * Mirrors ingest_service.ingest_directory; PDF support is not ported to the TS stack yet. */
+export async function ingestDirectory(
+  db: Database,
+  directory: string,
+  embed: Embedder,
+): Promise<IngestResult[]> {
+  if (!existsSync(directory)) return [];
+  const glob = new Bun.Glob("**/*.md");
+  const files = (await Array.fromAsync(glob.scan({ cwd: directory }))).sort();
+  const results: IngestResult[] = [];
+  for (const rel of files) {
+    const path = join(directory, rel);
+    results.push(await ingestText(db, path, readFileSync(path, "utf8"), embed));
+  }
+  return results;
 }
 
 function upsertDocument(

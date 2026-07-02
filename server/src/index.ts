@@ -1,25 +1,32 @@
 // KnowHive TS/bun sidecar entrypoint. Spawned by the Tauri shell as
 // `bun run src/index.ts --port <port> --data-dir <dir>` (see src-tauri/src/sidecar.rs).
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamText, type ModelMessage, type UIMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { parseArgs } from "./args.ts";
 import { loadConfig } from "./config.ts";
+import { configRoutes } from "./configRoutes.ts";
 import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
-import { ingestText, type Embedder } from "./ingest.ts";
+import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
+import { runTestLlm } from "./testLlm.ts";
 
 const VERSION = "0.1.0";
 
 const { port, dataDir } = parseArgs();
 const db = openDb(dataDir);
-const config = loadConfig(dataDir);
+// Mutable: PUT /config swaps this at runtime; closures below read it per call.
+let config = loadConfig(dataDir);
 
-// Embedder bound to the configured Ollama endpoint + language→model mapping.
+// User knowledge base lives inside the data dir (Python used ./knowledge relative cwd).
+const knowledgeDir = join(dataDir, "knowledge");
+
+// Embedder reading the live config each call (endpoint + language→model mapping).
 const embedder: Embedder = (texts) =>
   ollamaEmbed(texts, {
     baseUrl: config.base_url,
@@ -27,10 +34,9 @@ const embedder: Embedder = (texts) =>
   });
 
 // Chat model via Ollama's OpenAI-compatible endpoint (/v1), consumed by the AI SDK.
-const chatProvider = createOpenAICompatible({
-  name: "ollama",
-  baseURL: `${config.base_url}/v1`,
-});
+// Recreated per call so a config change (base_url) takes effect without restart.
+const chatModel = () =>
+  createOpenAICompatible({ name: "ollama", baseURL: `${config.base_url}/v1` })(config.model_name);
 
 const app = new Hono();
 
@@ -44,6 +50,24 @@ app.get("/health", (c) =>
 
 // Minimal setup gate the frontend checks on boot (full onboarding ported in Phase D).
 app.get("/setup/status", (c) => c.json({ first_run: !config.first_run_complete }));
+
+// GET/PUT /config + POST /config/test-llm. A saved embedding_language change
+// re-ingests the knowledge dir in the background with the new model.
+app.route(
+  "/",
+  configRoutes({
+    dataDir,
+    getConfig: () => config,
+    setConfig: (next) => {
+      config = next;
+    },
+    reembed: async () => {
+      const results = await ingestDirectory(db, knowledgeDir, embedder);
+      console.log(`[config] re-embedded ${results.length} files after language change`);
+    },
+    testLlm: runTestLlm,
+  }),
+);
 
 // Ingest local files by path (mirrors backend POST /ingest/files).
 app.post("/ingest/files", async (c) => {
@@ -87,7 +111,7 @@ app.post("/chat", async (c) => {
     .filter((m) => typeof m.content === "string" && m.content.length > 0);
 
   const result = streamText({
-    model: chatProvider(config.model_name),
+    model: chatModel(),
     system,
     messages: modelMessages,
   });
