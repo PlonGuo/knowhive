@@ -24,17 +24,20 @@ export async function ingestText(
 ): Promise<IngestResult> {
   const { data, body } = parseFrontmatter(rawText);
   const chunks = splitByHeadings(body);
+  // Content hash + size let the sync service detect modified files (sync.ts).
+  const fileHash = new Bun.CryptoHasher("sha256").update(rawText).digest("hex");
+  const fileSize = Buffer.byteLength(rawText);
 
   if (chunks.length === 0) {
     deleteChunksForFile(db, filePath);
-    upsertDocument(db, filePath, data.title, 0, "empty");
+    upsertDocument(db, filePath, data.title, 0, "empty", fileHash, fileSize);
     return { filePath, chunkCount: 0 };
   }
 
   const embeddings = await embed(chunks.map((c) => c.content));
   deleteChunksForFile(db, filePath);
   storeChunks(db, filePath, chunks, embeddings, data);
-  upsertDocument(db, filePath, data.title, chunks.length, "indexed");
+  upsertDocument(db, filePath, data.title, chunks.length, "indexed", fileHash, fileSize);
 
   return { filePath, chunkCount: chunks.length };
 }
@@ -68,16 +71,20 @@ function upsertDocument(
   title: string | null,
   chunkCount: number,
   status: string,
+  fileHash: string,
+  fileSize: number,
 ): void {
   db.run(
-    `INSERT INTO documents (file_path, file_name, modified_at, indexed_at, chunk_count, status, title)
-       VALUES (?, ?, datetime('now'), datetime('now'), ?, ?, ?)
+    `INSERT INTO documents (file_path, file_name, file_hash, file_size, modified_at, indexed_at, chunk_count, status, title)
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?, ?)
      ON CONFLICT(file_path) DO UPDATE SET
+       file_hash   = excluded.file_hash,
+       file_size   = excluded.file_size,
        indexed_at  = datetime('now'),
        chunk_count = excluded.chunk_count,
        status      = excluded.status,
        title       = excluded.title,
        updated_at  = datetime('now')`,
-    [filePath, basename(filePath), chunkCount, status, title],
+    [filePath, basename(filePath), fileHash, fileSize, chunkCount, status, title],
   );
 }

@@ -1,6 +1,6 @@
 // KnowHive TS/bun sidecar entrypoint. Spawned by the Tauri shell as
 // `bun run src/index.ts --port <port> --data-dir <dir>` (see src-tauri/src/sidecar.rs).
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -16,7 +16,10 @@ import { ingestRoutes } from "./ingestRoutes.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
+import { syncKnowledgeDir } from "./sync.ts";
 import { runTestLlm } from "./testLlm.ts";
+import { FileWatcher } from "./watcher.ts";
+import { watcherRoutes } from "./watcherRoutes.ts";
 
 const VERSION = "0.1.0";
 
@@ -34,6 +37,11 @@ const embedder: Embedder = (texts) =>
     baseUrl: config.base_url,
     model: embeddingModelFor(config.embedding_language),
   });
+
+// Read + index a single file; shared by ingest tasks, watcher sync and startup sync.
+const ingestOne = async (absPath: string) => {
+  await ingestText(db, absPath, readFileSync(absPath, "utf8"), embedder);
+};
 
 // Chat model via Ollama's OpenAI-compatible endpoint (/v1), consumed by the AI SDK.
 // Recreated per call so a config change (base_url) takes effect without restart.
@@ -83,16 +91,23 @@ app.route(
   }),
 );
 
+// Watch the knowledge dir: edits made outside the app (e.g. Obsidian) sync into the index.
+const watcher = new FileWatcher({
+  knowledgeDir,
+  onChange: async () => {
+    const stats = await syncKnowledgeDir(db, knowledgeDir, ingestOne);
+    console.log(
+      `[watcher] sync: ${stats.new} new, ${stats.modified} modified, ${stats.deleted} deleted` +
+        (stats.errors.length ? `, ${stats.errors.length} errors` : ""),
+    );
+  },
+});
+app.route("/", watcherRoutes({ watcher }));
+
 // Ingest with task tracking: POST /ingest/files, GET /ingest/status/:id, POST /ingest/resync.
 app.route(
   "/",
-  ingestRoutes({
-    db,
-    knowledgeDir,
-    ingestFile: async (absPath) => {
-      await ingestText(db, absPath, readFileSync(absPath, "utf8"), embedder);
-    },
-  }),
+  ingestRoutes({ db, knowledgeDir, ingestFile: ingestOne }),
 );
 
 // Hybrid retrieval (vector KNN ⊕ FTS5 via RRF). Used for Phase B verification and by the
@@ -137,6 +152,16 @@ console.log(
   `[server] KnowHive sidecar listening on http://127.0.0.1:${port} ` +
     `(data-dir=${dataDir}, sqlite-vec=${vecVersion(db)})`,
 );
+
+// Startup sync + watcher autostart (mirrors backend/app/main.py lifespan). Runs in the
+// background so /health responds immediately; the knowledge dir must exist for fs.watch.
+mkdirSync(knowledgeDir, { recursive: true });
+syncKnowledgeDir(db, knowledgeDir, ingestOne)
+  .then((stats) =>
+    console.log(`[server] startup sync: ${stats.new} new, ${stats.modified} modified, ${stats.deleted} deleted`),
+  )
+  .catch((err) => console.error("[server] startup sync failed:", err))
+  .finally(() => watcher.start());
 
 export default {
   port,

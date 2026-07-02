@@ -79,3 +79,14 @@ test("ingestDirectory on a missing directory returns empty results", async () =>
   expect(results).toEqual([]);
   db.close();
 });
+
+test("ingestText stores the content sha256 and byte size on the documents row", async () => {
+  const db = openDbAt(":memory:");
+  await ingestText(db, "animals.md", DOC, fakeEmbed);
+  const row = db
+    .query("SELECT file_hash, file_size FROM documents WHERE file_path = 'animals.md'")
+    .get() as { file_hash: string; file_size: number };
+  const expected = new Bun.CryptoHasher("sha256").update(DOC).digest("hex");
+  expect(row.file_hash).toBe(expected);
+  expect(row.file_size).toBe(Buffer.byteLength(DOC));
+});
