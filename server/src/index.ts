@@ -7,8 +7,9 @@ import { cors } from "hono/cors";
 import { generateText, streamText, type ModelMessage, type UIMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { parseArgs } from "./args.ts";
-import { loadConfig } from "./config.ts";
+import { configPath, loadConfig } from "./config.ts";
 import { configRoutes } from "./configRoutes.ts";
+import { exportRoutes } from "./exportRoutes.ts";
 import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
 import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
@@ -109,6 +110,9 @@ app.route("/", watcherRoutes({ watcher }));
 
 // SM-2 spaced-repetition review: GET /review/due, POST /review/record, GET /review/stats.
 app.route("/", reviewRoutes({ db }));
+
+// Export: POST /export/full (zip), POST /export/chat (json), POST /export/file (bytes).
+app.route("/", exportRoutes({ db, knowledgeDir, configPath: configPath(dataDir) }));
 
 // Cached LLM document summaries: GET /summary/file, POST /summary/{cached,generate,batch}.
 app.route(
