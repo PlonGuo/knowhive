@@ -12,6 +12,7 @@ import { configRoutes } from "./configRoutes.ts";
 import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
 import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
+import { ingestRoutes } from "./ingestRoutes.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
@@ -82,20 +83,17 @@ app.route(
   }),
 );
 
-// Ingest local files by path (mirrors backend POST /ingest/files).
-app.post("/ingest/files", async (c) => {
-  const { paths } = (await c.req.json()) as { paths: string[] };
-  const results = [];
-  for (const path of paths) {
-    try {
-      const text = readFileSync(path, "utf8");
-      results.push(await ingestText(db, path, text, embedder));
-    } catch (err) {
-      results.push({ filePath: path, chunkCount: 0, error: (err as Error).message });
-    }
-  }
-  return c.json({ results });
-});
+// Ingest with task tracking: POST /ingest/files, GET /ingest/status/:id, POST /ingest/resync.
+app.route(
+  "/",
+  ingestRoutes({
+    db,
+    knowledgeDir,
+    ingestFile: async (absPath) => {
+      await ingestText(db, absPath, readFileSync(absPath, "utf8"), embedder);
+    },
+  }),
+);
 
 // Hybrid retrieval (vector KNN ⊕ FTS5 via RRF). Used for Phase B verification and by the
 // RAG retrieve step in Phase C.

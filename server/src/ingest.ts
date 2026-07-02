@@ -39,19 +39,24 @@ export async function ingestText(
   return { filePath, chunkCount: chunks.length };
 }
 
+/** Recursively list .md files under `directory` (absolute paths, sorted).
+ * Mirrors ingest_service.find_ingestable_files; PDF support is not ported to the TS stack yet. */
+export async function findMarkdownFiles(directory: string): Promise<string[]> {
+  if (!existsSync(directory)) return [];
+  const glob = new Bun.Glob("**/*.md");
+  const relPaths = (await Array.fromAsync(glob.scan({ cwd: directory }))).sort();
+  return relPaths.map((rel) => join(directory, rel));
+}
+
 /** Recursively ingest all .md files under `directory` (used by re-embed and resync).
- * Mirrors ingest_service.ingest_directory; PDF support is not ported to the TS stack yet. */
+ * Mirrors ingest_service.ingest_directory. */
 export async function ingestDirectory(
   db: Database,
   directory: string,
   embed: Embedder,
 ): Promise<IngestResult[]> {
-  if (!existsSync(directory)) return [];
-  const glob = new Bun.Glob("**/*.md");
-  const files = (await Array.fromAsync(glob.scan({ cwd: directory }))).sort();
   const results: IngestResult[] = [];
-  for (const rel of files) {
-    const path = join(directory, rel);
+  for (const path of await findMarkdownFiles(directory)) {
     results.push(await ingestText(db, path, readFileSync(path, "utf8"), embed));
   }
   return results;
