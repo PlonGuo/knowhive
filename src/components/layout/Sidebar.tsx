@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import FileTree from '../knowledge/FileTree'
+import { selectFiles } from '../../lib/platform'
 
 interface ImportState {
   status: 'idle' | 'ingesting' | 'completed' | 'failed'
@@ -77,7 +78,7 @@ export default function Sidebar({
 
   const handleImport = async () => {
     try {
-      const files: string[] = await window.api.selectFiles()
+      const files: string[] = await selectFiles()
       if (files.length === 0 || !backendUrl) return
 
       setImportState({ status: 'ingesting', totalFiles: files.length, processedFiles: 0 })

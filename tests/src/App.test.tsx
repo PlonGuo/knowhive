@@ -68,7 +68,7 @@ describe('App', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:8000/health')
+      expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:18200/health')
     })
   })
 

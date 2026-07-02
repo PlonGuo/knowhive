@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from './components/layout/AppLayout'
 import OnboardingPage from './components/onboarding/OnboardingPage'
+import { getBackendUrl } from './lib/platform'
 
 interface HealthStatus {
   status: string
@@ -16,7 +17,7 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
       try {
-        const url = await window.api?.getBackendUrl?.() ?? 'http://127.0.0.1:8000'
+        const url = await getBackendUrl()
         setBackendUrl(url)
         const [healthRes, setupRes] = await Promise.all([
           fetch(`${url}/health`),

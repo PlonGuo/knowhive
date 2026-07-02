@@ -1,0 +1,24 @@
+{
+  "name": "knowhive-server",
+  "version": "0.1.0",
+  "description": "KnowHive TS/bun sidecar — RAG orchestration + storage (replaces the Python FastAPI backend)",
+  "type": "module",
+  "private": true,
+  "module": "src/index.ts",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.2",
+    "ai": "^7.0.9",
+    "hono": "^4.6.14",
+    "sqlite-vec": "^0.1.6",
+    "yaml": "^2.8.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

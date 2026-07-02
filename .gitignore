@@ -41,3 +41,5 @@ tsconfig.web.tsbuildinfo
 
 # env
 .env
+# Tauri frontend build output
+dist-web/

@@ -15,14 +15,24 @@
     "build:mac": "pnpm build && electron-builder --config electron-builder.yml --mac --publish never",
     "build:win": "pnpm build && electron-builder --config electron-builder.yml --win --publish never",
     "preview": "electron-vite preview",
+    "dev:web": "vite",
+    "build:web": "vite build",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "lint": "eslint src electron --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.12",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "~2.7.1",
+    "ai": "7.0.9",
     "get-port": "^7.1.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "zod": "^4.4.3"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -31,6 +41,7 @@
     ]
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.3",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^20.14.0",

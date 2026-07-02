@@ -34,7 +34,7 @@ describe('dev:all script configuration', () => {
   })
 
   it('waits for backend health before starting electron', () => {
-    expect(devAll).toMatch(/wait-on http:\/\/127\.0\.0\.1:\d+\/health/)
+    expect(devAll).toMatch(/wait-on http(-get)?:\/\/127\.0\.0\.1:\d+\/health/)
   })
 
   it('uses matching port between uvicorn and BACKEND_URL', () => {

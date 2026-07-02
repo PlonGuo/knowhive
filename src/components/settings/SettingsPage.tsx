@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { saveFile } from '../../lib/platform'
 
 interface AppConfig {
   llm_provider: 'ollama' | 'openai-compatible' | 'anthropic'
@@ -217,7 +218,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
       const res = await fetch(`${backendUrl}/export/full`, { method: 'POST' })
       const blob = await res.blob()
       const defaultName = `knowhive-export-${new Date().toISOString().slice(0, 10)}.zip`
-      const savePath = await window.api?.saveFile?.(defaultName)
+      const savePath = await saveFile(defaultName)
       if (savePath) {
         // In Electron, trigger download via anchor
         const url = URL.createObjectURL(blob)
