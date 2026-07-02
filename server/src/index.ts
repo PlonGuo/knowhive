@@ -15,6 +15,8 @@ import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
 import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
 import { ingestRoutes } from "./ingestRoutes.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
+import { ollamaRoutes } from "./ollamaRoutes.ts";
+import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { reviewRoutes } from "./reviewRoutes.ts";
@@ -62,8 +64,30 @@ app.get("/health", (c) =>
   c.json({ status: "ok", version: VERSION, vec: vecVersion(db), provider: config.llm_provider }),
 );
 
-// Minimal setup gate the frontend checks on boot (full onboarding ported in Phase D).
-app.get("/setup/status", (c) => c.json({ first_run: !config.first_run_complete }));
+// Onboarding gate + completion: GET /setup/status, POST /setup/complete.
+app.route(
+  "/",
+  setupRoutes({
+    dataDir,
+    getConfig: () => config,
+    setConfig: (next) => {
+      config = next;
+    },
+  }),
+);
+
+// Ollama model management for onboarding/settings: GET /ollama/status,
+// POST /ollama/pull (streams NDJSON download progress through to the renderer).
+app.route("/", ollamaRoutes({ getConfig: () => config }));
+
+// Reranker is Phase E; a disabled stub keeps the Settings UI functional until then.
+app.get("/reranker/status", (c) =>
+  c.json({ available: false, model: "none (planned: Phase E)", size_mb: 0, downloaded: false, loaded: false }),
+);
+app.post("/reranker/download", (c) =>
+  c.json({ detail: "Reranker is not available in the TS stack yet (Phase E)" }, 503),
+);
+app.get("/reranker/download-status", (c) => c.json({ status: null }));
 
 // GET/PUT /config + POST /config/test-llm. A saved embedding_language change
 // re-ingests the knowledge dir in the background with the new model.
