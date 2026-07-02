@@ -52,8 +52,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_backend_url,
-            commands::get_sidecar_status,
-            commands::check_setup
+            commands::get_sidecar_status
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

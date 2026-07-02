@@ -26,6 +26,19 @@ function mockFetch(firstRun: boolean) {
     if (url.includes('/setup/complete')) {
       return { ok: true, json: () => Promise.resolve({ ok: true }) } as Response
     }
+    if (url.includes('/ollama/status')) {
+      return {
+        ok: true,
+        json: () => Promise.resolve({
+          running: true,
+          models: ['llama3.2:latest', 'nomic-embed-text:latest'],
+          required: [
+            { name: 'llama3.2', purpose: 'chat', installed: true },
+            { name: 'nomic-embed-text', purpose: 'embedding', installed: true },
+          ],
+        }),
+      } as Response
+    }
     if (url.includes('/health')) {
       return { ok: true, json: () => Promise.resolve({ status: 'ok', version: '0.1.0' }) } as Response
     }
@@ -70,10 +83,10 @@ describe('Onboarding wiring — App.tsx', () => {
   it('shows AppLayout after onboarding completes', async () => {
     mockFetch(true)
     render(<App />)
-    // Navigate through all onboarding steps
-    await waitFor(() => expect(screen.getByTestId('onboarding-next-btn')).not.toBeDisabled())
-    fireEvent.click(screen.getByTestId('onboarding-next-btn'))
-    await waitFor(() => screen.getByTestId('onboarding-step2'))
+    // Navigate through all onboarding steps (R3 flow: mode choice → setup → done)
+    await waitFor(() => screen.getByTestId('onboarding-mode-local'))
+    fireEvent.click(screen.getByTestId('onboarding-mode-local'))
+    await waitFor(() => expect(screen.getByTestId('onboarding-step2-next-btn')).not.toBeDisabled())
     fireEvent.click(screen.getByTestId('onboarding-step2-next-btn'))
     await waitFor(() => screen.getByTestId('onboarding-step3'))
     fireEvent.click(screen.getByTestId('onboarding-finish-btn'))
@@ -85,9 +98,9 @@ describe('Onboarding wiring — App.tsx', () => {
   it('hides OnboardingPage after completion', async () => {
     mockFetch(true)
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('onboarding-next-btn')).not.toBeDisabled())
-    fireEvent.click(screen.getByTestId('onboarding-next-btn'))
-    await waitFor(() => screen.getByTestId('onboarding-step2'))
+    await waitFor(() => screen.getByTestId('onboarding-mode-local'))
+    fireEvent.click(screen.getByTestId('onboarding-mode-local'))
+    await waitFor(() => expect(screen.getByTestId('onboarding-step2-next-btn')).not.toBeDisabled())
     fireEvent.click(screen.getByTestId('onboarding-step2-next-btn'))
     await waitFor(() => screen.getByTestId('onboarding-step3'))
     fireEvent.click(screen.getByTestId('onboarding-finish-btn'))

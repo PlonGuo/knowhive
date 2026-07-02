@@ -8,10 +8,6 @@
 
 import { invoke } from '@tauri-apps/api/core'
 
-export interface SetupStatus {
-  uv_ok: boolean
-}
-
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:18200'
 
 function hasElectronApi(): boolean {
@@ -32,12 +28,6 @@ export async function getSidecarStatus(): Promise<string> {
   if (hasElectronApi()) return window.api!.getSidecarStatus()
   if (isTauri()) return invoke<string>('get_sidecar_status')
   return 'stopped'
-}
-
-export async function checkSetup(): Promise<SetupStatus> {
-  if (hasElectronApi()) return window.api!.checkSetup()
-  if (isTauri()) return invoke<SetupStatus>('check_setup')
-  return { uv_ok: false }
 }
 
 export async function selectFiles(): Promise<string[]> {

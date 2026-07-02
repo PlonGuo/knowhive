@@ -32,9 +32,8 @@ describe('check-setup IPC channel', () => {
     expect(src).toContain("'check-setup'")
   })
 
-  it('env.d.ts declares checkSetup with correct return type', () => {
+  it('env.d.ts no longer declares checkSetup (TS stack uses /setup/status)', () => {
     const src = readFileSync(resolve(ROOT, 'src/env.d.ts'), 'utf-8')
-    expect(src).toContain('checkSetup')
-    expect(src).toContain('uv_ok')
+    expect(src).not.toContain('checkSetup')
   })
 })

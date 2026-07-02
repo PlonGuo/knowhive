@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { generateText, streamText, type ModelMessage, type UIMessage } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { parseArgs } from "./args.ts";
 import { configPath, loadConfig } from "./config.ts";
@@ -49,10 +50,24 @@ const ingestOne = async (absPath: string) => {
   await ingestText(db, absPath, readFileSync(absPath, "utf8"), embedder);
 };
 
-// Chat model via Ollama's OpenAI-compatible endpoint (/v1), consumed by the AI SDK.
-// Recreated per call so a config change (base_url) takes effect without restart.
-const chatModel = () =>
-  createOpenAICompatible({ name: "ollama", baseURL: `${config.base_url}/v1` })(config.model_name);
+// Chat model for the configured provider, consumed by the AI SDK. Recreated per call
+// so config changes (provider/base_url/key) take effect without restart. Ollama is
+// reached through its OpenAI-compatible /v1; for openai-compatible the user's base_url
+// already includes the version prefix (parity with the Python test-llm probe).
+const chatModel = () => {
+  const base = config.base_url.replace(/\/+$/, "");
+  const apiKey = config.api_key ?? undefined;
+  switch (config.llm_provider) {
+    case "anthropic":
+      return createAnthropic({ apiKey, baseURL: `${base}/v1` })(config.model_name);
+    case "openai-compatible":
+      return createOpenAICompatible({ name: "openai-compatible", baseURL: base, apiKey })(
+        config.model_name,
+      );
+    default:
+      return createOpenAICompatible({ name: "ollama", baseURL: `${base}/v1` })(config.model_name);
+  }
+};
 
 const app = new Hono();
 

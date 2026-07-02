@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { fetchOllamaStatus, pullModel, type OllamaStatus } from '../../lib/ollama'
 import { saveFile } from '../../lib/platform'
 
 interface AppConfig {
@@ -19,19 +20,6 @@ interface TestResult {
   error?: string
 }
 
-interface EmbeddingModel {
-  language: string
-  name: string
-  size_mb: number
-  downloaded: boolean
-}
-
-interface EmbeddingStatus {
-  language?: string
-  status: string | null
-  progress?: number
-}
-
 interface SettingsPageProps {
   backendUrl: string
   onBack?: () => void
@@ -39,6 +27,7 @@ interface SettingsPageProps {
 }
 
 interface RerankerStatus {
+  available?: boolean
   model: string
   size_mb: number
   downloaded: boolean
@@ -48,6 +37,13 @@ interface RerankerStatus {
 interface RerankerDownloadStatus {
   status: string | null
   progress?: number
+  error?: string
+}
+
+interface EmbeddingPull {
+  model: string
+  percent: number
+  status: string
   error?: string
 }
 
@@ -68,16 +64,14 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
-  const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModel[]>([])
-  const [downloadStatus, setDownloadStatus] = useState<EmbeddingStatus | null>(null)
-  const [downloading, setDownloading] = useState(false)
+  const [ollama, setOllama] = useState<OllamaStatus | null>(null)
+  const [embeddingPull, setEmbeddingPull] = useState<EmbeddingPull | null>(null)
   const [showEmbeddingWarning, setShowEmbeddingWarning] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [rerankerStatus, setRerankerStatus] = useState<RerankerStatus | null>(null)
   const [rerankerDownloading, setRerankerDownloading] = useState(false)
   const [rerankerDownloadStatus, setRerankerDownloadStatus] = useState<RerankerDownloadStatus | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const rerankerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -88,12 +82,9 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   }, [backendUrl])
 
   useEffect(() => {
-    fetch(`${backendUrl}/embedding/models`)
-      .then((r) => r.ok ? r.json() : Promise.resolve([]))
-      .then((data: EmbeddingModel[]) => {
-        if (Array.isArray(data)) setEmbeddingModels(data)
-      })
-      .catch(() => {})
+    fetchOllamaStatus(backendUrl)
+      .then(setOllama)
+      .catch(() => setOllama(null))
   }, [backendUrl])
 
   useEffect(() => {
@@ -108,50 +99,27 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   // Stop polling on unmount
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
       if (rerankerPollRef.current) clearInterval(rerankerPollRef.current)
     }
   }, [])
 
-  const currentModel = embeddingModels.find((m) => m.language === config.embedding_language)
+  // /ollama/status derives the required embedding model from the *saved* config, so
+  // the indicator reflects the saved language; a changed dropdown applies on Save.
+  const embeddingModel = ollama?.required?.find((r) => r.purpose === 'embedding') ?? null
 
-  const startStatusPolling = (language: string) => {
-    if (pollRef.current) clearInterval(pollRef.current)
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${backendUrl}/embedding/status?language=${language}`)
-        const data: EmbeddingStatus = await res.json()
-        setDownloadStatus(data)
-        if (data.status === 'complete' || data.status === 'error') {
-          clearInterval(pollRef.current!)
-          pollRef.current = null
-          setDownloading(false)
-          // Refresh model list
-          const modelsRes = await fetch(`${backendUrl}/embedding/models`)
-          const models: EmbeddingModel[] = await modelsRes.json()
-          setEmbeddingModels(models)
-        }
-      } catch {
-        clearInterval(pollRef.current!)
-        pollRef.current = null
-        setDownloading(false)
-      }
-    }, 1000)
-  }
-
-  const handleDownload = async () => {
-    setDownloading(true)
-    setDownloadStatus({ status: 'downloading', progress: 0 })
-    try {
-      await fetch(`${backendUrl}/embedding/download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: config.embedding_language }),
-      })
-      startStatusPolling(config.embedding_language)
-    } catch {
-      setDownloading(false)
+  const handleDownloadEmbedding = async () => {
+    if (!embeddingModel) return
+    const model = embeddingModel.name
+    setEmbeddingPull({ model, percent: 0, status: 'starting' })
+    const result = await pullModel(backendUrl, model, (percent, status) =>
+      setEmbeddingPull({ model, percent, status }),
+    )
+    if (!result.ok) {
+      setEmbeddingPull({ model, percent: 0, status: 'error', error: result.error })
+      return
     }
+    setEmbeddingPull(null)
+    fetchOllamaStatus(backendUrl).then(setOllama).catch(() => {})
   }
 
   const startRerankerPolling = () => {
@@ -193,11 +161,6 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
     setTestResult(null)
     setShowEmbeddingWarning(false)
 
-    // Warn if selected model is not downloaded
-    if (currentModel && !currentModel.downloaded) {
-      setShowEmbeddingWarning(true)
-    }
-
     try {
       await fetch(`${backendUrl}/config`, {
         method: 'PUT',
@@ -206,6 +169,16 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
       })
       setSaveMessage('Settings saved')
       onConfigSaved?.()
+      // Refresh model readiness against the newly saved config; warn if the
+      // embedding model for the selected language isn't installed.
+      try {
+        const status = await fetchOllamaStatus(backendUrl)
+        setOllama(status)
+        const embedding = status.required?.find((r) => r.purpose === 'embedding')
+        if (embedding && !embedding.installed) setShowEmbeddingWarning(true)
+      } catch {
+        // status refresh is best-effort
+      }
     } catch {
       setSaveMessage('Failed to save settings')
     }
@@ -285,8 +258,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   const selectClass =
     'w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
-  const isDownloading = downloading || downloadStatus?.status === 'downloading'
-  const downloadProgress = downloadStatus?.progress ?? 0
+  const isPullingEmbedding = embeddingPull !== null && !embeddingPull.error
 
   return (
     <div data-testid="settings-page" className="flex-1 overflow-y-auto p-6">
@@ -381,17 +353,17 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
             </select>
           </div>
 
-          {/* Embedding Model Info */}
-          {currentModel && (
+          {/* Embedding Model Info (served by local Ollama) */}
+          {embeddingModel && (
             <div
               data-testid="embedding-model-section"
               className="rounded-md border bg-muted/40 p-3 space-y-2"
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
-                  {currentModel.name} — {currentModel.size_mb} MB
+                  {embeddingModel.name} <span className="text-xs">(via Ollama)</span>
                 </span>
-                {currentModel.downloaded ? (
+                {embeddingModel.installed ? (
                   <span
                     data-testid="embedding-ready-indicator"
                     className="text-xs font-medium text-green-600"
@@ -401,24 +373,27 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
                 ) : (
                   <button
                     data-testid="download-embedding-button"
-                    onClick={handleDownload}
-                    disabled={isDownloading}
+                    onClick={handleDownloadEmbedding}
+                    disabled={isPullingEmbedding}
                     className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                   >
-                    {isDownloading ? 'Downloading...' : 'Download'}
+                    {isPullingEmbedding ? 'Downloading...' : 'Download'}
                   </button>
                 )}
               </div>
-              {isDownloading && (
+              {ollama && !ollama.running && (
+                <p className="text-xs text-red-600">Ollama is not running — embeddings unavailable.</p>
+              )}
+              {embeddingPull && (
                 <div data-testid="embedding-progress-bar" className="w-full">
                   <div className="h-1.5 w-full rounded-full bg-muted">
                     <div
                       className="h-1.5 rounded-full bg-primary transition-all"
-                      style={{ width: `${Math.round(downloadProgress * 100)}%` }}
+                      style={{ width: `${embeddingPull.percent}%` }}
                     />
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {Math.round(downloadProgress * 100)}% downloaded
+                    {embeddingPull.error ?? `${embeddingPull.percent}% — ${embeddingPull.status}`}
                   </p>
                 </div>
               )}
@@ -472,7 +447,13 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
             </div>
 
             {/* Reranker Model Download */}
-            {config.use_reranker && rerankerStatus && (
+            {config.use_reranker && rerankerStatus?.available === false && (
+              <p data-testid="reranker-unavailable-note" className="text-xs text-muted-foreground">
+                Reranking is not available in this build yet (planned: Phase E). Hybrid retrieval
+                (vector + keyword) already covers most of the gap.
+              </p>
+            )}
+            {config.use_reranker && rerankerStatus && rerankerStatus.available !== false && (
               <div
                 data-testid="reranker-model-section"
                 className="rounded-md border bg-muted/40 p-3 space-y-2"
