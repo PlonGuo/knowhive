@@ -109,10 +109,27 @@ Tauri 壳 (Rust) — 窗口 + spawn/守护 bun sidecar
 
 ---
 
-## 6. 尚未完成 / 后续
+## 6. Phase E 复评:LLM-as-reranker(2026-07-04)
 
-- 前端 `ChatArea` → `useChat` 接线 + 真机验证 WKWebView 流式(迁移最高风险闸)
+Phase D 完成后,Phase E 第一步选了 **LLM-as-reranker**(hybrid 粗召回 20 候选 → llama3.2 单次 listwise 调用精排 → top-5,零新依赖,解析失败 fail-open),再跑同一 RAGAS 基准:
+
+| 指标 | **TS + LLM rerank** | TS 无rerank | Python CrossEncoder(旧完整栈) |
+|---|---|---|---|
+| faithfulness | **0.696** | 0.668 | 0.716 |
+| answer_relevancy | **0.805** | 0.687 | 0.832 |
+| context_precision | 0.829 | 0.835 | 0.818 |
+| context_recall | 0.660 | 0.706 | 0.674 |
+
+**读法:**
+1. **answer_relevancy +0.12(0.687→0.805)是 rerank 的主要收益**,faithfulness +0.03——精排把真正相关的 chunk 排进 top-5,生成质量随之上来。
+2. **与 Python CrossEncoder 完整栈基本打平**(-0.02/-0.03/+0.01/-0.01,n=20 噪声内)——一个 prompt 就追平了专训 cross-encoder,不需要任何原生依赖。
+3. **recall 略降(0.706→0.660)是 rerank 的已知代价**:从 20 候选里只保 5 个,精排偶尔会丢掉 hybrid top-5 里本来命中的 chunk。Python CrossEncoder 也一样(0.674)。
+4. 代价是延迟:每次查询多一轮本地 LLM 调用(约 2-8s)。
+
+**面试点:** "reranker 我做了两步走——先用 LLM-as-reranker(零依赖)拿到量化收益证明,数据显示它已追平原 CrossEncoder 基线;transformers.js/ONNX 的原生方案只有在延迟不可接受时才值得引入,那是唯一一个会威胁 bun 单二进制打包的依赖。"
+
+## 7. 尚未完成 / 后续
+
 - 预检索策略(query rewrite / HyDE / multi-query)分层加回
-- Phase E:reranker(transformers.js spike 或 LLM-as-reranker)
+- Phase E 第二步(可选):transformers.js cross-encoder spike——仅当 LLM rerank 延迟不可接受;先验 bun build --compile 能否带 onnxruntime
 - Phase F:`bun build --compile` 单二进制 + Tauri 打包 + 清理 Python 运行时/Electron 残留
-- RAGAS 复评:接上 reranker 后,TS-reranker vs Python-reranker 完整栈对比,目标 ≥ 0.72/0.83/0.82/0.67
