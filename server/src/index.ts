@@ -20,6 +20,7 @@ import { ollamaRoutes } from "./ollamaRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
+import { RERANK_CANDIDATES, rerankChunks } from "./rerank.ts";
 import { reviewRoutes } from "./reviewRoutes.ts";
 import { SUMMARIZE_SYSTEM_PROMPT } from "./summary.ts";
 import { summaryRoutes } from "./summaryRoutes.ts";
@@ -176,13 +177,23 @@ app.route(
   ingestRoutes({ db, knowledgeDir, ingestFile: ingestOne }),
 );
 
-// Hybrid retrieval (vector KNN ⊕ FTS5 via RRF). Used for Phase B verification and by the
-// RAG retrieve step in Phase C.
+// Retrieve: hybrid (vector KNN ⊕ FTS5 via RRF), and when use_reranker is on,
+// over-fetch RERANK_CANDIDATES and let the LLM rerank down to k (Phase E step 1).
+const retrieve = async (query: string, k: number) => {
+  const [queryVector] = await embedder([query]);
+  if (!config.use_reranker) return hybridSearch(db, queryVector!, query, k);
+
+  const candidates = hybridSearch(db, queryVector!, query, RERANK_CANDIDATES);
+  return rerankChunks(query, candidates, k, async (prompt) => {
+    const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
+    return text;
+  });
+};
+
+// Used for Phase B verification, the RAG retrieve step, and the RAGAS eval adapter.
 app.post("/search", async (c) => {
   const { query, k = 5 } = (await c.req.json()) as { query: string; k?: number };
-  const [queryVector] = await embedder([query]);
-  const hits = hybridSearch(db, queryVector!, query, k);
-  return c.json({ hits });
+  return c.json({ hits: await retrieve(query, k) });
 });
 
 // RAG chat with streaming, consumed by the frontend's Vercel AI SDK useChat.
@@ -193,8 +204,7 @@ app.post("/chat", async (c) => {
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   const question = uiMessageText(lastUser);
 
-  const [queryVector] = await embedder([question]);
-  const chunks = question ? hybridSearch(db, queryVector!, question, 5) : [];
+  const chunks = question ? await retrieve(question, 5) : [];
   const system = buildSystemPrompt(chunks, config.custom_system_prompt);
 
   // Map UIMessages → plain model messages (avoids v7 convertToModelMessages quirks).
