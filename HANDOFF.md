@@ -8,8 +8,9 @@
 
 - ✅ **Phase A/B/C 完成**:壳 spawn bun sidecar、bun:sqlite+FTS5、cosine KNN + RRF 混合检索、Ollama embedding、ingest、`/chat` 流式(AI SDK v7)、前端 `useChat`、**WKWebView 流式真机验证流畅**。
 - ✅ **RAGAS 验证通过**:TS 无rerank 全面优于 Python 无rerank 基线,检索指标追平 Python 有rerank 基线。**迁移无退化。**
-- ✅ **Phase D + R3 完成(本轮,D1–D8 共 8 个 commit)**:config / knowledge CRUD / ingest 任务进度 / watcher+sync / SM-2 review / summary / export / setup+ollama+onboarding 全部移植到 TS。**136 bun 测试绿**,每块都有真 Ollama e2e。前端 vitest 252 绿(仅剩 chat.test.tsx 9 个 Phase C 遗留失败,测的是旧 chat 组件,待重写)。
-- 👉 **下一步:真机验证 `pnpm tauri:dev` 全流程**(onboarding 新流程 + pull 进度条在 WKWebView 上),然后 Phase E(reranker)或直接 F(打包)。
+- ✅ **Phase D + R3 完成(D1–D8 共 8 个 commit)**:config / knowledge CRUD / ingest 任务进度 / watcher+sync / SM-2 review / summary / export / setup+ollama+onboarding 全部移植到 TS。**136 bun 测试绿**,每块都有真 Ollama e2e。
+- ✅ **R3 onboarding 浏览器 e2e 通过(2026-07-04)**:headless Chromium + 真 sidecar + 真 Ollama pull 走完整流程——本地/云端两条路、语言切换更新所需模型、缺模型时 pull 进度条 0→100% 流式渲染后解锁 Next、完成态持久化。发现并修掉一个 bug(App.tsx 在 setup check 期间闪 AppLayout + 打旧 8000 端口)。chat.test.tsx 已按 useChat 重写(mock 用真机抓的 AI SDK v7 wire format)。**前端 vitest 253/253 全绿。**
+- 👉 **下一步:真机 `pnpm tauri:dev` 快速过一遍**(浏览器 e2e 已覆盖逻辑,只差 WKWebView 壳),然后 Phase E(reranker)或直接 F(打包)。
 
 ## Phase D 移植明细(全部带 TDD parity 测试 + e2e)
 
@@ -70,8 +71,8 @@ pnpm tauri:dev          # 新终端(新终端才有 cargo,已写进 ~/.zshrc)
 
 ## 已工作 / 待办
 - ✅ 全部核心服务在 TS sidecar:聊天流式、导入(带进度)、检索、知识树/编辑、设置、watcher 自动同步、review、overview/summary、export、onboarding
-- ⏳ 真机 `tauri:dev` 验证新 onboarding + pull 进度(WKWebView)
-- ⏳ chat.test.tsx 重写(测旧组件,Phase C 遗留)
+- ⏳ 真机 `tauri:dev` 快速复核(浏览器 e2e 已过,只差 WKWebView 壳)
+
 - ❌ community、chat history、PDF、reranker(Phase E)、打包(Phase F)
 
 ## Roadmap
