@@ -26,7 +26,7 @@ describe('App', () => {
   it('shows connecting state initially', () => {
     vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
     render(<App />)
-    expect(screen.getByText('Connecting...')).toBeInTheDocument()
+    expect(screen.getByTestId('app-connecting')).toHaveTextContent('Connecting')
   })
 
   it('displays health status on successful /health call', async () => {
@@ -72,9 +72,11 @@ describe('App', () => {
     })
   })
 
-  it('renders KnowHive title', () => {
-    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
+  it('renders KnowHive title once the setup check resolves', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      json: () => Promise.resolve({ status: 'ok', version: '0.1.0' })
+    } as Response)
     render(<App />)
-    expect(screen.getByText('KnowHive')).toBeInTheDocument()
+    expect(await screen.findByText('KnowHive')).toBeInTheDocument()
   })
 })

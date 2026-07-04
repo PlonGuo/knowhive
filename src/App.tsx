@@ -11,7 +11,7 @@ interface HealthStatus {
 export default function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [backendUrl, setBackendUrl] = useState('http://127.0.0.1:8000')
+  const [backendUrl, setBackendUrl] = useState('http://127.0.0.1:18200')
   const [firstRun, setFirstRun] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -34,6 +34,19 @@ export default function App() {
     }
     init()
   }, [])
+
+  // Don't mount AppLayout until the setup check resolves — its children would fire
+  // requests against the placeholder URL and the layout would flash before onboarding.
+  if (firstRun === null) {
+    return (
+      <div
+        data-testid="app-connecting"
+        className="flex h-screen items-center justify-center text-sm text-muted-foreground"
+      >
+        Connecting to backend…
+      </div>
+    )
+  }
 
   if (firstRun === true) {
     return <OnboardingPage backendUrl={backendUrl} onComplete={() => setFirstRun(false)} />

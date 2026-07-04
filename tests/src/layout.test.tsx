@@ -47,18 +47,17 @@ describe('AppLayout', () => {
 
   it('sidebar contains KnowHive branding', async () => {
     render(<App />)
-    const sidebar = screen.getByTestId('sidebar')
-    expect(sidebar).toHaveTextContent('KnowHive')
+    expect(await screen.findByTestId('sidebar')).toHaveTextContent('KnowHive')
   })
 
   it('sidebar has a placeholder for file tree', async () => {
     render(<App />)
-    expect(screen.getByTestId('sidebar')).toHaveTextContent('Knowledge')
+    expect(await screen.findByTestId('sidebar')).toHaveTextContent('Knowledge')
   })
 
   it('chat area shows a placeholder message', async () => {
     render(<App />)
-    expect(screen.getByTestId('chat-area')).toHaveTextContent('Start a conversation')
+    expect(await screen.findByTestId('chat-area')).toHaveTextContent('Start a conversation')
   })
 
   it('status bar shows backend connection status', async () => {
@@ -70,11 +69,10 @@ describe('AppLayout', () => {
     })
   })
 
-  it('status bar shows connecting state initially', () => {
+  it('shows a connecting placeholder while the setup check is pending', () => {
     vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
     render(<App />)
-    const statusBar = screen.getByTestId('status-bar')
-    expect(statusBar).toHaveTextContent('Connecting')
+    expect(screen.getByTestId('app-connecting')).toHaveTextContent('Connecting')
   })
 
   it('status bar shows error when backend is unreachable', async () => {
@@ -86,16 +84,13 @@ describe('AppLayout', () => {
     })
   })
 
-  it('sidebar has a settings button', () => {
-    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
+  it('sidebar has a settings button', async () => {
     render(<App />)
-    expect(screen.getByTestId('settings-button')).toBeInTheDocument()
+    expect(await screen.findByTestId('settings-button')).toBeInTheDocument()
   })
 
-  it('layout fills the full viewport', () => {
-    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
+  it('layout fills the full viewport', async () => {
     render(<App />)
-    const layout = screen.getByTestId('app-layout')
-    expect(layout).toHaveClass('h-screen')
+    expect(await screen.findByTestId('app-layout')).toHaveClass('h-screen')
   })
 })
