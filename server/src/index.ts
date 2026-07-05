@@ -184,10 +184,17 @@ const retrieve = async (query: string, k: number) => {
   if (!config.use_reranker) return hybridSearch(db, queryVector!, query, k);
 
   const candidates = hybridSearch(db, queryVector!, query, RERANK_CANDIDATES);
-  return rerankChunks(query, candidates, k, async (prompt) => {
-    const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
-    return text;
-  });
+  return rerankChunks(
+    query,
+    candidates,
+    k,
+    async (prompt) => {
+      const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
+      return text;
+    },
+    // Experimental flag for the k-sweep (learnings/Reranker-K-Sweep.md); default relevance.
+    process.env.KNOWHIVE_RERANK_STYLE === "coverage" ? "coverage" : "relevance",
+  );
 };
 
 // Used for Phase B verification, the RAG retrieve step, and the RAGAS eval adapter.

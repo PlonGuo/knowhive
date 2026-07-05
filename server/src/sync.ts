@@ -1,6 +1,7 @@
 // Filesystem ↔ DB sync: new files → embed, modified → re-embed, deleted → remove.
 // Ports backend/app/services/sync_service.py.
 import type { Database } from "bun:sqlite";
+import { resolve, sep } from "node:path";
 import { findMarkdownFiles } from "./ingest.ts";
 import { deleteChunksForFile } from "./store.ts";
 
@@ -43,7 +44,13 @@ export async function syncKnowledgeDir(
     }
   }
 
-  for (const path of [...dbHashes.keys()].filter((p) => !diskPaths.has(p)).sort()) {
+  // Deletion only applies to files the sync owns (inside the knowledge dir).
+  // Files imported via /ingest/files from elsewhere on disk must survive restarts —
+  // treating "not under knowledge/" as "deleted" wiped them (found by the k-sweep
+  // experiment when a sidecar restart erased the eval corpus).
+  const root = resolve(knowledgeDir) + sep;
+  const managed = [...dbHashes.keys()].filter((p) => resolve(p).startsWith(root));
+  for (const path of managed.filter((p) => !diskPaths.has(p)).sort()) {
     try {
       deleteChunksForFile(db, path);
       db.run("DELETE FROM documents WHERE file_path = ?", [path]);

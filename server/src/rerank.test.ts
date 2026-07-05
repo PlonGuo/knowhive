@@ -71,3 +71,12 @@ test("rerankChunks skips the LLM entirely for 0 or 1 candidates", async () => {
   expect((await rerankChunks("q", [chunk("only")], 5, generate)).length).toBe(1);
   expect(called).toBe(0);
 });
+
+test("coverage style adds a diversity instruction to the prompt", () => {
+  const relevance = buildRerankPrompt("q", ["a", "b"]);
+  const coverage = buildRerankPrompt("q", ["a", "b"], "coverage");
+  expect(relevance).not.toContain("different aspects");
+  expect(coverage).toContain("different aspects");
+  // Ranking contract stays identical so parseRanking is unaffected.
+  expect(coverage).toContain("ONLY a JSON array");
+});

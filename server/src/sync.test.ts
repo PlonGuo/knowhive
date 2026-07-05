@@ -83,3 +83,18 @@ test("sync collects per-file errors and keeps going", async () => {
   expect(stats.errors.length).toBe(1);
   expect(stats.errors[0]).toContain("bad.md");
 });
+
+test("sync leaves externally-imported files (outside the knowledge dir) alone", async () => {
+  const { dir, db, ingestFile } = setup();
+  // A file imported via /ingest/files from outside the knowledge dir.
+  const outside = join(mkdtempSync(join(tmpdir(), "knowhive-external-")), "imported.md");
+  writeFileSync(outside, DOC);
+  await ingestText(db, outside, DOC, fakeEmbed);
+
+  const stats = await syncKnowledgeDir(db, dir, ingestFile);
+  expect(stats.deleted).toBe(0);
+  const row = db.query("SELECT COUNT(*) AS c FROM documents WHERE file_path = ?").get(outside) as {
+    c: number;
+  };
+  expect(row.c).toBe(1);
+});

@@ -11,12 +11,25 @@ const EXCERPT_CHARS = 1000;
 
 export type RerankGenerator = (prompt: string) => Promise<string>;
 
-export function buildRerankPrompt(query: string, contents: string[]): string {
+/** "relevance" = plain listwise ranking; "coverage" = MMR-style diversity hint that
+ * asks the model to cover different aspects of the query instead of stacking
+ * redundant passages (experiment: k-sweep, see learnings/Reranker-K-Sweep.md). */
+export type RerankPromptStyle = "relevance" | "coverage";
+
+export function buildRerankPrompt(
+  query: string,
+  contents: string[],
+  style: RerankPromptStyle = "relevance",
+): string {
   const numbered = contents
     .map((c, i) => `[${i + 1}] ${c.length > EXCERPT_CHARS ? `${c.slice(0, EXCERPT_CHARS)}…` : c}`)
     .join("\n\n");
+  const diversity =
+    style === "coverage"
+      ? " When several passages repeat the same information, prefer covering different aspects of the query over stacking near-duplicates."
+      : "";
   return (
-    `You are a search result reranker. Rank the following passages by relevance to the query, most relevant first.\n\n` +
+    `You are a search result reranker. Rank the following passages by relevance to the query, most relevant first.${diversity}\n\n` +
     `Query: ${query}\n\nPassages:\n${numbered}\n\n` +
     `Respond with ONLY a JSON array of passage numbers, most relevant first, e.g. [2, 1, 3]. No other text.`
   );
@@ -55,11 +68,12 @@ export async function rerankChunks<T extends { content: string }>(
   chunks: T[],
   k: number,
   generate: RerankGenerator,
+  style: RerankPromptStyle = "relevance",
 ): Promise<T[]> {
   if (chunks.length <= 1) return chunks.slice(0, k);
 
   try {
-    const raw = await generate(buildRerankPrompt(query, chunks.map((c) => c.content)));
+    const raw = await generate(buildRerankPrompt(query, chunks.map((c) => c.content), style));
     const ranking = parseRanking(raw, chunks.length);
     if (!ranking) return chunks.slice(0, k);
     return ranking.slice(0, k).map((i) => chunks[i - 1]!);
