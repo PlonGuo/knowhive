@@ -192,8 +192,9 @@ const retrieve = async (query: string, k: number) => {
       const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
       return text;
     },
-    // Experimental flag for the k-sweep (learnings/Reranker-K-Sweep.md); default relevance.
-    process.env.KNOWHIVE_RERANK_STYLE === "coverage" ? "coverage" : "relevance",
+    // "coverage" won the k-sweep (learnings/Reranker-K-Sweep.md): best precision AND
+    // recall at k=5. The env override remains for re-running the A/B.
+    process.env.KNOWHIVE_RERANK_STYLE === "relevance" ? "relevance" : "coverage",
   );
 };
 
