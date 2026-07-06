@@ -17,6 +17,9 @@ export const PreRetrievalStrategy = z.enum([
 ]);
 export type PreRetrievalStrategy = z.infer<typeof PreRetrievalStrategy>;
 
+export const RerankerBackend = z.enum(["llm", "cross-encoder"]);
+export type RerankerBackend = z.infer<typeof RerankerBackend>;
+
 /** Mirrors backend/app/config.py:AppConfig (field names + defaults). */
 export const AppConfigSchema = z.object({
   llm_provider: LLMProvider.default("ollama"),
@@ -27,6 +30,8 @@ export const AppConfigSchema = z.object({
   first_run_complete: z.boolean().default(false),
   pre_retrieval_strategy: PreRetrievalStrategy.default("none"),
   use_reranker: z.boolean().default(false),
+  // "llm" = LLM-as-reranker (Phase E1); "cross-encoder" = in-process ONNX (Phase E2)
+  reranker_backend: RerankerBackend.default("llm"),
   chat_memory_turns: z.number().int().default(0),
   memory_compression_threshold: z.number().int().default(20),
   custom_system_prompt: z.string().default(""),
