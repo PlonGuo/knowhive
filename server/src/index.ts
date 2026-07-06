@@ -20,6 +20,8 @@ import { ollamaRoutes } from "./ollamaRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
+import { rerankCrossEncoder } from "./crossEncoder.ts";
+import { crossEncoderScore, isCrossEncoderLoaded } from "./crossEncoderModel.ts";
 import { RERANK_CANDIDATES, rerankChunks } from "./rerank.ts";
 import { reviewRoutes } from "./reviewRoutes.ts";
 import { SUMMARIZE_SYSTEM_PROMPT } from "./summary.ts";
@@ -178,12 +180,17 @@ app.route(
 );
 
 // Retrieve: hybrid (vector KNN ⊕ FTS5 via RRF), and when use_reranker is on,
-// over-fetch RERANK_CANDIDATES and let the LLM rerank down to k (Phase E step 1).
+// over-fetch RERANK_CANDIDATES and rerank down to k with the configured backend:
+// "cross-encoder" = in-process ONNX (Phase E2), "llm" = LLM-as-reranker (Phase E1).
 const retrieve = async (query: string, k: number) => {
   const [queryVector] = await embedder([query]);
   if (!config.use_reranker) return hybridSearch(db, queryVector!, query, k);
 
   const candidates = hybridSearch(db, queryVector!, query, RERANK_CANDIDATES);
+
+  if (config.reranker_backend === "cross-encoder") {
+    return rerankCrossEncoder(query, candidates, k, crossEncoderScore);
+  }
   return rerankChunks(
     query,
     candidates,
