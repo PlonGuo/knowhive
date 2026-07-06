@@ -98,14 +98,24 @@ app.route(
 // POST /ollama/pull (streams NDJSON download progress through to the renderer).
 app.route("/", ollamaRoutes({ getConfig: () => config }));
 
-// Reranker is Phase E; a disabled stub keeps the Settings UI functional until then.
+// Cross-encoder reranker status/download (Phase E2). "download" warms the lazy
+// singleton (transformers.js fetches the ONNX model into its cache on first load).
 app.get("/reranker/status", (c) =>
-  c.json({ available: false, model: "none (planned: Phase E)", size_mb: 0, downloaded: false, loaded: false }),
+  c.json({
+    available: true,
+    model: "onnx-community/bge-reranker-v2-m3-ONNX (int8)",
+    size_mb: 571,
+    downloaded: isCrossEncoderLoaded(),
+    loaded: isCrossEncoderLoaded(),
+  }),
 );
-app.post("/reranker/download", (c) =>
-  c.json({ detail: "Reranker is not available in the TS stack yet (Phase E)" }, 503),
+app.post("/reranker/download", async (c) => {
+  await crossEncoderScore("warmup", ["warmup"]); // triggers download + load
+  return c.json({ status: "complete" });
+});
+app.get("/reranker/download-status", (c) =>
+  c.json({ status: isCrossEncoderLoaded() ? "complete" : null }),
 );
-app.get("/reranker/download-status", (c) => c.json({ status: null }));
 
 // GET/PUT /config + POST /config/test-llm. A saved embedding_language change
 // re-ingests the knowledge dir in the background with the new model.
