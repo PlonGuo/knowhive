@@ -20,7 +20,7 @@ test("loadConfig returns defaults when config.yaml is missing", () => {
     first_run_complete: false,
     pre_retrieval_strategy: "none",
     use_reranker: false,
-    reranker_backend: "llm",
+    reranker_backend: "cross-encoder",
     chat_memory_turns: 0,
     memory_compression_threshold: 20,
     custom_system_prompt: "",

@@ -128,8 +128,27 @@ Phase D 完成后,Phase E 第一步选了 **LLM-as-reranker**(hybrid 粗召回 2
 
 **面试点:** "reranker 我做了两步走——先用 LLM-as-reranker(零依赖)拿到量化收益证明,数据显示它已追平原 CrossEncoder 基线;transformers.js/ONNX 的原生方案只有在延迟不可接受时才值得引入,那是唯一一个会威胁 bun 单二进制打包的依赖。"
 
-## 7. 尚未完成 / 后续
+## 7. Phase E2 复评:进程内 cross-encoder(2026-07-06)
+
+E2 把 reranker 换成**进程内 ONNX cross-encoder**(`onnx-community/bge-reranker-v2-m3-ONNX`,int8,571MB,transformers.js/onnxruntime-node 跑在 bun 里),LLM-as-reranker 降级为 `reranker_backend="llm"` 的后备。spike 先行验证了唯一高风险项(transformers.js 在 bun 的可用性):API 原样可用,只需 `bun pm trust onnxruntime-node`。
+
+| 指标 | **TS + int8 CE** | TS + LLM rerank(E1) | Python fp32 CE(旧栈) |
+|---|---|---|---|
+| faithfulness | **0.749** | 0.696 | 0.716 |
+| answer_relevancy | 0.808 | 0.805 | 0.832 |
+| context_precision | **0.914** | 0.829 | 0.818 |
+| context_recall | **0.780** | 0.660 | 0.674 |
+
+**读法:**
+1. **四指标全部持平或上涨**——质量闸(防 int8 量化退化,±0.03)以「零掉点」通过,fp16 救济不需要。
+2. **recall +0.12、precision +0.086**:专训 reranker 的排序能力甩开 llama3.2 3B 的 listwise——与 k-sweep 的「捞回效应」发现互相印证(强 reranker 把 hybrid 排 6-20 名的相关 chunk 准确捞回 top-5)。
+3. **对旧 Python fp32 CrossEncoder 基线三胜一平**(answer_relevancy -0.024 在噪声内)。注意非同模型对比:旧栈是 ms-marco-MiniLM,本次是强一代的 bge-reranker-v2-m3(多语种,中文友好)。
+4. **延迟**:warm `/search` 端到端 ~1.25s(约 50ms/对 × 20 候选,含 Ollama embedding)vs LLM rerank 2-8s;冷启动模型加载 892ms(下载后缓存)。
+5. **默认已翻**:`reranker_backend` 默认 `cross-encoder`(shared/schema.ts + config.py 同步)。`use_reranker` 本身仍默认关。
+
+**面试点:** "E2 的两个闸:先 spike 验证 bun+onnxruntime 这个唯一可能翻车的原生依赖(20 分钟出结论),再用 RAGAS 对着 E1 基线设 ±0.03 退化闸——结果 int8 不但没退化,四指标全面胜出,把 E1 的 LLM-as-reranker 变成了一个有量化数据背书的降级后备。"
+
+## 8. 尚未完成 / 后续
 
 - 预检索策略(query rewrite / HyDE / multi-query)分层加回
-- Phase E 第二步(可选):transformers.js cross-encoder spike——仅当 LLM rerank 延迟不可接受;先验 bun build --compile 能否带 onnxruntime
-- Phase F:`bun build --compile` 单二进制 + Tauri 打包 + 清理 Python 运行时/Electron 残留
+- Phase F:`bun build --compile` 单二进制 + Tauri 打包 + 清理 Python 运行时/Electron 残留——**新增验证项:onnxruntime-node 原生依赖能否进单二进制**(E2 引入,原 roadmap 风险预告成真,需在 F 里实测;不行则 externalBin 附带)

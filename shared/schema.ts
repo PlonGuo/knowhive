@@ -30,8 +30,9 @@ export const AppConfigSchema = z.object({
   first_run_complete: z.boolean().default(false),
   pre_retrieval_strategy: PreRetrievalStrategy.default("none"),
   use_reranker: z.boolean().default(false),
-  // "llm" = LLM-as-reranker (Phase E1); "cross-encoder" = in-process ONNX (Phase E2)
-  reranker_backend: RerankerBackend.default("llm"),
+  // "cross-encoder" = in-process ONNX (Phase E2, default: won the RAGAS gate on all
+  // four metrics); "llm" = LLM-as-reranker (Phase E1, kept as fallback backend)
+  reranker_backend: RerankerBackend.default("cross-encoder"),
   chat_memory_turns: z.number().int().default(0),
   memory_compression_threshold: z.number().int().default(20),
   custom_system_prompt: z.string().default(""),

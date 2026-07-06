@@ -10,8 +10,9 @@
 - ✅ **RAGAS 验证通过**:TS 无rerank 全面优于 Python 无rerank 基线,检索指标追平 Python 有rerank 基线。**迁移无退化。**
 - ✅ **Phase D + R3 完成(D1–D8 共 8 个 commit)**:config / knowledge CRUD / ingest 任务进度 / watcher+sync / SM-2 review / summary / export / setup+ollama+onboarding 全部移植到 TS。**136 bun 测试绿**,每块都有真 Ollama e2e。
 - ✅ **R3 onboarding 浏览器 e2e 通过(2026-07-04)**:headless Chromium + 真 sidecar + 真 Ollama pull 走完整流程——本地/云端两条路、语言切换更新所需模型、缺模型时 pull 进度条 0→100% 流式渲染后解锁 Next、完成态持久化。发现并修掉一个 bug(App.tsx 在 setup check 期间闪 AppLayout + 打旧 8000 端口)。chat.test.tsx 已按 useChat 重写(mock 用真机抓的 AI SDK v7 wire format)。**前端 vitest 253/253 全绿。**
-- ✅ **Phase E1 完成(2026-07-04)**:LLM-as-reranker(20候选→llama3.2 listwise→top5,零依赖,fail-open)。RAGAS 复评:0.696/0.805/0.829/0.660,answer_relevancy +0.12,**追平 Python CrossEncoder 完整栈基线**(详见 learnings)。
-- 👉 **下一步:真机 `pnpm tauri:dev` 快速过一遍**(浏览器 e2e 已过,只差 WKWebView 壳);Phase E2(transformers.js spike,仅当延迟不可接受)或直接 Phase F(打包)。
+- ✅ **Phase E1 完成(2026-07-04)**:LLM-as-reranker(20候选→llama3.2 listwise→top5,零依赖,fail-open)。RAGAS 复评:0.696/0.805/0.829/0.660,answer_relevancy +0.12,**追平 Python CrossEncoder 完整栈基线**。后续 k-sweep:recall 由 k 决定而非 rerank;coverage prompt 转正(learnings/Reranker-K-Sweep.md);顺带修了 startup sync 会删外部导入文件的继承 bug。
+- ✅ **Phase E2 完成(2026-07-06)**:进程内 cross-encoder(bge-reranker-v2-m3 **int8 ONNX**,transformers.js 跑在 bun 里,571MB 懒加载单例)。RAGAS 质量闸**零掉点、四指标全面胜出 LLM 基线**:0.749/0.808/**0.914**/**0.780**;warm rerank ~1.25s vs LLM 2-8s,冷加载 892ms(缓存后)。**默认 `reranker_backend=cross-encoder`**,LLM 后备保留可切;/reranker/* 路由接真状态/下载。bun 注意:装依赖后要 `bun pm trust onnxruntime-node protobufjs`。
+- 👉 **下一步:真机 `pnpm tauri:dev` 快速过一遍**(浏览器 e2e 已过,只差 WKWebView 壳);然后 Phase F(打包)——**新增验证项:onnxruntime-node 原生依赖能否进 bun build --compile 单二进制**(不行则 Tauri externalBin 附带)。
 
 ## Phase D 移植明细(全部带 TDD parity 测试 + e2e)
 
