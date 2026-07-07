@@ -17,6 +17,7 @@
     "preview": "electron-vite preview",
     "dev:web": "vite",
     "build:web": "vite build",
+    "build:sidecar": "cd server && bun run build-dist.ts",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

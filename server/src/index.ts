@@ -21,7 +21,13 @@ import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { rerankCrossEncoder } from "./crossEncoder.ts";
-import { crossEncoderScore, isCrossEncoderLoaded } from "./crossEncoderModel.ts";
+import {
+  crossEncoderScore,
+  downloadStatus,
+  isCrossEncoderLoaded,
+  setModelCacheDir,
+  warmup,
+} from "./crossEncoderModel.ts";
 import { RERANK_CANDIDATES, rerankChunks } from "./rerank.ts";
 import { reviewRoutes } from "./reviewRoutes.ts";
 import { SUMMARIZE_SYSTEM_PROMPT } from "./summary.ts";
@@ -40,6 +46,10 @@ let config = loadConfig(dataDir);
 
 // User knowledge base lives inside the data dir (Python used ./knowledge relative cwd).
 const knowledgeDir = join(dataDir, "knowledge");
+
+// Reranker model cache also lives in the data dir — the packaged .app's resources
+// are read-only, and transformers.js defaults to a relative cache path.
+setModelCacheDir(join(dataDir, "models"));
 
 // Embedder reading the live config each call (endpoint + language→model mapping).
 const embedder: Embedder = (texts) =>
@@ -109,13 +119,12 @@ app.get("/reranker/status", (c) =>
     loaded: isCrossEncoderLoaded(),
   }),
 );
-app.post("/reranker/download", async (c) => {
-  await crossEncoderScore("warmup", ["warmup"]); // triggers download + load
-  return c.json({ status: "complete" });
+app.post("/reranker/download", (c) => {
+  // First download is 571MB — runs in background; the frontend polls download-status.
+  warmup();
+  return c.json({ status: "started" });
 });
-app.get("/reranker/download-status", (c) =>
-  c.json({ status: isCrossEncoderLoaded() ? "complete" : null }),
-);
+app.get("/reranker/download-status", (c) => c.json(downloadStatus()));
 
 // GET/PUT /config + POST /config/test-llm. A saved embedding_language change
 // re-ingests the knowledge dir in the background with the new model.
@@ -268,4 +277,7 @@ export default {
   port,
   hostname: "127.0.0.1",
   fetch: app.fetch,
+  // Bun.serve kills requests idle for 10s by default — too tight for a cold Ollama's
+  // first chat token. Long work (model download) is async + polled, not long requests.
+  idleTimeout: 120,
 };

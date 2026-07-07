@@ -5,12 +5,24 @@
 //! end-to-end gate. In dev the sidecar is the `server/` bun project; in a packaged
 //! build it will be the `bun build --compile` single binary (Phase F).
 
-/// Build the `bun` invocation args. The sidecar is launched from the server dir as
-/// `bun run src/index.ts --port <port> --data-dir <dataDir>`.
+/// Build the `bun` invocation args. In dev the sidecar is launched from the server
+/// dir as `bun run src/index.ts --port <port> --data-dir <dataDir>`.
 pub fn build_args(port: u16, data_dir: &str) -> Vec<String> {
     vec![
         "run".into(),
         "src/index.ts".into(),
+        "--port".into(),
+        port.to_string(),
+        "--data-dir".into(),
+        data_dir.into(),
+    ]
+}
+
+/// Release invocation: the bundled bun runtime (Tauri externalBin, next to the app
+/// executable) runs the pre-bundled `index.js` from resources (Phase F, Path C).
+pub fn release_spawn_args(server_dir: &std::path::Path, port: u16, data_dir: &str) -> Vec<String> {
+    vec![
+        server_dir.join("index.js").to_string_lossy().into_owned(),
         "--port".into(),
         port.to_string(),
         "--data-dir".into(),
@@ -231,8 +243,18 @@ impl SidecarManager {
 
 fn spawn_child(server_dir: &Path, port: u16, data_dir: &Path) -> std::io::Result<Child> {
     let data_dir_str = data_dir.to_string_lossy();
-    let args = build_args(port, &data_dir_str);
-    Command::new("bun")
+    // Dev: system bun runs the TS sources. Release: the bundled bun runtime (Tauri
+    // externalBin, placed next to the app executable) runs the resources bundle.
+    let (program, args) = if cfg!(debug_assertions) {
+        ("bun".into(), build_args(port, &data_dir_str))
+    } else {
+        let bundled_bun = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("bun")))
+            .unwrap_or_else(|| PathBuf::from("bun"));
+        (bundled_bun, release_spawn_args(server_dir, port, &data_dir_str))
+    };
+    Command::new(program)
         .args(&args)
         .current_dir(server_dir)
         .stdin(Stdio::null())
@@ -303,6 +325,21 @@ mod tests {
             vec![
                 "run",
                 "src/index.ts",
+                "--port",
+                "18250",
+                "--data-dir",
+                "/data/dir"
+            ]
+        );
+    }
+
+    #[test]
+    fn release_args_run_the_bundled_entrypoint() {
+        let args = release_spawn_args(Path::new("/res/server"), 18250, "/data/dir");
+        assert_eq!(
+            args,
+            vec![
+                "/res/server/index.js",
                 "--port",
                 "18250",
                 "--data-dir",
