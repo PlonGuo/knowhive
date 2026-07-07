@@ -41,21 +41,23 @@ function setupFetchMock(overrides: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetchMock)
 }
 
-function setupWindowApi(selectFilesResult: string[] = []) {
-  Object.defineProperty(window, 'api', {
-    value: {
-      getBackendUrl: vi.fn().mockResolvedValue(mockBackendUrl),
-      getSidecarStatus: vi.fn().mockResolvedValue('running'),
-      selectFiles: vi.fn().mockResolvedValue(selectFilesResult),
-    },
-    writable: true,
-    configurable: true,
-  })
+// Mock the platform adapter (the file-picker seam) — components never touch
+// native APIs directly. The factory can't reference later consts (hoisting).
+const { selectFilesMock } = vi.hoisted(() => ({ selectFilesMock: vi.fn() }))
+vi.mock('../../src/lib/platform', () => ({
+  getBackendUrl: () => Promise.resolve('http://127.0.0.1:18200'),
+  getSidecarStatus: () => Promise.resolve('running'),
+  selectFiles: selectFilesMock,
+  saveFile: () => Promise.resolve(null),
+}))
+
+function setupSelectFiles(selectFilesResult: string[] = []) {
+  selectFilesMock.mockResolvedValue(selectFilesResult)
 }
 
 describe('Import Flow', () => {
   beforeEach(() => {
-    setupWindowApi()
+    setupSelectFiles()
     setupFetchMock()
   })
 
@@ -77,27 +79,18 @@ describe('Import Flow', () => {
   })
 
   it('calls selectFiles on import click', async () => {
-    const selectFiles = vi.fn().mockResolvedValue([])
-    Object.defineProperty(window, 'api', {
-      value: {
-        getBackendUrl: vi.fn().mockResolvedValue(mockBackendUrl),
-        getSidecarStatus: vi.fn().mockResolvedValue('running'),
-        selectFiles,
-      },
-      writable: true,
-      configurable: true,
-    })
+    setupSelectFiles([])
 
     render(<Sidebar backendUrl={mockBackendUrl} />)
     await act(async () => {
       fireEvent.click(screen.getByTestId('import-button'))
     })
 
-    expect(selectFiles).toHaveBeenCalled()
+    expect(selectFilesMock).toHaveBeenCalled()
   })
 
   it('does nothing when file picker is cancelled (empty array)', async () => {
-    setupWindowApi([])
+    setupSelectFiles([])
 
     render(<Sidebar backendUrl={mockBackendUrl} />)
     await act(async () => {
@@ -108,7 +101,7 @@ describe('Import Flow', () => {
   })
 
   it('shows progress bar and calls ingest API when files are selected', async () => {
-    setupWindowApi(['/path/to/file1.md', '/path/to/file2.md'])
+    setupSelectFiles(['/path/to/file1.md', '/path/to/file2.md'])
     // Return completed immediately to avoid polling issues
     setupFetchMock({
       '/ingest/files': { task_id: 'task-123', status: 'pending', total_files: 2 },
@@ -135,7 +128,7 @@ describe('Import Flow', () => {
   })
 
   it('disables import button while importing', async () => {
-    setupWindowApi(['/path/to/file.md'])
+    setupSelectFiles(['/path/to/file.md'])
     setupFetchMock({
       '/ingest/files': { task_id: 'task-dis', status: 'pending', total_files: 1 },
       '/ingest/status/task-dis': { task_id: 'task-dis', status: 'running', total_files: 1, processed_files: 0, errors: null },
@@ -153,7 +146,7 @@ describe('Import Flow', () => {
   })
 
   it('polls ingest status and shows completion', async () => {
-    setupWindowApi(['/path/to/file.md'])
+    setupSelectFiles(['/path/to/file.md'])
 
     let pollCount = 0
     setupFetchMock({
@@ -179,7 +172,7 @@ describe('Import Flow', () => {
   })
 
   it('shows error state when ingest API returns error', async () => {
-    setupWindowApi(['/path/to/file.md'])
+    setupSelectFiles(['/path/to/file.md'])
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = typeof input === 'string' ? input : (input as Request).url
@@ -203,7 +196,7 @@ describe('Import Flow', () => {
   })
 
   it('shows error when ingest task fails', async () => {
-    setupWindowApi(['/path/to/file.md'])
+    setupSelectFiles(['/path/to/file.md'])
     setupFetchMock({
       '/ingest/files': { task_id: 'task-789', status: 'pending', total_files: 1 },
       '/ingest/status/task-789': { task_id: 'task-789', status: 'failed', total_files: 1, processed_files: 0, errors: 'Parse error' },
@@ -220,7 +213,7 @@ describe('Import Flow', () => {
   })
 
   it('handles PDF file imports alongside Markdown', async () => {
-    setupWindowApi(['/path/to/doc.md', '/path/to/report.pdf'])
+    setupSelectFiles(['/path/to/doc.md', '/path/to/report.pdf'])
     setupFetchMock({
       '/ingest/files': { task_id: 'task-pdf', status: 'pending', total_files: 2 },
       '/ingest/status/task-pdf': { task_id: 'task-pdf', status: 'completed', total_files: 2, processed_files: 2, errors: null },
@@ -245,7 +238,7 @@ describe('Import Flow', () => {
   })
 
   it('refreshes file tree after successful import', async () => {
-    setupWindowApi(['/path/to/file.md'])
+    setupSelectFiles(['/path/to/file.md'])
     setupFetchMock({
       '/ingest/files': { task_id: 'task-refresh', status: 'pending', total_files: 1 },
       '/ingest/status/task-refresh': { task_id: 'task-refresh', status: 'completed', total_files: 1, processed_files: 1, errors: null },
