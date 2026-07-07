@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Turn the dev-mode app into a distributable macOS .app: compiled sidecar binary (no user-installed bun), Tauri-bundled, Electron and Python runtime remnants removed, root toolchain switched from pnpm to bun.
+**Goal:** Turn the dev-mode app into a distributable macOS .app: bundled sidecar + bundled bun runtime (no user-installed bun), Tauri-bundled, Electron and Python runtime remnants removed, root toolchain switched from pnpm to bun.
 
-**Architecture:** `bun build --compile` produces a self-contained sidecar executable that Tauri ships as an `externalBin`; `sidecar.rs` spawns it in release builds (dev keeps `bun run src/index.ts`). The one unknown that gates everything is whether `onnxruntime-node` (the Phase E2 native addon) survives compilation — Task 0 spikes it with documented fallbacks. Cleanup (Electron removal, root bun switch) happens only after the packaged app is proven.
+**Architecture (Path C, decided after the Task 0 spike):** `bun build --target=bun` produces one `index.js` bundle with the two native packages (`onnxruntime-node`, `sharp`) left external; the app ships the bun runtime as a Tauri `externalBin` plus a minimal real `node_modules` (just the externals + their transitive deps, installed by the build script) in resources. `sidecar.rs` spawns `bun index.js` in release (dev keeps `bun run src/index.ts`). This is the Electron/VS Code distribution shape — native modules load from disk exactly as designed, zero runtime tricks. The single-binary route (D) was spiked, proven viable, and deliberately not shipped — see `learnings/Bun-Compile-Native-Deps-Spike.md` for the four traps, the fixes, and the trade-off decision + revert triggers.
 
-**Tech Stack:** bun (`build --compile`), Tauri v2 (`externalBin`, resource dir), Rust (`sidecar.rs`), vitest (stays as the frontend test runner).
+**Tech Stack:** bun (`build --target=bun`, runtime as externalBin), Tauri v2 (`externalBin` + resources), Rust (`sidecar.rs`), vitest (stays as the frontend test runner).
 
 ---
 
@@ -61,49 +61,39 @@ Run the binary from an empty cwd (`cd /tmp && ...`) to confirm no implicit depen
 
 ---
 
-## Task 1: Sidecar build script + release spawn path
+## Task 1: Sidecar dist build (bundle + bun runtime + native node_modules) + release spawn path
 
 **Files:**
+- Create: `server/build-dist.ts` (dist builder)
+- Modify: `server/src/crossEncoderModel.ts` (explicit model cache dir — .app resources are read-only)
+- Modify: `server/src/index.ts` (call `setModelCacheDir(join(dataDir, "models"))`)
 - Modify: `package.json` (add `build:sidecar` script)
-- Modify: `src-tauri/tauri.conf.json` (externalBin + beforeBuildCommand)
-- Modify: `src-tauri/src/sidecar.rs` (spawn compiled binary in release)
-- Modify: `src-tauri/src/lib.rs` (resolve binary path in release)
-- Test: `src-tauri/src/sidecar.rs` unit tests (arg builder for the binary form)
+- Modify: `src-tauri/tauri.conf.json` (externalBin bun + resources + beforeBuildCommand)
+- Modify: `src-tauri/src/sidecar.rs` (release spawn: bundled bun + index.js)
+- Test: `server/src/crossEncoderModel` cache-dir wiring (bun test) + `sidecar.rs` unit test for release args
 
-**Step 1: Write the failing Rust test** (in `sidecar.rs` `#[cfg(test)]`)
+**Step 1: Model cache dir (TDD the pure bit)** — failing test: `setModelCacheDir("/x")` makes the module's effective cache `/x` (export a getter for testability). Implement: module-level `let cacheDir`; `load()` sets `env.cacheDir = cacheDir` before `from_pretrained`. Wire `setModelCacheDir(join(dataDir, "models"))` in `index.ts` startup. Run `bun test` — green; dev now caches under the data dir (verify by deleting nothing — just check the path logs on next e2e).
 
-```rust
-#[test]
-fn binary_args_omit_bun_run() {
-    let args = build_binary_args(18200, "/data");
-    assert_eq!(args, vec!["--port", "18200", "--data-dir", "/data"]);
-}
-```
+**Step 2: `server/build-dist.ts`** — produces `src-tauri/resources/server/`:
+1. `Bun.build({ entrypoints: ["src/index.ts"], target: "bun", external: ["onnxruntime-node", "sharp"], outdir: "../src-tauri/resources/server" })` → `index.js`
+2. Write a synthetic `package.json` into the resources dir with `dependencies: { "onnxruntime-node": <version>, "sharp": <version> }` (versions read from `server/node_modules/*/package.json`), then run `bun install --production` there → real minimal `node_modules` with correct transitive deps + dylibs in place
+3. Copy the running bun runtime: `cp $(which bun) src-tauri/binaries/bun-<target-triple>`
 
-**Step 2: Run to verify it fails** — `cd src-tauri && cargo test binary_args` → compile error (function missing).
+Run: `bun run build-dist.ts` → expected: `resources/server/{index.js,package.json,node_modules/}` + `binaries/bun-aarch64-apple-darwin`.
 
-**Step 3: Implement** — add `build_binary_args(port, data_dir)` (no `run src/index.ts` prefix); in the spawn path, choose per build profile:
+**Step 3: Smoke the dist layout directly (pre-Tauri proof)**
 
-```rust
-// spawn_child: debug → Command::new("bun").args(build_args(...)).current_dir(server_dir)
-//              release → Command::new(sidecar_binary_path()).args(build_binary_args(...))
-```
+Run: `src-tauri/binaries/bun-<triple> src-tauri/resources/server/index.js --port 18315 --data-dir $(mktemp -d)` from an empty cwd; hit `/health` + `POST /reranker/download`. Expected: both pass — proves the resources layout is self-sufficient (bundle resolves externals from the sibling node_modules; model downloads into the data dir).
 
-`sidecar_binary_path()`: `std::env::current_exe()?.parent()?.join("knowhive-sidecar")` (Tauri places externalBin next to the app executable). Keep `SidecarManager` construction unchanged (server_dir still passed; unused in release path).
+**Step 4: Rust release spawn (TDD)** — failing test: `release_spawn_args("/res/server", 18200, "/data")` = `["/res/server/index.js", "--port", "18200", "--data-dir", "/data"]`. Implement + in `spawn_child`: debug → `Command::new("bun").args(build_args(...)).current_dir(server_dir)`; release → `Command::new(current_exe_dir.join("bun")).args(release_spawn_args(server_dir, ...)).current_dir(server_dir)`. `cargo test` green.
 
-**Step 4: Run tests** — `cargo test` → PASS; `cargo check` clean.
+**Step 5: Wire the build** — `package.json`: `"build:sidecar": "cd server && bun run build-dist.ts"`. `tauri.conf.json`: `"beforeBuildCommand": "pnpm build:web && pnpm build:sidecar"`, `bundle.externalBin: ["binaries/bun"]`, `bundle.resources: ["resources/server"]`. Add `src-tauri/binaries/` + `src-tauri/resources/` to `.gitignore`.
 
-**Step 5: Wire the build** — `package.json`:
-```json
-"build:sidecar": "cd server && bun build --compile src/index.ts --outfile ../src-tauri/binaries/knowhive-sidecar-$(rustc -vV | sed -n 's/host: //p')"
-```
-`tauri.conf.json`: `"beforeBuildCommand": "pnpm build:web && pnpm build:sidecar"`, and under `bundle`: `"externalBin": ["binaries/knowhive-sidecar"]`. Add `src-tauri/binaries/` to `.gitignore`.
-
-**Step 6: Verify dev mode is untouched** — `pnpm tauri:dev` still spawns `bun run` (debug path). Commit.
+**Step 6: Verify dev mode untouched** (`bun test` server suite green; tauri:dev still uses `bun run src/index.ts`). Commit:
 
 ```bash
-git add package.json src-tauri/tauri.conf.json src-tauri/src/sidecar.rs src-tauri/src/lib.rs .gitignore
-git commit -m "feat(tauri): compile sidecar to externalBin, spawn binary in release — Phase F"
+git add server/build-dist.ts server/src package.json src-tauri/tauri.conf.json src-tauri/src/sidecar.rs .gitignore
+git commit -m "feat(tauri): sidecar dist bundle + bundled bun runtime spawn — Phase F (Path C)"
 ```
 
 ---
