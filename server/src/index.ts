@@ -273,6 +273,16 @@ syncKnowledgeDir(db, knowledgeDir, ingestOne)
   .catch((err) => console.error("[server] startup sync failed:", err))
   .finally(() => watcher.start());
 
+// Orphan watchdog: if the Tauri shell dies without signalling us (macOS quit paths
+// that skip ExitRequested, force-quit, crash), we get reparented to launchd (ppid 1)
+// — exit instead of lingering as a zombie server.
+setInterval(() => {
+  if (process.ppid === 1) {
+    console.log("[server] parent process gone, shutting down");
+    process.exit(0);
+  }
+}, 2000);
+
 export default {
   port,
   hostname: "127.0.0.1",

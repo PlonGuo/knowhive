@@ -14,9 +14,11 @@ fn resolve_server_dir(app: &tauri::App) -> PathBuf {
             .map(|p| p.join("server"))
             .unwrap_or_else(|| PathBuf::from("server"))
     } else {
+        // tauri.conf `resources: ["resources/server"]` preserves the relative path
+        // inside the bundle: Contents/Resources/resources/server/.
         app.path()
             .resource_dir()
-            .map(|r| r.join("server"))
+            .map(|r| r.join("resources").join("server"))
             .unwrap_or_else(|_| PathBuf::from("server"))
     }
 }
@@ -57,10 +59,16 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                if let Some(manager) = app_handle.try_state::<sidecar::SidecarManager>() {
-                    manager.stop();
+            // ExitRequested doesn't fire on every macOS quit path (e.g. Apple Events);
+            // Exit is the last-chance hook. stop() is idempotent, so handling both is safe.
+            // The sidecar also self-terminates when orphaned (see index.ts watchdog).
+            match event {
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                    if let Some(manager) = app_handle.try_state::<sidecar::SidecarManager>() {
+                        manager.stop();
+                    }
                 }
+                _ => {}
             }
         });
 }
