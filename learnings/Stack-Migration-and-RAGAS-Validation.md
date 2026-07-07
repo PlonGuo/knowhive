@@ -151,4 +151,4 @@ E2 把 reranker 换成**进程内 ONNX cross-encoder**(`onnx-community/bge-reran
 ## 8. 尚未完成 / 后续
 
 - 预检索策略(query rewrite / HyDE / multi-query)分层加回
-- Phase F:`bun build --compile` 单二进制 + Tauri 打包 + 清理 Python 运行时/Electron 残留——**新增验证项:onnxruntime-node 原生依赖能否进单二进制**(E2 引入,原 roadmap 风险预告成真,需在 F 里实测;不行则 externalBin 附带)
+- ~~Phase F:`bun build --compile` 单二进制——onnxruntime-node 原生依赖能否进单二进制~~ **已关闭(2026-07-08)**:spike 实测**可行**(dylib 需 DYLD_LIBRARY_PATH 注入、sharp 需 stub、cache 需显式指出 bunfs),但工程权衡后**发布形态选了 Path C**(bundle.js + 随包 bun runtime + 最小真实 node_modules,Electron/VSCode 同款)。打包发布闸全绿:.app 126MB / dmg 43MB,模型 571MB 运行时下到 data dir,冷加载 687ms。完整决策记录与回切触发条件见 `Bun-Compile-Native-Deps-Spike.md`。Electron 与 pnpm 已清,迁移主线(A–F)收官。
