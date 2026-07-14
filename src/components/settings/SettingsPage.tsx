@@ -10,6 +10,7 @@ interface AppConfig {
   embedding_language: 'english' | 'chinese' | 'mixed'
   pre_retrieval_strategy: 'none' | 'hyde' | 'multi_query' | 'auto' | 'auto_llm'
   use_reranker: boolean
+  chat_mode: 'single' | 'agentic'
   chat_memory_turns: number
   custom_system_prompt: string
 }
@@ -55,6 +56,7 @@ const defaultConfig: AppConfig = {
   embedding_language: 'english',
   pre_retrieval_strategy: 'none',
   use_reranker: false,
+  chat_mode: 'single',
   chat_memory_turns: 0,
   custom_system_prompt: '',
 }
@@ -424,6 +426,36 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
                 <option value="auto">Auto — rule-based strategy selection (fast, no LLM call)</option>
                 <option value="auto_llm">Auto (LLM) — LLM picks the best strategy (slower, more accurate)</option>
               </select>
+            </div>
+
+            {/* Agent Mode Toggle (Phase G: /chat tool-use loop) */}
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-foreground">Agent Mode</label>
+                <p className="text-xs text-muted-foreground">
+                  Let the AI search and read notes on its own for multi-hop questions
+                </p>
+              </div>
+              <button
+                data-testid="chat-mode-toggle"
+                onClick={() =>
+                  setConfig({
+                    ...config,
+                    chat_mode: config.chat_mode === 'agentic' ? 'single' : 'agentic',
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  config.chat_mode === 'agentic' ? 'bg-primary' : 'bg-muted'
+                }`}
+                role="switch"
+                aria-checked={config.chat_mode === 'agentic'}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    config.chat_mode === 'agentic' ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
             </div>
 
             {/* Reranker Toggle */}

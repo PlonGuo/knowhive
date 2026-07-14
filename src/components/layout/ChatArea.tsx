@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
+import FadeContent from '../reactbits/FadeContent'
+import ShinyText from '../reactbits/ShinyText'
+import { isToolPart, toolPartLabel, toolPartStatus, type ToolPartLike } from '../../lib/toolPart'
 
 interface ChatAreaProps {
   backendUrl?: string
@@ -8,18 +11,45 @@ interface ChatAreaProps {
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:18200'
 
-/** Concatenate the text parts of a v7 UIMessage. */
-function messageText(m: UIMessage): string {
-  return m.parts
-    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-    .map((p) => p.text)
-    .join('')
-}
-
 /** Retrieved source file paths, attached by the backend as message metadata. */
 function messageSources(m: UIMessage): string[] {
   const meta = m.metadata as { sources?: string[] } | undefined
   return meta?.sources ?? []
+}
+
+/** One line of agent tool activity: spinner/✓/✗ + compact label. */
+function ToolActivity({ part, index }: { part: ToolPartLike; index: number }) {
+  const status = toolPartStatus(part)
+  const label = toolPartLabel(part)
+  return (
+    <div
+      data-testid={`tool-part-${index}`}
+      data-tool-status={status}
+      className="flex items-center gap-1.5 py-0.5 text-xs text-muted-foreground"
+    >
+      {status === 'running' && (
+        <>
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+          <ShinyText text={label} />
+        </>
+      )}
+      {status === 'done' && (
+        <>
+          <span className="text-green-600">✓</span>
+          <span>{label}</span>
+        </>
+      )}
+      {status === 'error' && (
+        <>
+          <span className="text-red-500">✗</span>
+          <span>
+            {label}
+            {part.errorText ? ` — ${part.errorText}` : ''}
+          </span>
+        </>
+      )}
+    </div>
+  )
 }
 
 export default function ChatArea({ backendUrl }: ChatAreaProps) {
@@ -71,7 +101,9 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
         {!hasMessages && !streaming ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="space-y-2 text-center">
-              <p className="text-lg text-muted-foreground">Start a conversation</p>
+              <p className="text-lg">
+                <ShinyText text="Start a conversation" speed={4} />
+              </p>
               <p className="text-sm text-muted-foreground">Ask questions about your knowledge base</p>
             </div>
           </div>
@@ -80,9 +112,9 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
             {messages.map((msg, i) => {
               const sources = msg.role === 'assistant' ? messageSources(msg) : []
               return (
-                <div
+                <FadeContent
                   key={msg.id ?? `msg-${i}`}
-                  data-testid={`message-${msg.role}-${i}`}
+                  testId={`message-${msg.role}-${i}`}
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
@@ -92,7 +124,25 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
                         : 'bg-secondary text-secondary-foreground'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap text-sm">{messageText(msg)}</div>
+                    {/* Render parts in order: agent tool activity interleaves with text.
+                        Tool indexes count tool parts only (step-start parts render null). */}
+                    {(() => {
+                      let toolIdx = -1
+                      return msg.parts.map((part, j) => {
+                        if (part.type === 'text') {
+                          return (
+                            <div key={j} className="whitespace-pre-wrap text-sm">
+                              {(part as { text: string }).text}
+                            </div>
+                          )
+                        }
+                        if (isToolPart(part)) {
+                          toolIdx += 1
+                          return <ToolActivity key={j} part={part} index={toolIdx} />
+                        }
+                        return null
+                      })
+                    })()}
                     {sources.length > 0 && (
                       <div className="mt-2 border-t border-border/50 pt-2">
                         <p className="mb-1 text-xs font-medium text-muted-foreground">Sources:</p>
@@ -109,7 +159,7 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
                       </div>
                     )}
                   </div>
-                </div>
+                </FadeContent>
               )
             })}
             {error && (

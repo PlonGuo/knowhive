@@ -33,7 +33,7 @@ function ndjsonBody(lines: object[]): ReadableStream<Uint8Array> {
 }
 
 function mockBackend(opts: { embeddingInstalled: boolean; rerankerAvailable?: boolean }) {
-  const state = { installed: opts.embeddingInstalled, pulled: [] as string[] }
+  const state = { installed: opts.embeddingInstalled, pulled: [] as string[], puts: [] as unknown[] }
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = typeof input === 'string' ? input : (input as Request).url
     if (url.includes('/ollama/status')) {
@@ -66,6 +66,7 @@ function mockBackend(opts: { embeddingInstalled: boolean; rerankerAvailable?: bo
       } as Response
     }
     if (url.includes('/config')) {
+      if (init?.method === 'PUT') state.puts.push(JSON.parse(init.body as string))
       return { ok: true, json: () => Promise.resolve(fullConfig) } as Response
     }
     return { ok: true, json: () => Promise.resolve({}) } as Response
@@ -108,5 +109,24 @@ describe('Settings — reranker stub (Phase E pending)', () => {
       expect(screen.getByTestId('reranker-unavailable-note')).toBeInTheDocument()
     })
     expect(screen.queryByTestId('reranker-model-section')).not.toBeInTheDocument()
+  })
+})
+
+describe('Settings — agent mode toggle (Phase G)', () => {
+  it('toggles chat_mode and saves it via PUT /config', async () => {
+    const state = mockBackend({ embeddingInstalled: true })
+    render(<SettingsPage backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('chat-mode-toggle'))
+
+    const toggle = screen.getByTestId('chat-mode-toggle')
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => {
+      const put = state.puts.at(-1) as { chat_mode?: string } | undefined
+      expect(put?.chat_mode).toBe('agentic')
+    })
   })
 })

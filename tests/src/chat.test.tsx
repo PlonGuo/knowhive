@@ -153,3 +153,60 @@ describe('ChatArea (useChat)', () => {
     })
   })
 })
+
+// --- Phase G: agent tool parts in the stream ---
+
+function agenticStream({ sources = [] as string[], toolError = false } = {}): string {
+  const meta = { sources }
+  const toolStep = toolError
+    ? [
+        { type: 'tool-input-start', toolCallId: 'c1', toolName: 'search_knowledge' },
+        { type: 'tool-input-available', toolCallId: 'c1', toolName: 'search_knowledge', input: { query: '区间DP' } },
+        { type: 'tool-output-error', toolCallId: 'c1', errorText: 'ollama down' },
+      ]
+    : [
+        { type: 'tool-input-start', toolCallId: 'c1', toolName: 'search_knowledge' },
+        { type: 'tool-input-available', toolCallId: 'c1', toolName: 'search_knowledge', input: { query: '区间DP' } },
+        { type: 'tool-output-available', toolCallId: 'c1', output: { results: [] } },
+      ]
+  const chunks = [
+    { type: 'start', messageMetadata: meta },
+    { type: 'start-step' },
+    ...toolStep,
+    { type: 'finish-step' },
+    { type: 'start-step' },
+    { type: 'text-start', id: 'txt-0' },
+    { type: 'text-delta', id: 'txt-0', delta: 'final answer' },
+    { type: 'text-end', id: 'txt-0' },
+    { type: 'finish-step' },
+    { type: 'finish', finishReason: 'stop', messageMetadata: meta },
+  ]
+  return chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n'
+}
+
+describe('ChatArea agent tool parts', () => {
+  it('renders a completed tool activity line with its query and the final answer', async () => {
+    mockChat(agenticStream({ sources: ['a.md', 'b.md'] }))
+    render(<ChatArea backendUrl={BACKEND} />)
+    await typeAndSend('对比两种DP')
+
+    const tool = screen.getByTestId('tool-part-0')
+    expect(tool).toHaveTextContent('Searching: 区间DP')
+    expect(tool).toHaveAttribute('data-tool-status', 'done')
+    expect(screen.getByTestId('chat-area')).toHaveTextContent('final answer')
+    // aggregated sources still render as chips
+    expect(screen.getByTestId('chat-area')).toHaveTextContent('a.md')
+    expect(screen.getByTestId('chat-area')).toHaveTextContent('b.md')
+  })
+
+  it('renders tool errors as an error status line without breaking the answer', async () => {
+    mockChat(agenticStream({ toolError: true }))
+    render(<ChatArea backendUrl={BACKEND} />)
+    await typeAndSend('q')
+
+    const tool = screen.getByTestId('tool-part-0')
+    expect(tool).toHaveAttribute('data-tool-status', 'error')
+    expect(tool).toHaveTextContent('ollama down')
+    expect(screen.getByTestId('chat-area')).toHaveTextContent('final answer')
+  })
+})

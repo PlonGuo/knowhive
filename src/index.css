@@ -46,3 +46,30 @@ body {
   color: hsl(var(--foreground));
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
+
+/* ShinyText (React Bits) — shine sweep over muted text via background-clip. */
+.shiny-text {
+  color: hsl(var(--muted-foreground) / 0.75);
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0) 40%,
+    hsl(var(--foreground) / 0.9) 50%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  display: inline-block;
+  animation: shine 3s linear infinite;
+}
+.shiny-text-disabled {
+  animation: none;
+}
+@keyframes shine {
+  0% {
+    background-position: 100%;
+  }
+  100% {
+    background-position: -100%;
+  }
+}
