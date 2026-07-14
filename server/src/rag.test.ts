@@ -1,5 +1,11 @@
 import { test, expect } from "bun:test";
-import { buildSystemPrompt, extractSources, uiMessageText, SYSTEM_PROMPT } from "./rag.ts";
+import {
+  buildAgentSystemPrompt,
+  buildSystemPrompt,
+  extractSources,
+  uiMessageText,
+  SYSTEM_PROMPT,
+} from "./rag.ts";
 import type { ChunkRow } from "./store.ts";
 
 function chunk(file_path: string, content: string): ChunkRow {
@@ -47,4 +53,27 @@ test("uiMessageText reads v7 parts array", () => {
 
 test("uiMessageText falls back to string content", () => {
   expect(uiMessageText({ content: "legacy" })).toBe("legacy");
+});
+
+test("buildAgentSystemPrompt includes tool guidance, custom prompt, and context block", () => {
+  const chunks = [chunk("a.md", "AAA")];
+  const prompt = buildAgentSystemPrompt(chunks, "Be terse.");
+  expect(prompt).toContain("search_knowledge");
+  expect(prompt).toContain("read_note");
+  expect(prompt).toContain("Do not repeat a search");
+  expect(prompt).toContain("Be terse.");
+  expect(prompt).toContain("Context from knowledge base:");
+  expect(prompt).toContain("[Source: a.md]\nAAA");
+});
+
+test("buildAgentSystemPrompt without chunks says no pre-retrieved context but tools remain", () => {
+  const prompt = buildAgentSystemPrompt([]);
+  expect(prompt).toContain("search_knowledge");
+  expect(prompt).toContain("No relevant context was found");
+});
+
+test("buildAgentSystemPrompt keeps the tool guidance short (small-model friendly)", () => {
+  const base = buildAgentSystemPrompt([]);
+  const guidance = base.slice(base.indexOf("search_knowledge") - 200, base.indexOf("No relevant"));
+  expect(guidance.split("\n").filter((l) => l.trim()).length).toBeLessThanOrEqual(8);
 });

@@ -23,6 +23,34 @@ export function buildSystemPrompt(chunks: readonly ChunkRow[], customSystemPromp
   return system;
 }
 
+// Tool guidance for the agentic loop. Deliberately short: 3B-class models lose
+// instruction-following on long prompts (see learnings/Llama32-Tool-Call-Spike.md).
+const AGENT_TOOL_GUIDANCE =
+  "You have tools to explore the knowledge base:\n" +
+  "- search_knowledge: search for notes on a topic. Use it when the context below is not enough, " +
+  "or the question spans multiple topics (compare/aggregate) — search each missing topic once.\n" +
+  "- read_note: read one full note when an excerpt is cut off.\n" +
+  "- list_notes: list all note paths.\n" +
+  "Do not repeat a search you already made. When you have enough information, answer directly.";
+
+/** System prompt for the agentic loop: base (+ custom) + tool guidance + pre-retrieved context. */
+export function buildAgentSystemPrompt(
+  chunks: readonly ChunkRow[],
+  customSystemPrompt = "",
+): string {
+  let system = SYSTEM_PROMPT;
+  if (customSystemPrompt) system += `\n\n${customSystemPrompt}`;
+  system += `\n\n${AGENT_TOOL_GUIDANCE}`;
+
+  if (chunks.length > 0) {
+    const context = chunks.map((c) => `[Source: ${c.file_path}]\n${c.content}`).join("\n\n");
+    system += `\n\nContext from knowledge base:\n\n${context}`;
+  } else {
+    system += `\n\nNo relevant context was found in the knowledge base for the question yet.`;
+  }
+  return system;
+}
+
 /** Unique source file paths from chunks, preserving first-seen order. */
 export function extractSources(chunks: readonly ChunkRow[]): string[] {
   const seen = new Set<string>();
