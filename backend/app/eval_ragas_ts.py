@@ -37,13 +37,26 @@ def ts_search(base: str, query: str, k: int) -> list[str]:
     return [h["content"] for h in hits]
 
 
-def ts_chat(base: str, question: str) -> str:
-    """Get the streamed answer via /chat, concatenating UI-message text deltas."""
+def ts_chat(base: str, question: str, mode: str = "single") -> tuple[str, list[str], list[str]]:
+    """Stream /chat and return (answer, tool_contexts, sources).
+
+    - answer: concatenated text deltas.
+    - tool_contexts: chunk contents the model actually retrieved via search_knowledge
+      tool calls (agentic mode) — empty in single mode.
+    - sources: aggregated source file paths from the finish messageMetadata.
+    """
     resp = _post(
         f"{base}/chat",
-        {"messages": [{"id": "1", "role": "user", "parts": [{"type": "text", "text": question}]}]},
+        {
+            "mode": mode,
+            "messages": [
+                {"id": "1", "role": "user", "parts": [{"type": "text", "text": question}]}
+            ],
+        },
     )
     answer = ""
+    tool_contexts: list[str] = []
+    sources: list[str] = []
     for raw in resp:
         line = raw.decode("utf-8").strip()
         if not line.startswith("data: ") or line == "data: [DONE]":
@@ -52,9 +65,28 @@ def ts_chat(base: str, question: str) -> str:
             evt = json.loads(line[6:])
         except json.JSONDecodeError:
             continue
-        if evt.get("type") == "text-delta" and "delta" in evt:
+        etype = evt.get("type")
+        if etype == "text-delta" and "delta" in evt:
             answer += evt["delta"]
-    return answer
+        elif etype == "tool-output-available":
+            for hit in (evt.get("output") or {}).get("results") or []:
+                if isinstance(hit, dict) and isinstance(hit.get("content"), str):
+                    tool_contexts.append(hit["content"])
+        elif etype in ("finish", "message-metadata"):
+            meta = evt.get("messageMetadata") or {}
+            if isinstance(meta.get("sources"), list):
+                sources = meta["sources"]  # later snapshots supersede earlier ones
+    return answer, tool_contexts, sources
+
+
+def source_recall(expected: list[str], actual: list[str]) -> float:
+    """Deterministic |expected ∩ actual| / |expected|, matched by file basename
+    (the sidecar reports absolute paths; datasets list basenames)."""
+    if not expected:
+        return 1.0
+    actual_names = {Path(a).name for a in actual}
+    hit = sum(1 for e in expected if Path(e).name in actual_names)
+    return hit / len(expected)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -62,8 +94,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--base", default="http://127.0.0.1:18300")
     ap.add_argument("--dataset", default="eval_dataset.json")
     ap.add_argument("--k", type=int, default=5)
+    ap.add_argument("--mode", choices=("single", "agentic"), default="single")
     ap.add_argument("--output", default="eval_results/results_ts_mixed.json")
     ap.add_argument("--evaluator-model", default="gpt-4o-mini")
+    ap.add_argument("--limit", type=int, default=0, help="evaluate only the first N samples (0 = all)")
     args = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -71,15 +105,29 @@ def main(argv: list[str] | None = None) -> None:
     load_dotenv()  # OPENAI_API_KEY for the RAGAS grader
 
     eval_data = load_eval_dataset(Path(args.dataset))
-    print(f"Loaded {len(eval_data)} samples; querying TS sidecar at {args.base}")
+    if args.limit:
+        eval_data = eval_data[: args.limit]
+    print(f"Loaded {len(eval_data)} samples; querying TS sidecar at {args.base} (mode={args.mode})")
 
     pipeline_results = []
+    recalls: list[float] = []
     for i, sample in enumerate(eval_data):
         q = sample["question"]
-        contexts = ts_search(args.base, q, args.k)
-        answer = ts_chat(args.base, q)
+        answer, tool_contexts, sources = ts_chat(args.base, q, args.mode)
+        if args.mode == "agentic":
+            # Contexts = pre-retrieval (same as /search) + what the model actually
+            # pulled via tools — that behavior is exactly what this eval measures.
+            contexts = ts_search(args.base, q, args.k) + tool_contexts
+        else:
+            contexts = ts_search(args.base, q, args.k)
         pipeline_results.append({"answer": answer, "contexts": contexts})
-        print(f"  [{i + 1}/{len(eval_data)}] {q[:56]}...")
+
+        line = f"  [{i + 1}/{len(eval_data)}] {q[:48]}..."
+        if sample.get("expected_sources"):
+            r = source_recall(sample["expected_sources"], sources)
+            recalls.append(r)
+            line += f" source_recall={r:.2f} (tool_ctx={len(tool_contexts)})"
+        print(line)
 
     samples = build_ragas_samples(eval_data, pipeline_results)
 
@@ -107,6 +155,8 @@ def main(argv: list[str] | None = None) -> None:
         for col in ("faithfulness", "answer_relevancy", "context_precision", "context_recall")
         if col in df.columns
     }
+    if recalls:
+        scores["source_recall"] = round(sum(recalls) / len(recalls), 4)
     print("\n=== TS stack RAGAS scores ===")
     print(json.dumps(scores, ensure_ascii=False, indent=2))
 
@@ -114,7 +164,13 @@ def main(argv: list[str] | None = None) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(
-            {"dataset": args.dataset, "num_samples": len(eval_data), "stack": "ts", "scores": scores},
+            {
+                "dataset": args.dataset,
+                "num_samples": len(eval_data),
+                "stack": "ts",
+                "mode": args.mode,
+                "scores": scores,
+            },
             ensure_ascii=False,
             indent=2,
         )

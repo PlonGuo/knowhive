@@ -1,0 +1,52 @@
+[
+  {
+    "question": "LC 486 Predict the Winner 和 LC 877 Stone Game 这两道博弈题的思路有什么异同？",
+    "ground_truth": "两题都是博弈类区间DP：LC 486 用区间DP计算先手与后手的分差判断先手能否不输；LC 877 与 LC 486 类似也可用区间DP，但因为石子堆数为偶数且总数为奇数，先手必胜，可以直接返回 true（数学性质），这是两题最大的区别。",
+    "expected_sources": ["LC 486 - Predict the Winner.md", "LC 877 - Stone Game.md"]
+  },
+  {
+    "question": "区间DP 和 数位DP 的状态设计有什么差异？各举一道代表题。",
+    "ground_truth": "区间DP 的状态是 dp[i][j] 表示区间 [i,j] 上的最优值，按区间长度从小到大枚举，代表题如 LC 312 戳气球；数位DP 的状态围绕数位构建，通常包含位置 pos、是否受上界约束 tight（is_limit）、是否已开始 started 等维度，用于统计满足条件的数字个数，代表题如 LC 233 数字1的个数。",
+    "expected_sources": ["区间DP.md", "数位DP.md"]
+  },
+  {
+    "question": "Dijkstra 和 BFS 求最短路各适用什么场景？复杂度分别是多少？",
+    "ground_truth": "BFS 适用于无权图（或边权全为1）的最短路径，复杂度 O(V+E)；Dijkstra 适用于非负权重图的单源最短路径，优先队列实现复杂度 O((V+E)logV)，不能处理负权边。",
+    "expected_sources": ["Dijkstra.md", "BFS.md"]
+  },
+  {
+    "question": "知识库里哪些题目用到了堆/优先队列？分别是怎么用的？",
+    "ground_truth": "LC 253 Meeting Rooms II 用最小堆维护各会议室的最早结束时间，按开始时间排序后用堆判断是否需要新会议室；堆/优先队列本身适用于动态求极值（如 Top K、数据流中位数）和 Dijkstra 等图算法中取当前最短距离节点。",
+    "expected_sources": ["堆-优先队列.md", "LC 253 - Meeting Rooms II.md"]
+  },
+  {
+    "question": "数位DP 相关的题目有哪些？各自的难点是什么？",
+    "ground_truth": "数位DP 相关题目包括 LC 233 Number of Digit One（统计数字1出现的次数，难点在按位统计与上界处理）、LC 600 不含连续1的非负整数（二进制数位DP，难点在连续1的状态传递）、LC 2719 Count of Integers（区间计数且带数位和上下界约束，用 f(high)-f(low-1) 转化）。",
+    "expected_sources": ["数位DP.md", "LC 233 - Number of Digit One.md", "LC 600 - 不含连续1的非负整数.md", "LC 2719 - Count of Integers.md"]
+  },
+  {
+    "question": "LC 310 Minimum Height Trees 和 LC 834 Sum of Distances in Tree 分别用什么方法解？它们同属哪类技巧？",
+    "ground_truth": "LC 310 可用拓扑剥洋葱（逐层去掉叶子节点）求最小高度树的根，也与换根思想相关；LC 834 是换根DP 的经典题：第一次 DFS 计算子树节点数和子树距离和，第二次 DFS 用换根公式从父节点推导每个节点作为根的距离和。两题都属于树上（换根）DP/树中心类技巧。",
+    "expected_sources": ["LC 310 - Minimum Height Trees.md", "LC 834 - Sum of Distances in Tree.md", "换根DP.md"]
+  },
+  {
+    "question": "戳气球和石子游戏为什么都属于区间DP？两题的解法有什么区别？",
+    "ground_truth": "两题的最优解都依赖子区间的最优解：戳气球 LC 312 的状态 dp[i][j] 表示戳破开区间 (i,j) 内所有气球的最大硬币数，枚举最后戳破的气球，是标准 Hard 区间DP；石子游戏 LC 877 是博弈型区间DP，状态表示区间内先手减后手的最大分差，且因偶数堆性质先手必胜可直接返回 true。区别在于一个求最大收益、一个是博弈分差且有数学捷径。",
+    "expected_sources": ["区间DP.md", "LC 312 - 戳气球.md", "LC 877 - Stone Game.md"]
+  },
+  {
+    "question": "Rippling 面试重点考察哪些算法方向？其中最重点的图算法是什么、它有什么限制？",
+    "ground_truth": "Rippling 面试高频考动态规划（区间DP、数位DP、换根DP 等）和图算法，图算法是重点，已验证的面试题包括标准 Dijkstra 实现和无向图最长路径；最重点的图算法是 Dijkstra——非负权重图的单源最短路径，优先队列实现 O((V+E)logV)，限制是不能处理负权边。",
+    "expected_sources": ["Rippling.md", "Dijkstra.md"]
+  },
+  {
+    "question": "差分数组的核心操作是什么？知识库里哪道题用到了它？",
+    "ground_truth": "差分数组的核心操作是区间更新 O(1)：对区间 [l,r] 加 val 时只需 diff[l]+=val、diff[r+1]-=val，最后前缀和还原原数组；LC 732 My Calendar III 用差分（有序字典计数）统计任意时刻的最大重叠预订数。",
+    "expected_sources": ["差分数组.md", "LC 732 - My Calendar III.md"]
+  },
+  {
+    "question": "LC 2385 二叉树感染时间这道题用什么方法解？它和哪些基础算法相关？",
+    "ground_truth": "LC 2385 先把二叉树转成无向图（记录父节点关系，DFS/建图），再从起点 BFS 逐层扩散，感染时间即 BFS 的层数（最远距离）。它结合了 DFS（建图/遍历）和 BFS（无权图最短/最远距离）两个基础算法。",
+    "expected_sources": ["LC 2385 - Amount of Time for Binary Tree to Be Infected.md", "BFS.md", "DFS.md"]
+  }
+]
