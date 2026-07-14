@@ -16,6 +16,7 @@ import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
 import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
 import { ingestRoutes } from "./ingestRoutes.ts";
+import { buildTree, flattenTree, resolveSafePath } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
@@ -237,6 +238,11 @@ app.route(
     getConfig: () => config,
     chatModel,
     retrieve,
+    readNote: (relPath) => {
+      const abs = resolveSafePath(knowledgeDir, relPath);
+      return { path: relPath, content: readFileSync(abs, "utf8") };
+    },
+    listNotePaths: () => flattenTree(buildTree(knowledgeDir)),
   }),
 );
 
@@ -257,13 +263,17 @@ syncKnowledgeDir(db, knowledgeDir, ingestOne)
 
 // Orphan watchdog: if the Tauri shell dies without signalling us (macOS quit paths
 // that skip ExitRequested, force-quit, crash), we get reparented to launchd (ppid 1)
-// — exit instead of lingering as a zombie server.
-setInterval(() => {
-  if (process.ppid === 1) {
-    console.log("[server] parent process gone, shutting down");
-    process.exit(0);
-  }
-}, 2000);
+// — exit instead of lingering as a zombie server. Opt-in via env (set by the Rust
+// shell's spawn): standalone runs (eval scripts, manual curl sessions) background
+// the sidecar from transient shells and must not be killed by reparenting.
+if (process.env.KNOWHIVE_PARENT_WATCHDOG) {
+  setInterval(() => {
+    if (process.ppid === 1) {
+      console.log("[server] parent process gone, shutting down");
+      process.exit(0);
+    }
+  }, 2000);
+}
 
 export default {
   port,

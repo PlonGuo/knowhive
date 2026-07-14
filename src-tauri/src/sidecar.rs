@@ -257,6 +257,9 @@ fn spawn_child(server_dir: &Path, port: u16, data_dir: &Path) -> std::io::Result
     Command::new(program)
         .args(&args)
         .current_dir(server_dir)
+        // Arms the sidecar's orphan watchdog — only shell-spawned sidecars should
+        // self-terminate on reparenting (standalone/eval runs must survive it).
+        .env("KNOWHIVE_PARENT_WATCHDOG", "1")
         .stdin(Stdio::null())
         // Inherit stdout/stderr so sidecar logs surface in the `tauri dev` console.
         .stdout(Stdio::inherit())
