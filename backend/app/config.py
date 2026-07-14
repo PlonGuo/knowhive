@@ -37,6 +37,7 @@ class AppConfig(BaseModel):
     pre_retrieval_strategy: PreRetrievalStrategy = PreRetrievalStrategy.NONE
     use_reranker: bool = False
     reranker_backend: str = "cross-encoder"  # "llm" | "cross-encoder" — mirrors shared/schema.ts
+    chat_mode: str = "single"  # "single" | "agentic" — mirrors shared/schema.ts
     chat_memory_turns: int = 0
     memory_compression_threshold: int = 20
     custom_system_prompt: str = ""

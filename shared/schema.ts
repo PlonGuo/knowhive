@@ -20,6 +20,9 @@ export type PreRetrievalStrategy = z.infer<typeof PreRetrievalStrategy>;
 export const RerankerBackend = z.enum(["llm", "cross-encoder"]);
 export type RerankerBackend = z.infer<typeof RerankerBackend>;
 
+export const ChatMode = z.enum(["single", "agentic"]);
+export type ChatMode = z.infer<typeof ChatMode>;
+
 /** Mirrors backend/app/config.py:AppConfig (field names + defaults). */
 export const AppConfigSchema = z.object({
   llm_provider: LLMProvider.default("ollama"),
@@ -33,6 +36,9 @@ export const AppConfigSchema = z.object({
   // "cross-encoder" = in-process ONNX (Phase E2, default: won the RAGAS gate on all
   // four metrics); "llm" = LLM-as-reranker (Phase E1, kept as fallback backend)
   reranker_backend: RerankerBackend.default("cross-encoder"),
+  // "single" = one-shot RAG; "agentic" = tool-use loop (Phase G). Default flips
+  // only after the Task 7 eval gate passes.
+  chat_mode: ChatMode.default("single"),
   chat_memory_turns: z.number().int().default(0),
   memory_compression_threshold: z.number().int().default(20),
   custom_system_prompt: z.string().default(""),

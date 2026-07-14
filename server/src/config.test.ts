@@ -21,6 +21,7 @@ test("loadConfig returns defaults when config.yaml is missing", () => {
     pre_retrieval_strategy: "none",
     use_reranker: false,
     reranker_backend: "cross-encoder",
+    chat_mode: "single",
     chat_memory_turns: 0,
     memory_compression_threshold: 20,
     custom_system_prompt: "",
@@ -70,4 +71,15 @@ test("unknown keys in config.yaml are stripped (pydantic ignore-extra parity)", 
   const cfg = loadConfig(dir);
   expect(cfg.model_name).toBe("qwen3");
   expect("some_future_field" in cfg).toBe(false);
+});
+
+test("chat_mode defaults to single and survives legacy yaml without the field", () => {
+  const dir = tempDir();
+  writeFileSync(configPath(dir), "llm_provider: ollama\nmodel_name: llama3.2\n");
+  expect(loadConfig(dir).chat_mode).toBe("single");
+});
+
+test("chat_mode accepts agentic and rejects unknown values", () => {
+  expect(AppConfigSchema.parse({ chat_mode: "agentic" }).chat_mode).toBe("agentic");
+  expect(() => AppConfigSchema.parse({ chat_mode: "yolo" })).toThrow();
 });
