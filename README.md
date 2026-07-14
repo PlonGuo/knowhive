@@ -14,6 +14,7 @@ A **local-first AI knowledge base** desktop app. Import your Markdown notes, cha
 | Feature | Description |
 |---------|-------------|
 | **RAG Chat** | Ask questions about your knowledge base with source citations and token streaming (Vercel AI SDK v7) |
+| **Agent Mode (opt-in)** | A self-built tool-use loop: the model can search and read notes on its own for multi-hop questions, with live tool activity in the chat UI |
 | **File Management** | Import `.md` files; rename, delete, and edit Markdown in-app with automatic re-indexing |
 | **File Watcher** | Files edited outside the app (e.g. in Obsidian) are re-indexed automatically |
 | **Spaced Repetition** | SM-2 algorithm with AI-generated summaries for review scheduling |
@@ -70,6 +71,12 @@ Query → embed (Ollama) → hybrid retrieve (vector KNN ⊕ FTS5, RRF-fused, to
 ```
 
 Reranking fails open: any scorer error falls back to hybrid order. Retrieval design choices (candidate count, k, coverage vs relevance prompt) were selected by a k-sweep experiment — see [learnings/Reranker-K-Sweep.md](learnings/Reranker-K-Sweep.md).
+
+### Agent Mode (tool-use loop)
+
+`chat_mode: agentic` upgrades the pipeline to a self-built agent loop (no framework — AI SDK v7 primitives): the same pre-retrieval runs first (so a model that never calls tools degrades to single-pass, not zero context), then the model can call `search_knowledge` / `read_note` / `list_notes` for follow-up hops, capped at 6 steps with a tools-stripped final step that structurally guarantees a text answer. Tool failures return error values instead of throwing, sources aggregate across steps, and the chat UI streams tool activity live.
+
+It ships **off by default** — a pre-registered eval gate (single vs agentic, 4 arms, RAGAS + a deterministic `source_recall` metric) showed that with a local 3B model the loop's retrieval gains don't survive answer synthesis. The write-up, including why that negative result is the interesting part, is in [learnings/Agentic-vs-SingleShot.md](learnings/Agentic-vs-SingleShot.md).
 
 ## Tech Stack
 
@@ -183,6 +190,7 @@ base_url: http://localhost:11434
 embedding_language: english       # english | chinese | mixed
 use_reranker: false
 reranker_backend: cross-encoder   # cross-encoder | llm
+chat_mode: single                 # single | agentic (tool-use loop)
 custom_system_prompt: ''
 ```
 

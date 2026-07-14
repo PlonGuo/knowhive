@@ -18,7 +18,13 @@
   - **Task 2 发布闸抓到 2 个真 bug**:①lib.rs 拼 `resource_dir()/server` 但 Tauri 保留相对路径实际在 `resources/server` 下→release sidecar 永远起不来;②macOS Apple Events 退出路径不触发 ExitRequested→sidecar 变孤儿。双修:Rust 加 `RunEvent::Exit`,sidecar 加孤儿看门狗(ppid==1 自退)。7 项打包验证 API 级全绿(无 PATH bun 启动/导入/重排检索/chat 流式带 sources/watcher/export/重启持久无重下载)。**体积:.app 126MB(bun 60 + resources 58 + shell 8.8),dmg 43MB;模型 571MB 首次用时下到 data dir;冷加载 687ms。**
   - **Task 3**:Electron 全删(净删 3235 行);platform.ts 只剩 Tauri+浏览器分支;import 测试改 mock platform 模块。
   - **Task 4**:根目录 pnpm→bun(bun.lock;tauri.conf 前置命令改 `bun run`;**vitest 保留,经 `bun run test` 跑**)。
-- 👉 **下一步:memory system**(见项目记忆 project_memory_system:per-KB session + 三类长期记忆 + summarizer agent),或预检索策略移植(HyDE/multi-query,config 有字段、pipeline 未实现)。
+- ✅ **Phase G 完成(2026-07-15)——Agentic loop(自研 harness,AI SDK v7 底座)**:
+  - `/chat` 双模式:`body.mode ?? config.chat_mode`——single(原单趟)/ agentic(混合式 tool-use loop:预检索保底 + search_knowledge/read_note/list_notes 只读三工具,`stepCountIs(6)` + `prepareStep` 末步物理禁工具)。工具层 DI 可单测(agentTools.ts);chatRoutes.ts 提取,`ai/test` MockLanguageModelV3 无模型测完整 loop。sources 跨步聚合(SourceCollector→messageMetadata)。**Provider 无关**:openai-compatible 路径已就绪(用户计划以 DeepSeek 为主力云模型)。
+  - Task 0 spike:llama3.2 tool-call 83%发起/80%干净,过 70% 闸(learnings/Llama32-Tool-Call-Spike.md)。
+  - 前端:ChatArea 按 parts 顺序渲染,工具活动行(spinner+ShinyText→✓/✗);React Bits 进场(ShinyText/FadeContent,新依赖 motion);Settings 加 Agent Mode 开关。
+  - **Task 7 评估闸未过(learnings/Agentic-vs-SingleShot.md):默认保持 `chat_mode=single`**。llama3.2 调工具后 relevancy −0.20(答案复述工具输出),多跳 source_recall 持平;recall +0.07 证明检索有效但小模型综合不动。**结论:瓶颈在模型不在 harness**,云模型 arm(DeepSeek)是下一个可验证假设。发现:stepCountIs 限步数不限单步调用数→2/30 失控尾部(15-17min),后续需单步调用上限+重复查询去重。
+  - 顺带:孤儿看门狗改 opt-in(`KNOWHIVE_PARENT_WATCHDOG`,Rust spawn 注入)——原先误杀独立起的评估 sidecar;评估管线全客户端加显式超时(Clash TUN 代理下无超时客户端僵死 3 次,learnings 有记录)。
+- 👉 **下一步:UI Redesign phase**(用户已定:混合风格暗Claude暖/亮OpenAI冷 + React Bits DotGrid 全局背景 + dark mode,见项目记忆 project_ui_redesign,需写 plan);之后 memory system(project_memory_system)或 Phase H(写工具+权限,AI SDK 原生审批流协议已确认可用)。
 
 ## Phase D 移植明细(全部带 TDD parity 测试 + e2e)
 
