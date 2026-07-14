@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -111,9 +112,12 @@ def main(argv: list[str] | None = None) -> None:
 
     pipeline_results = []
     recalls: list[float] = []
+    behavior: list[dict] = []
     for i, sample in enumerate(eval_data):
         q = sample["question"]
+        t0 = time.time()
         answer, tool_contexts, sources = ts_chat(args.base, q, args.mode)
+        seconds = round(time.time() - t0, 1)
         if args.mode == "agentic":
             # Contexts = pre-retrieval (same as /search) + what the model actually
             # pulled via tools — that behavior is exactly what this eval measures.
@@ -122,11 +126,14 @@ def main(argv: list[str] | None = None) -> None:
             contexts = ts_search(args.base, q, args.k)
         pipeline_results.append({"answer": answer, "contexts": contexts})
 
+        rec = {"q": q[:60], "seconds": seconds, "tool_ctx": len(tool_contexts), "answer_len": len(answer)}
         line = f"  [{i + 1}/{len(eval_data)}] {q[:48]}..."
         if sample.get("expected_sources"):
             r = source_recall(sample["expected_sources"], sources)
             recalls.append(r)
-            line += f" source_recall={r:.2f} (tool_ctx={len(tool_contexts)})"
+            rec["source_recall"] = r
+            line += f" source_recall={r:.2f} (tool_ctx={len(tool_contexts)}, {seconds}s)"
+        behavior.append(rec)
         print(line)
 
     samples = build_ragas_samples(eval_data, pipeline_results)
@@ -139,13 +146,18 @@ def main(argv: list[str] | None = None) -> None:
         faithfulness,
     )
 
+    from ragas import RunConfig
+
     dataset = EvaluationDataset(samples=samples)
     print(f"Running RAGAS (grader: {args.evaluator_model})...")
+    # Bounded timeout + modest concurrency: large agentic contexts through a local
+    # TUN proxy reproducibly wedged unbounded clients (see learnings, Phase G).
     result = evaluate(
         dataset=dataset,
         metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
         llm=_create_evaluator_llm(args.evaluator_model),
         embeddings=_create_evaluator_embeddings(),
+        run_config=RunConfig(timeout=180, max_retries=8, max_workers=4),
         show_progress=True,
     )
 
@@ -170,6 +182,7 @@ def main(argv: list[str] | None = None) -> None:
                 "stack": "ts",
                 "mode": args.mode,
                 "scores": scores,
+                "behavior": behavior,
             },
             ensure_ascii=False,
             indent=2,

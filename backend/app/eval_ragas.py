@@ -228,15 +228,22 @@ def _create_evaluator_embeddings():
     from langchain_openai import OpenAIEmbeddings
     from ragas.embeddings.base import LangchainEmbeddingsWrapper
 
-    return LangchainEmbeddingsWrapper(OpenAIEmbeddings())
+    # Explicit timeout for the same reason as _create_evaluator_llm: the default
+    # (request_timeout=None) hangs forever on a connection that dies mid-request.
+    return LangchainEmbeddingsWrapper(OpenAIEmbeddings(request_timeout=120.0, max_retries=5))
 
 
 def _create_evaluator_llm(model: str = "gpt-4o-mini"):
-    """Create OpenAI LLM for RAGAS evaluation. Uses OPENAI_API_KEY env var."""
+    """Create OpenAI LLM for RAGAS evaluation. Uses OPENAI_API_KEY env var.
+
+    Explicit timeout: the default client has none, so a connection that dies
+    mid-request (observed through a local TUN proxy on large agentic-context
+    payloads) hangs the whole eval forever instead of retrying.
+    """
     from openai import OpenAI
     from ragas.llms import llm_factory
 
-    client = OpenAI()
+    client = OpenAI(timeout=120.0, max_retries=5)
     return llm_factory(model, client=client, max_tokens=8192)
 
 
