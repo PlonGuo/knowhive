@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildTree, resolveSafePath, SafePathError } from "./knowledge.ts";
+import { buildTree, flattenTree, resolveSafePath, SafePathError } from "./knowledge.ts";
 
 // Parity tests against backend/app/routers/knowledge.py (_build_tree, _resolve_safe_path).
 
@@ -50,4 +50,9 @@ test("resolveSafePath rejects absolute paths", () => {
 test("resolveSafePath rejects traversal outside the root", () => {
   expect(() => resolveSafePath(makeKnowledgeDir(), "../escape.md")).toThrow(SafePathError);
   expect(() => resolveSafePath(makeKnowledgeDir(), "Algo/../../escape.md")).toThrow(SafePathError);
+});
+
+test("flattenTree returns file paths only, depth-first (empty dirs contribute nothing)", () => {
+  const tree = buildTree(makeKnowledgeDir());
+  expect(flattenTree(tree)).toEqual([join("Algo", "sort.md"), "Apple.md", "zebra.md"]);
 });

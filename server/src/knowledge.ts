@@ -45,6 +45,12 @@ function buildChildren(directory: string, base: string): TreeNode[] {
   });
 }
 
+/** Flatten a tree into file paths only, depth-first (tree order: dirs first, alpha). */
+export function flattenTree(node: TreeNode): string[] {
+  if (node.type === "file") return [node.path];
+  return (node.children ?? []).flatMap(flattenTree);
+}
+
 /** Resolve a relative path within the knowledge dir, blocking traversal and absolute paths. */
 export function resolveSafePath(root: string, relPath: string): string {
   if (relPath.startsWith("/")) {
