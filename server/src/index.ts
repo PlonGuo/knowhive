@@ -4,10 +4,11 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { generateText, streamText, type ModelMessage, type UIMessage } from "ai";
+import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { parseArgs } from "./args.ts";
+import { chatRoutes } from "./chatRoutes.ts";
 import { configPath, loadConfig } from "./config.ts";
 import { configRoutes } from "./configRoutes.ts";
 import { exportRoutes } from "./exportRoutes.ts";
@@ -19,7 +20,6 @@ import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
-import { buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { rerankCrossEncoder } from "./crossEncoder.ts";
 import {
   crossEncoderScore,
@@ -230,33 +230,15 @@ app.post("/search", async (c) => {
   return c.json({ hits: await retrieve(query, k) });
 });
 
-// RAG chat with streaming, consumed by the frontend's Vercel AI SDK useChat.
-// MVP pipeline: retrieve context for the latest question → inject into the system prompt →
-// stream the answer. Pre-retrieval strategies (rewrite/HyDE/multi-query) layer on next.
-app.post("/chat", async (c) => {
-  const { messages } = (await c.req.json()) as { messages: UIMessage[] };
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const question = uiMessageText(lastUser);
-
-  const chunks = question ? await retrieve(question, 5) : [];
-  const system = buildSystemPrompt(chunks, config.custom_system_prompt);
-
-  // Map UIMessages → plain model messages (avoids v7 convertToModelMessages quirks).
-  const modelMessages: ModelMessage[] = messages
-    .map((m) => ({ role: m.role, content: uiMessageText(m) }) as ModelMessage)
-    .filter((m) => typeof m.content === "string" && m.content.length > 0);
-
-  const result = streamText({
-    model: chatModel(),
-    system,
-    messages: modelMessages,
-  });
-
-  // Surface retrieved sources to the UI as message metadata.
-  return result.toUIMessageStreamResponse({
-    messageMetadata: () => ({ sources: extractSources(chunks) }),
-  });
-});
+// RAG chat with streaming (single-pass RAG or Phase G agentic tool loop) — see chatRoutes.ts.
+app.route(
+  "/",
+  chatRoutes({
+    getConfig: () => config,
+    chatModel,
+    retrieve,
+  }),
+);
 
 console.log(
   `[server] KnowHive sidecar listening on http://127.0.0.1:${port} ` +
