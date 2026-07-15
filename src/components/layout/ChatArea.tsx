@@ -87,7 +87,7 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
   return (
     <main data-testid="chat-area" className="flex flex-1 flex-col bg-transparent">
       {hasMessages && (
-        <div className="flex items-center justify-end border-b px-4 py-2">
+        <div data-tauri-drag-region className="flex items-center justify-end px-4 py-2">
           <button
             onClick={() => setMessages([])}
             className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -101,14 +101,14 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
         {!hasMessages && !streaming ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="space-y-2 text-center">
-              <p className="text-lg">
+              <p className="font-serif text-2xl">
                 <ShinyText text="Start a conversation" speed={4} />
               </p>
               <p className="text-sm text-muted-foreground">Ask questions about your knowledge base</p>
             </div>
           </div>
         ) : (
-          <div className="flex-1 space-y-4 p-4">
+          <div className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-6 py-4">
             {messages.map((msg, i) => {
               const sources = msg.role === 'assistant' ? messageSources(msg) : []
               return (
@@ -118,11 +118,13 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    className={
                       msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary text-secondary-foreground'
-                    }`}
+                        ? // Claude-style: user turns are compact rounded capsules…
+                          'max-w-[75%] rounded-2xl border bg-secondary/80 px-4 py-2.5 text-secondary-foreground backdrop-blur-sm'
+                        : // …assistant turns are plain prose straight on the background.
+                          'max-w-full py-0.5 text-foreground'
+                    }
                   >
                     {/* Render parts in order: agent tool activity interleaves with text.
                         Tool indexes count tool parts only (step-start parts render null). */}
@@ -131,7 +133,7 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
                       return msg.parts.map((part, j) => {
                         if (part.type === 'text') {
                           return (
-                            <div key={j} className="whitespace-pre-wrap text-sm">
+                            <div key={j} className="whitespace-pre-wrap text-sm leading-relaxed">
                               {(part as { text: string }).text}
                             </div>
                           )
@@ -144,18 +146,16 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
                       })
                     })()}
                     {sources.length > 0 && (
-                      <div className="mt-2 border-t border-border/50 pt-2">
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">Sources:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {sources.map((src) => (
-                            <span
-                              key={src}
-                              className="rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground"
-                            >
-                              {src}
-                            </span>
-                          ))}
-                        </div>
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">Sources</span>
+                        {sources.map((src) => (
+                          <span
+                            key={src}
+                            className="rounded-md border bg-accent/60 px-1.5 py-0.5 text-xs text-accent-foreground backdrop-blur-sm"
+                          >
+                            {src.split('/').pop()}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -172,24 +172,25 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
         )}
       </div>
 
-      <div className="border-t p-4">
-        <div className="flex gap-2">
+      {/* Floating composer card, Claude-style: textarea and send share one frame. */}
+      <div className="px-6 pb-5 pt-2">
+        <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl border bg-background/85 p-2 shadow-sm backdrop-blur-md focus-within:ring-1 focus-within:ring-ring">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about your knowledge base..."
             rows={1}
-            className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             disabled={streaming}
           />
           <button
             data-testid="send-button"
             onClick={submit}
             disabled={streaming || !input.trim()}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="rounded-xl bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
           >
-            Send
+            ↑
           </button>
         </div>
       </div>

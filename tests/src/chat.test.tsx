@@ -115,9 +115,10 @@ describe('ChatArea (useChat)', () => {
     await typeAndSend('sources?')
     await waitFor(() => {
       const assistant = screen.getByTestId('message-assistant-1')
-      expect(assistant).toHaveTextContent('Sources:')
-      expect(assistant).toHaveTextContent('knowledge/rrf.md')
-      expect(assistant).toHaveTextContent('knowledge/hybrid.md')
+      expect(assistant).toHaveTextContent('Sources')
+      // Chips show basenames (full paths are noisy in the UI)
+      expect(assistant).toHaveTextContent('rrf.md')
+      expect(assistant).toHaveTextContent('hybrid.md')
     })
   })
 
