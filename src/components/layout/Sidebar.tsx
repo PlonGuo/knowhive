@@ -109,7 +109,7 @@ export default function Sidebar({
   return (
     <aside
       data-testid="sidebar"
-      className="flex w-64 flex-col border-r bg-secondary/50"
+      className="flex w-64 flex-col overflow-hidden rounded-xl border bg-background/75 shadow-sm backdrop-blur-md"
     >
       <div className="flex h-12 items-center gap-2 border-b px-4">
         <span className="text-lg font-bold text-foreground">KnowHive</span>

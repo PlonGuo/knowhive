@@ -31,7 +31,8 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
 
   return (
     <div data-testid="app-layout" className="flex h-screen flex-col">
-      <div className="flex flex-1 overflow-hidden">
+      {/* Floating panels over the DotGrid background: gap + padding lets it show through. */}
+      <div className="flex flex-1 gap-3 overflow-hidden p-3">
         <Sidebar
           onSettingsClick={() => setView('settings')}
           onCommunityClick={() => setView('community')}
@@ -40,6 +41,7 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
           selectedPath={selectedFilePath ?? undefined}
           backendUrl={backendUrl}
         />
+        <div className="flex flex-1 overflow-hidden rounded-xl border bg-background/75 shadow-sm backdrop-blur-md">
         {view === 'settings' ? (
           <SettingsPage backendUrl={backendUrl} onBack={() => setView('chat')} onConfigSaved={() => setConfigVersion((v) => v + 1)} />
         ) : view === 'community' ? (
@@ -57,6 +59,7 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
         ) : (
           <ChatArea backendUrl={backendUrl} />
         )}
+        </div>
       </div>
       <StatusBar health={health} error={error} backendUrl={backendUrl} configVersion={configVersion} onReviewClick={() => setView("review")} />
     </div>

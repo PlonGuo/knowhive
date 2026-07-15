@@ -85,7 +85,7 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
   const hasMessages = messages.length > 0
 
   return (
-    <main data-testid="chat-area" className="flex flex-1 flex-col bg-background">
+    <main data-testid="chat-area" className="flex flex-1 flex-col bg-transparent">
       {hasMessages && (
         <div className="flex items-center justify-end border-b px-4 py-2">
           <button

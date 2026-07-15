@@ -136,7 +136,7 @@ export default function StatusBar({ health, error, backendUrl, configVersion, on
   return (
     <footer
       data-testid="status-bar"
-      className="flex h-7 items-center justify-between border-t bg-secondary/50 px-4"
+      className="flex h-7 items-center justify-between bg-transparent px-5"
     >
       <span className={`text-xs ${statusColor}`}>{statusText}</span>
       {llmConfig && (
