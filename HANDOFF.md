@@ -24,7 +24,13 @@
   - 前端:ChatArea 按 parts 顺序渲染,工具活动行(spinner+ShinyText→✓/✗);React Bits 进场(ShinyText/FadeContent,新依赖 motion);Settings 加 Agent Mode 开关。
   - **Task 7 评估闸未过(learnings/Agentic-vs-SingleShot.md):默认保持 `chat_mode=single`**。llama3.2 调工具后 relevancy −0.20(答案复述工具输出),多跳 source_recall 持平;recall +0.07 证明检索有效但小模型综合不动。**结论:瓶颈在模型不在 harness**,云模型 arm(DeepSeek)是下一个可验证假设。发现:stepCountIs 限步数不限单步调用数→2/30 失控尾部(15-17min),后续需单步调用上限+重复查询去重。
   - 顺带:孤儿看门狗改 opt-in(`KNOWHIVE_PARENT_WATCHDOG`,Rust spawn 注入)——原先误杀独立起的评估 sidecar;评估管线全客户端加显式超时(Clash TUN 代理下无超时客户端僵死 3 次,learnings 有记录)。
-- 👉 **下一步:UI Redesign phase**(用户已定:混合风格暗Claude暖/亮OpenAI冷 + React Bits DotGrid 全局背景 + dark mode,见项目记忆 project_ui_redesign,需写 plan);之后 memory system(project_memory_system)或 Phase H(写工具+权限,AI SDK 原生审批流协议已确认可用)。
+- ✅ **Phase UI 完成(2026-07-15)——全 UI 重构**:
+  - **主题系统**:两套色板走现有 HSL token(亮=OpenAI 冷中性,暗=Claude desktop 级暖炭 #181614 + terracotta 主色);`src/lib/theme.ts` 纯函数(存储优先→系统回退,TDD);切换钮在侧栏底部,首帧前应用防闪白。
+  - **DotGrid 全局背景**(React Bits 官方 TS 源适配,gsap InertiaPlugin):鼠标推开点阵弹性回位;三个加固——配色随 .dark class 实时切(MutationObserver)、**空闲暂停**(指针静止且点归位后停止绘制,WKWebView 省电)、prefers-reduced-motion 静态渲染。
+  - **壳**:原生标题栏隐藏(tauri.conf `titleBarStyle: Overlay` + `hiddenTitle`),顶部全宽「背景→透明」渐变条当拖动区(Claude desktop 式);侧栏半透明毛玻璃 + Claude 式收缩(«/»);**状态栏删除**(backend/watcher/model 指示是调试噪音),复习红点+主题切换挪侧栏底部。
+  - **Chat**:Claude 式消息列(assistant 无气泡直排背景上,user 半透明胶囊,居中 max-w-3xl,悬浮输入卡);Settings/Onboarding 卡片化 + 全部硬编码颜色换 token(onboarding 原来暗色下不可读)。
+  - 两轮用户视觉反馈驱动迭代;195 vitest + 176 bun + 5 cargo 绿。
+- 👉 **下一步候选**:memory system(project_memory_system)/ Phase H(写工具+权限,AI SDK 原生审批流已确认)/ 云模型 arm 评估(DeepSeek,验证「agentic 瓶颈在模型」假设,learnings/Agentic-vs-SingleShot.md)。
 
 ## Phase D 移植明细(全部带 TDD parity 测试 + e2e)
 
