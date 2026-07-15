@@ -7,6 +7,12 @@ import { isToolPart, toolPartLabel, toolPartStatus, type ToolPartLike } from '..
 
 interface ChatAreaProps {
   backendUrl?: string
+  /** Active conversation (Phase M). Absent = legacy stateless chat. */
+  sessionId?: string | null
+  /** Create-or-return the active session id right before the first send. */
+  ensureSession?: () => Promise<string>
+  /** Fired when an exchange finishes streaming (lets the sidebar refresh titles). */
+  onExchangeComplete?: () => void
 }
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:18200'
@@ -52,7 +58,12 @@ function ToolActivity({ part, index }: { part: ToolPartLike; index: number }) {
   )
 }
 
-export default function ChatArea({ backendUrl }: ChatAreaProps) {
+export default function ChatArea({
+  backendUrl,
+  sessionId,
+  ensureSession,
+  onExchangeComplete,
+}: ChatAreaProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -69,10 +80,47 @@ export default function ChatArea({ backendUrl }: ChatAreaProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, error])
 
-  const submit = () => {
+  // Session switch: load persisted history into the chat view.
+  useEffect(() => {
+    if (!sessionId) {
+      setMessages([])
+      return
+    }
+    let cancelled = false
+    fetch(`${backendUrl ?? DEFAULT_BACKEND_URL}/sessions/${sessionId}/messages`)
+      .then((res) => (res.ok ? res.json() : { messages: [] }))
+      .then(({ messages: rows }: { messages: Array<{ id: number; role: 'user' | 'assistant'; content: string; sources: string[] }> }) => {
+        if (cancelled) return
+        setMessages(
+          rows.map((r) => ({
+            id: String(r.id),
+            role: r.role,
+            parts: [{ type: 'text' as const, text: r.content }],
+            metadata: { sources: r.sources },
+          })),
+        )
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, backendUrl])
+
+  // Notify once per finished exchange (title refresh in the sidebar).
+  const prevStreaming = useRef(false)
+  useEffect(() => {
+    if (prevStreaming.current && !streaming) onExchangeComplete?.()
+    prevStreaming.current = streaming
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming])
+
+  const submit = async () => {
     if (!input.trim() || streaming) return
-    sendMessage({ text: input })
+    const text = input
     setInput('')
+    const sid = ensureSession ? await ensureSession() : sessionId ?? undefined
+    sendMessage({ text }, sid ? { body: { session_id: sid } } : undefined)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

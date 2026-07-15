@@ -14,6 +14,18 @@ interface AppLayoutProps {
 export default function AppLayout({ backendUrl }: AppLayoutProps) {
   const [view, setView] = useState<'chat' | 'settings' | 'editor' | 'community' | 'review' | 'overview'>('chat')
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [sessionsVersion, setSessionsVersion] = useState(0)
+
+  // Lazily create the conversation on first send — "+ New" just clears the active id.
+  const ensureSession = async (): Promise<string> => {
+    if (activeSessionId) return activeSessionId
+    const res = await fetch(`${backendUrl}/sessions`, { method: 'POST' })
+    const { id } = (await res.json()) as { id: string }
+    setActiveSessionId(id)
+    setSessionsVersion((v) => v + 1)
+    return id
+  }
 
   const handleFileSelect = (path: string) => {
     setSelectedFilePath(path)
@@ -45,6 +57,12 @@ export default function AppLayout({ backendUrl }: AppLayoutProps) {
           onFileSelect={handleFileSelect}
           selectedPath={selectedFilePath ?? undefined}
           backendUrl={backendUrl}
+          activeSessionId={activeSessionId}
+          onSessionSelect={(id) => {
+            setActiveSessionId(id)
+            setView('chat')
+          }}
+          sessionsVersion={sessionsVersion}
         />
         {/* Chat floats fully transparent over the dot grid; other views keep a card
             for readability until their own redesign pass. */}
@@ -70,7 +88,12 @@ export default function AppLayout({ backendUrl }: AppLayoutProps) {
             onClose={handleEditorClose}
           />
         ) : (
-          <ChatArea backendUrl={backendUrl} />
+          <ChatArea
+            backendUrl={backendUrl}
+            sessionId={activeSessionId}
+            ensureSession={ensureSession}
+            onExchangeComplete={() => setSessionsVersion((v) => v + 1)}
+          />
         )}
         </div>
       </div>

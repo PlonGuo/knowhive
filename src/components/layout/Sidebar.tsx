@@ -10,6 +10,12 @@ interface ImportState {
   error?: string
 }
 
+interface SessionSummary {
+  id: string
+  title: string
+  updated_at: string
+}
+
 interface SidebarProps {
   onSettingsClick?: () => void
   onCommunityClick?: () => void
@@ -19,6 +25,10 @@ interface SidebarProps {
   onFileSelect?: (path: string) => void
   selectedPath?: string
   onRefreshReady?: (refresh: () => void) => void
+  activeSessionId?: string | null
+  onSessionSelect?: (id: string | null) => void
+  /** Bumped by the layout when sessions change (new chat, finished exchange). */
+  sessionsVersion?: number
 }
 
 export default function Sidebar({
@@ -30,6 +40,9 @@ export default function Sidebar({
   onFileSelect,
   selectedPath,
   onRefreshReady,
+  activeSessionId,
+  onSessionSelect,
+  sessionsVersion,
 }: SidebarProps) {
   const [importState, setImportState] = useState<ImportState>({
     status: 'idle',
@@ -54,6 +67,22 @@ export default function Sidebar({
       .then((data) => setDueCount(data?.due_today ?? 0))
       .catch(() => {})
   }, [backendUrl])
+
+  const [chatSessions, setChatSessions] = useState<SessionSummary[]>([])
+  useEffect(() => {
+    if (!backendUrl) return
+    fetch(`${backendUrl}/sessions`)
+      .then((res) => (res.ok ? res.json() : { sessions: [] }))
+      .then((data) => setChatSessions(data.sessions ?? []))
+      .catch(() => {})
+  }, [backendUrl, sessionsVersion])
+
+  const deleteChatSession = async (id: string) => {
+    if (!backendUrl) return
+    await fetch(`${backendUrl}/sessions/${id}`, { method: 'DELETE' }).catch(() => {})
+    setChatSessions((prev) => prev.filter((s) => s.id !== id))
+    if (activeSessionId === id) onSessionSelect?.(null)
+  }
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const refreshTreeRef = useRef<(() => void) | null>(null)
 
@@ -148,7 +177,51 @@ export default function Sidebar({
       data-testid="sidebar"
       className="flex w-64 flex-col overflow-hidden rounded-xl border bg-background/40 shadow-sm backdrop-blur-sm"
     >
+      {/* Chats (Phase M): new conversation + recent sessions. */}
       <div className="flex items-center justify-between px-3 pt-3 pb-1">
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Chats
+        </div>
+        <button
+          data-testid="new-chat-button"
+          onClick={() => onSessionSelect?.(null)}
+          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          + New
+        </button>
+      </div>
+      {chatSessions.length > 0 && (
+        <div data-testid="session-list" className="max-h-40 overflow-y-auto px-1 pb-1">
+          {chatSessions.map((s) => (
+            <div
+              key={s.id}
+              className={`group flex items-center justify-between rounded-md px-2 py-1 text-sm ${
+                s.id === activeSessionId
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-accent/50'
+              }`}
+            >
+              <button
+                data-testid={`session-item-${s.id}`}
+                onClick={() => onSessionSelect?.(s.id)}
+                className="min-w-0 flex-1 truncate text-left"
+              >
+                {s.title || 'New chat'}
+              </button>
+              <button
+                data-testid={`session-delete-${s.id}`}
+                onClick={() => deleteChatSession(s.id)}
+                aria-label="Delete conversation"
+                className="hidden px-1 text-xs group-hover:block hover:text-red-500"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between px-3 pt-2 pb-1">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Knowledge
         </div>
