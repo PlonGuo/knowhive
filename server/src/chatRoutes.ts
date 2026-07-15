@@ -98,8 +98,15 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       [distilled.summary, slice[0]!.id, slice.at(-1)!.id, sessionId],
     );
     if (distilled.facts.length > 0) {
-      const embeddings = deps.embedFacts ? await deps.embedFacts(distilled.facts) : [];
-      distilled.facts.forEach((fact, i) => {
+      // Dedupe by exact content — repeated compressions re-derive the same facts.
+      const fresh = distilled.facts.filter(
+        (fact) =>
+          !deps.db
+            .query("SELECT 1 FROM memories WHERE kind = 'semantic' AND content = ?")
+            .get(fact),
+      );
+      const embeddings = deps.embedFacts && fresh.length > 0 ? await deps.embedFacts(fresh) : [];
+      fresh.forEach((fact, i) => {
         deps.db.run(
           "INSERT INTO memories (kind, session_id, content, embedding) VALUES ('semantic', ?, ?, ?)",
           [sessionId, fact, embeddings[i] ? encodeVector(embeddings[i]!) : null],

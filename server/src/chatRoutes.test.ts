@@ -325,3 +325,23 @@ describe("session mode (Phase M)", () => {
     expect(count.n).toBe(0);
   });
 });
+
+describe("distillation dedupe", () => {
+  test("re-derived facts are not inserted twice", async () => {
+    const config = AppConfigSchema.parse({ chat_memory_turns: 1, memory_compression_threshold: 2 });
+    const deps = makeDeps({
+      getConfig: () => config,
+      generate: async () => '{"summary":"s","facts":["用户在准备面试"]}',
+    });
+    const sid = createSession(deps.db);
+    for (let i = 0; i < 3; i++) {
+      appendMessage(deps.db, sid, { role: i % 2 ? "assistant" : "user", content: `m${i}` });
+      await postChat(deps, { ...userMessage(`q${i}`), session_id: sid });
+      await settle();
+    }
+    const facts = deps.db.query("SELECT content FROM memories WHERE kind='semantic'").all() as {
+      content: string;
+    }[];
+    expect(facts.length).toBe(1);
+  });
+});

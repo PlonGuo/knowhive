@@ -82,9 +82,17 @@ export function buildDistillationPrompt(messages: MessageRow[], priorSummary?: s
   const prior = priorSummary ? `Earlier summary:\n${priorSummary}\n\n` : "";
   return (
     `${prior}Conversation segment:\n${transcript}\n\n` +
-    "Produce JSON with exactly two keys:\n" +
-    '{"summary": "concise summary of the segment merged with the earlier summary, keep key facts and decisions",\n' +
-    ' "facts": ["durable facts about the user or their knowledge worth remembering across conversations"]}\n' +
-    "facts must be short standalone statements; return an empty array if none. Respond with JSON only."
+    "Produce JSON with exactly two keys: summary and facts.\n" +
+    "summary: concise summary of the segment merged with the earlier summary; keep key facts and decisions.\n" +
+    "facts: 1-5 short standalone statements about the user worth remembering across future " +
+    "conversations (goals, background, preferences, ongoing work). Be specific — include names " +
+    "and targets. Use [] ONLY if the segment reveals nothing about the user.\n\n" +
+    // Few-shot: without it, small models dump everything into summary and return [].
+    // Deliberately off-domain (cooking) — small models copy example facts verbatim,
+    // and off-domain leakage is both detectable and rarely recalled by embedding.
+    "Example (unrelated topic, format only — facts must come ONLY from the segment above):\n" +
+    "segment: user: 我在学法餐，周末常做甜点\n" +
+    'output: {"summary":"用户在学习法餐烹饪","facts":["用户在学习法餐","用户周末常做甜点"]}\n\n' +
+    "Respond with JSON only."
   );
 }

@@ -39,7 +39,8 @@ export const AppConfigSchema = z.object({
   // "single" = one-shot RAG; "agentic" = tool-use loop (Phase G). Default flips
   // only after the Task 7 eval gate passes.
   chat_mode: ChatMode.default("single"),
-  chat_memory_turns: z.number().int().default(0),
+  // Recent turns sent verbatim in session mode (Phase M). 0 = question only.
+  chat_memory_turns: z.number().int().default(6),
   memory_compression_threshold: z.number().int().default(20),
   custom_system_prompt: z.string().default(""),
 });
