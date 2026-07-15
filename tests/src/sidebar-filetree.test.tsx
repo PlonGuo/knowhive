@@ -88,3 +88,17 @@ describe('Sidebar with FileTree', () => {
     expect(screen.getByTestId('settings-button')).toBeInTheDocument()
   })
 })
+
+describe('Sidebar collapse (Claude-style)', () => {
+  it('collapses to a rail and expands back', async () => {
+    render(<Sidebar backendUrl={mockBackendUrl} />)
+    await waitFor(() => expect(screen.getByTestId('filetree')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('sidebar-collapse'))
+    expect(screen.queryByTestId('filetree')).not.toBeInTheDocument()
+    expect(screen.getByTestId('sidebar-rail')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('sidebar-expand'))
+    await waitFor(() => expect(screen.getByTestId('filetree')).toBeInTheDocument())
+  })
+})

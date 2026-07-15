@@ -41,7 +41,15 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
           selectedPath={selectedFilePath ?? undefined}
           backendUrl={backendUrl}
         />
-        <div className="flex flex-1 overflow-hidden rounded-xl border bg-background/75 shadow-sm backdrop-blur-md">
+        {/* Chat floats fully transparent over the dot grid; other views keep a card
+            for readability until their own redesign pass. */}
+        <div
+          className={
+            view === 'chat'
+              ? 'flex flex-1 overflow-hidden'
+              : 'flex flex-1 overflow-hidden rounded-xl border bg-background/75 shadow-sm backdrop-blur-md'
+          }
+        >
         {view === 'settings' ? (
           <SettingsPage backendUrl={backendUrl} onBack={() => setView('chat')} onConfigSaved={() => setConfigVersion((v) => v + 1)} />
         ) : view === 'community' ? (

@@ -33,6 +33,7 @@ export default function Sidebar({
     totalFiles: 0,
     processedFiles: 0,
   })
+  const [collapsed, setCollapsed] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const refreshTreeRef = useRef<(() => void) | null>(null)
 
@@ -106,16 +107,41 @@ export default function Sidebar({
       ? Math.round((importState.processedFiles / importState.totalFiles) * 100)
       : 0
 
+  if (collapsed) {
+    // Claude-style collapsed rail: just an expand handle below the traffic lights.
+    return (
+      <div data-testid="sidebar-rail" className="flex w-8 flex-col items-center pt-8">
+        <button
+          data-testid="sidebar-expand"
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand sidebar"
+          className="rounded-lg border bg-background/40 px-1.5 py-1 text-sm text-muted-foreground backdrop-blur-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          »
+        </button>
+      </div>
+    )
+  }
+
   return (
     <aside
       data-testid="sidebar"
-      className="flex w-64 flex-col overflow-hidden rounded-xl border bg-background/75 shadow-sm backdrop-blur-md"
+      className="flex w-64 flex-col overflow-hidden rounded-xl border bg-background/40 shadow-sm backdrop-blur-sm"
     >
-      <div className="flex h-12 items-center gap-2 border-b px-4">
-        <span className="text-lg font-bold text-foreground">KnowHive</span>
+      {/* Top strip: drag region (window title bar is hidden) + collapse handle.
+          Left padding leaves room for the macOS traffic lights overlaying the corner. */}
+      <div data-tauri-drag-region className="flex h-9 shrink-0 items-center justify-end pl-14 pr-2">
+        <button
+          data-testid="sidebar-collapse"
+          onClick={() => setCollapsed(true)}
+          aria-label="Collapse sidebar"
+          className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          «
+        </button>
       </div>
 
-      <div className="flex items-center justify-between px-3 pt-3 pb-1">
+      <div className="flex items-center justify-between px-3 pt-1 pb-1">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Knowledge
         </div>

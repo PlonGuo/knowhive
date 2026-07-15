@@ -72,11 +72,11 @@ describe('App', () => {
     })
   })
 
-  it('renders KnowHive title once the setup check resolves', async () => {
+  it('renders the app layout once the setup check resolves', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       json: () => Promise.resolve({ status: 'ok', version: '0.1.0' })
     } as Response)
     render(<App />)
-    expect(await screen.findByText('KnowHive')).toBeInTheDocument()
+    expect(await screen.findByTestId('app-layout')).toBeInTheDocument()
   })
 })

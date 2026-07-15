@@ -45,9 +45,9 @@ describe('AppLayout', () => {
     })
   })
 
-  it('sidebar contains KnowHive branding', async () => {
+  it('sidebar has a collapse handle (title row removed by design)', async () => {
     render(<App />)
-    expect(await screen.findByTestId('sidebar')).toHaveTextContent('KnowHive')
+    expect(await screen.findByTestId('sidebar-collapse')).toBeInTheDocument()
   })
 
   it('sidebar has a placeholder for file tree', async () => {

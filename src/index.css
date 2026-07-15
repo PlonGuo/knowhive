@@ -21,21 +21,21 @@
     --radius: 0.75rem;
   }
 
-  /* Dark — Claude-warm: warm charcoal, cream foreground, terracotta primary. */
+  /* Dark — Claude-desktop-warm: deep warm charcoal, cream foreground, terracotta primary. */
   .dark {
-    --background: 48 6% 12%;
-    --foreground: 46 27% 94%;
-    --border: 45 5% 22%;
-    --input: 45 5% 22%;
+    --background: 48 7% 9%;
+    --foreground: 46 25% 92%;
+    --border: 45 5% 19%;
+    --input: 45 5% 19%;
     --ring: 16 58% 58%;
     --primary: 16 58% 58%;
     --primary-foreground: 20 30% 10%;
-    --secondary: 46 5% 17%;
-    --secondary-foreground: 46 27% 94%;
-    --muted: 46 5% 17%;
-    --muted-foreground: 45 6% 63%;
-    --accent: 45 6% 21%;
-    --accent-foreground: 46 27% 94%;
+    --secondary: 47 5% 14%;
+    --secondary-foreground: 46 25% 92%;
+    --muted: 47 5% 14%;
+    --muted-foreground: 45 5% 58%;
+    --accent: 46 5% 18%;
+    --accent-foreground: 46 25% 92%;
   }
 }
 
