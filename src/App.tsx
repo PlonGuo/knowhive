@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import AppLayout from './components/layout/AppLayout'
 import OnboardingPage from './components/onboarding/OnboardingPage'
 import { getBackendUrl } from './lib/platform'
+import { initTheme } from './lib/theme'
+
+// Apply the persisted (or system) theme before first paint — avoids a light flash.
+initTheme()
 
 interface HealthStatus {
   status: string

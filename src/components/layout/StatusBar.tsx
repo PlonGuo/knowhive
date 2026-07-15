@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { getInitialTheme, setTheme, type Theme } from '../../lib/theme'
 
 interface WatcherStatus {
   running: boolean
@@ -22,6 +23,14 @@ export default function StatusBar({ health, error, backendUrl, configVersion, on
   const [watcher, setWatcher] = useState<WatcherStatus | null>(null)
   const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null)
   const [dueCount, setDueCount] = useState<number>(0)
+  const [theme, setThemeState] = useState<Theme>(() =>
+    getInitialTheme(window.localStorage, window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false),
+  )
+  const toggleTheme = () => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    setThemeState(next)
+  }
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchWatcherStatus = async () => {
@@ -153,6 +162,14 @@ export default function StatusBar({ health, error, backendUrl, configVersion, on
           {watcherLabel}
         </button>
       )}
+      <button
+        data-testid="theme-toggle"
+        onClick={toggleTheme}
+        aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        className="rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      >
+        {theme === 'dark' ? '☀' : '☾'}
+      </button>
     </footer>
   )
 }
