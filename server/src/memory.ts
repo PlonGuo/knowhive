@@ -83,7 +83,11 @@ export function parseDistillation(text: string): Distillation {
     if (typeof obj.summary !== "string") return empty;
     const strings = (v: unknown) =>
       (Array.isArray(v) ? v : []).filter(
-        (f): f is string => typeof f === "string" && f.trim().length > 0,
+        (f): f is string =>
+          typeof f === "string" &&
+          f.trim().length > 0 &&
+          // Small models sometimes emit literal "[]" / bracket junk as items.
+          !/^[\[\]{}()"'\s]*$/.test(f),
       );
     return { summary: obj.summary, facts: strings(obj.facts), preferences: strings(obj.preferences) };
   } catch {
@@ -143,9 +147,13 @@ export function buildDistillationPrompt(messages: MessageRow[], priorSummary?: s
     // and off-domain leakage is both detectable and rarely recalled by embedding.
     // preferences is [] in the example on purpose: those inject unconditionally,
     // so a copied example value must be harmless.
-    "Example (unrelated topic, format only — output must come ONLY from the segment above):\n" +
+    "Examples (unrelated topic, format only — output must come ONLY from the segment above):\n" +
     "segment: user: 我在学法餐，周末常做甜点\n" +
-    'output: {"summary":"用户在学习法餐烹饪","facts":["用户在学习法餐","用户周末常做甜点"],"preferences":[]}\n\n' +
+    'output: {"summary":"用户在学习法餐烹饪","facts":["用户在学习法餐","用户周末常做甜点"],"preferences":[]}\n' +
+    "segment: user: 列菜谱的时候请用编号列表\n" +
+    // The example preference is deliberately scope-limited ("when listing recipes") —
+    // preferences inject unconditionally, so even a verbatim-copied leak stays inert.
+    'output: {"summary":"用户要求菜谱用编号列表呈现","facts":[],"preferences":["列菜谱时用编号列表"]}\n\n' +
     "Respond with JSON only."
   );
 }

@@ -345,3 +345,16 @@ describe("distillation dedupe", () => {
     expect(facts.length).toBe(1);
   });
 });
+
+describe("procedural injection (M3)", () => {
+  test("standing instructions enter the system prompt in session mode", async () => {
+    const model = textOnlyModel("ok");
+    const deps = makeDeps({ chatModel: () => model as never });
+    deps.db.run("INSERT INTO memories (kind, content) VALUES ('procedural', '回答永远用中文')");
+    const sid = createSession(deps.db);
+    await postChat(deps, { ...userMessage("hi"), session_id: sid });
+    const system = JSON.stringify(model.doStreamCalls[0]!.prompt.find((m) => m.role === "system"));
+    expect(system).toContain("回答永远用中文");
+    expect(system).toContain("Standing instructions");
+  });
+});
