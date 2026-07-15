@@ -19,6 +19,7 @@ import { ingestRoutes } from "./ingestRoutes.ts";
 import { buildTree, flattenTree, resolveSafePath } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
+import { memoryRoutes } from "./memoryRoutes.ts";
 import { recallSemanticMemories } from "./sessions.ts";
 import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
@@ -261,6 +262,9 @@ app.route(
 
 // Chat sessions (Phase M): list/create/read/delete conversations.
 app.route("/", sessionRoutes({ db }));
+
+// Memory management (Phase M3): the user sees/edits/deletes learned memories.
+app.route("/", memoryRoutes({ db, embedFacts: (facts) => embedder(facts) }));
 
 console.log(
   `[server] KnowHive sidecar listening on http://127.0.0.1:${port} ` +
