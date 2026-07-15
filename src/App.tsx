@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from './components/layout/AppLayout'
 import OnboardingPage from './components/onboarding/OnboardingPage'
+import DotGrid from './components/reactbits/DotGrid'
 import { getBackendUrl } from './lib/platform'
 import { initTheme } from './lib/theme'
 
@@ -41,8 +42,9 @@ export default function App() {
 
   // Don't mount AppLayout until the setup check resolves — its children would fire
   // requests against the placeholder URL and the layout would flash before onboarding.
+  let screen: React.ReactNode
   if (firstRun === null) {
-    return (
+    screen = (
       <div
         data-testid="app-connecting"
         className="flex h-screen items-center justify-center text-sm text-muted-foreground"
@@ -50,11 +52,19 @@ export default function App() {
         Connecting to backend…
       </div>
     )
+  } else if (firstRun === true) {
+    screen = <OnboardingPage backendUrl={backendUrl} onComplete={() => setFirstRun(false)} />
+  } else {
+    screen = <AppLayout health={health} error={error} backendUrl={backendUrl} />
   }
 
-  if (firstRun === true) {
-    return <OnboardingPage backendUrl={backendUrl} onComplete={() => setFirstRun(false)} />
-  }
-
-  return <AppLayout health={health} error={error} backendUrl={backendUrl} />
+  return (
+    <>
+      {/* Global interactive background — content panels float above it (z-10). */}
+      <div className="fixed inset-0 z-0 bg-background">
+        <DotGrid />
+      </div>
+      <div className="relative z-10 h-screen">{screen}</div>
+    </>
+  )
 }
