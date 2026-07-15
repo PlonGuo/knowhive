@@ -91,6 +91,39 @@ export function parseDistillation(text: string): Distillation {
   }
 }
 
+export interface EvictionPolicy {
+  /** Semantic memory cap; least-recently-recalled evicted beyond it. */
+  maxSemantic: number;
+  /** Episodic traces older than this are dropped. */
+  episodicTtlDays: number;
+}
+
+interface EvictableRow {
+  id: number;
+  kind: string;
+  created_at: string;
+  last_recalled_at: string | null;
+}
+
+/** Pure eviction selection (Phase M3). Procedural rows are never auto-evicted —
+ * standing instructions only leave via the user (memory management UI). */
+export function selectEvictions(rows: EvictableRow[], policy: EvictionPolicy, now: Date): number[] {
+  const evict: number[] = [];
+
+  const cutoff = new Date(now.getTime() - policy.episodicTtlDays * 24 * 60 * 60 * 1000);
+  for (const r of rows) {
+    if (r.kind === "episodic" && new Date(r.created_at) < cutoff) evict.push(r.id);
+  }
+
+  const semantic = rows
+    .filter((r) => r.kind === "semantic")
+    .sort((a, b) => (a.last_recalled_at ?? a.created_at).localeCompare(b.last_recalled_at ?? b.created_at));
+  const overflow = semantic.length - policy.maxSemantic;
+  for (let i = 0; i < overflow; i++) evict.push(semantic[i]!.id);
+
+  return evict.sort((a, b) => a - b);
+}
+
 /** Prompt for the combined compression+distillation call — one LLM pass produces
  * both the rolling summary and durable facts (distillation rides the compression
  * window, so it costs zero extra turns). */

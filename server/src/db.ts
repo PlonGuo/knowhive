@@ -176,6 +176,7 @@ function migrate(db: Database): void {
   };
   addColumnIfMissing("chat_messages", "session_id", "session_id TEXT");
   addColumnIfMissing("chat_summaries", "session_id", "session_id TEXT");
+  addColumnIfMissing("memories", "last_recalled_at", "last_recalled_at TEXT");
 }
 
 export function openDb(dataDir: string): Database {

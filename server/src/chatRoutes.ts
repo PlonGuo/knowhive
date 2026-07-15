@@ -30,12 +30,13 @@ import {
 } from "./memory.ts";
 import { buildAgentSystemPrompt, buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { encodeVector } from "./retrieval.ts";
-import { appendMessage, getMessages, setSessionTitle, type MessageRow } from "./sessions.ts";
+import { appendMessage, getMessages, runEviction, setSessionTitle, type MessageRow } from "./sessions.ts";
 import type { ChunkRow } from "./store.ts";
 
 // 6 steps = pre-retrieval-backed first answer + up to 4 tool hops + guarded finale.
 export const MAX_AGENT_STEPS = 6;
 const TITLE_MAX_CHARS = 40;
+export const EVICTION_POLICY = { maxSemantic: 200, episodicTtlDays: 90 };
 
 export interface ChatRoutesDeps {
   getConfig: () => AppConfig;
@@ -125,6 +126,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
         );
       });
     }
+    runEviction(deps.db, EVICTION_POLICY);
   }
 
   app.post("/chat", async (c) => {

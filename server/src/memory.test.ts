@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  selectEvictions,
   buildChatContext,
   needsCompression,
   parseDistillation,
@@ -127,3 +128,41 @@ describe("buildChatContext instructions (M3)", () => {
     expect(systemExtra).toContain("Standing instructions");
   });
 });
+
+describe("selectEvictions (M3)", () => {
+  const row = (id: number, kind: string, created: string, recalled?: string) => ({
+    id,
+    kind,
+    created_at: created,
+    last_recalled_at: recalled ?? null,
+  })
+  const policy = { maxSemantic: 2, episodicTtlDays: 90 }
+  const now = new Date("2026-07-16T00:00:00Z")
+
+  test("semantic over the cap evicts least-recently-recalled first", () => {
+    const rows = [
+      row(1, "semantic", "2026-01-01", "2026-07-01"), // recently recalled — keep
+      row(2, "semantic", "2026-02-01"),               // never recalled, old — evict
+      row(3, "semantic", "2026-06-01", "2026-03-01"), // stale recall — keep (cap=2)
+    ]
+    expect(selectEvictions(rows, policy, now)).toEqual([2])
+  })
+
+  test("episodic past TTL is evicted; fresh episodic stays", () => {
+    const rows = [
+      row(10, "episodic", "2026-01-01"), // >90d — evict
+      row(11, "episodic", "2026-07-01"), // fresh — keep
+    ]
+    expect(selectEvictions(rows, policy, now)).toEqual([10])
+  })
+
+  test("procedural is never auto-evicted", () => {
+    const rows = [row(20, "procedural", "2020-01-01")]
+    expect(selectEvictions(rows, policy, now)).toEqual([])
+  })
+
+  test("under limits nothing is evicted", () => {
+    const rows = [row(1, "semantic", "2026-01-01"), row(2, "episodic", "2026-07-10")]
+    expect(selectEvictions(rows, policy, now)).toEqual([])
+  })
+})

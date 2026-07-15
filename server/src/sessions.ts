@@ -3,6 +3,7 @@
 // in db.ts adds the session_id dimension).
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
+import { selectEvictions, type EvictionPolicy } from "./memory.ts";
 import { cosineSimilarity, decodeVector } from "./retrieval.ts";
 
 export interface SessionRow {
@@ -73,14 +74,29 @@ export function recallSemanticMemories(
   { k, minSimilarity }: { k: number; minSimilarity: number },
 ): string[] {
   const rows = db
-    .query("SELECT content, embedding FROM memories WHERE kind = 'semantic' AND embedding IS NOT NULL")
-    .all() as { content: string; embedding: Uint8Array }[];
-  return rows
-    .map((r) => ({ content: r.content, score: cosineSimilarity(queryVector, decodeVector(r.embedding)) }))
+    .query("SELECT id, content, embedding FROM memories WHERE kind = 'semantic' AND embedding IS NOT NULL")
+    .all() as { id: number; content: string; embedding: Uint8Array }[];
+  const hits = rows
+    .map((r) => ({ id: r.id, content: r.content, score: cosineSimilarity(queryVector, decodeVector(r.embedding)) }))
     .filter((r) => r.score >= minSimilarity)
     .sort((a, b) => b.score - a.score)
-    .slice(0, k)
-    .map((r) => r.content);
+    .slice(0, k);
+  // Recall keeps a memory alive under the LRU eviction policy.
+  for (const h of hits) {
+    db.run("UPDATE memories SET last_recalled_at = datetime('now') WHERE id = ?", [h.id]);
+  }
+  return hits.map((r) => r.content);
+}
+
+/** Apply the eviction policy (Phase M3): run at startup and after distillation. */
+export function runEviction(db: Database, policy: EvictionPolicy, now = new Date()): number {
+  const rows = db
+    .query("SELECT id, kind, created_at, last_recalled_at FROM memories")
+    .all() as Array<{ id: number; kind: string; created_at: string; last_recalled_at: string | null }>;
+  const ids = selectEvictions(rows, policy, now);
+  for (const id of ids) db.run("DELETE FROM memories WHERE id = ?", [id]);
+  if (ids.length > 0) console.log(`[memory] evicted ${ids.length} memories`);
+  return ids.length;
 }
 
 export function deleteSession(db: Database, sessionId: string): void {

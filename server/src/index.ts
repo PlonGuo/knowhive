@@ -8,7 +8,7 @@ import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { parseArgs } from "./args.ts";
-import { chatRoutes } from "./chatRoutes.ts";
+import { chatRoutes, EVICTION_POLICY } from "./chatRoutes.ts";
 import { configPath, loadConfig } from "./config.ts";
 import { configRoutes } from "./configRoutes.ts";
 import { exportRoutes } from "./exportRoutes.ts";
@@ -20,7 +20,7 @@ import { buildTree, flattenTree, resolveSafePath } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
 import { memoryRoutes } from "./memoryRoutes.ts";
-import { recallSemanticMemories } from "./sessions.ts";
+import { recallSemanticMemories, runEviction } from "./sessions.ts";
 import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
@@ -265,6 +265,8 @@ app.route("/", sessionRoutes({ db }));
 
 // Memory management (Phase M3): the user sees/edits/deletes learned memories.
 app.route("/", memoryRoutes({ db, embedFacts: (facts) => embedder(facts) }));
+// Startup eviction sweep (LRU cap on semantic, TTL on episodic).
+runEviction(db, EVICTION_POLICY);
 
 console.log(
   `[server] KnowHive sidecar listening on http://127.0.0.1:${port} ` +
