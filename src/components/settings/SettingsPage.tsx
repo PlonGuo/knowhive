@@ -41,6 +41,13 @@ interface RerankerDownloadStatus {
   error?: string
 }
 
+interface MemoryItem {
+  id: number
+  kind: 'semantic' | 'procedural'
+  content: string
+  created_at: string
+}
+
 interface EmbeddingPull {
   model: string
   percent: number
@@ -72,6 +79,8 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [rerankerStatus, setRerankerStatus] = useState<RerankerStatus | null>(null)
+  const [memories, setMemories] = useState<MemoryItem[]>([])
+  const [editingMemory, setEditingMemory] = useState<{ id: number; content: string } | null>(null)
   const [rerankerDownloading, setRerankerDownloading] = useState(false)
   const [rerankerDownloadStatus, setRerankerDownloadStatus] = useState<RerankerDownloadStatus | null>(null)
   const rerankerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -97,6 +106,32 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
       })
       .catch(() => {})
   }, [backendUrl])
+
+  useEffect(() => {
+    fetch(`${backendUrl}/memories`)
+      .then((r) => (r.ok ? r.json() : { memories: [] }))
+      .then((data: { memories: MemoryItem[] }) => setMemories(data.memories ?? []))
+      .catch(() => {})
+  }, [backendUrl])
+
+  const deleteMemory = async (id: number) => {
+    await fetch(`${backendUrl}/memories/${id}`, { method: 'DELETE' }).catch(() => {})
+    setMemories((prev) => prev.filter((m) => m.id !== id))
+  }
+
+  const saveMemoryEdit = async () => {
+    if (!editingMemory) return
+    const { id, content } = editingMemory
+    if (content.trim()) {
+      await fetch(`${backendUrl}/memories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }).catch(() => {})
+      setMemories((prev) => prev.map((m) => (m.id === id ? { ...m, content } : m)))
+    }
+    setEditingMemory(null)
+  }
 
   // Stop polling on unmount
   useEffect(() => {
@@ -576,6 +611,62 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
               Warning: The selected embedding model is not downloaded. Ingestion may fail.
             </p>
           )}
+
+          {/* Memory (Phase M3): what the assistant has learned about you */}
+          <div data-testid="memory-section" className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-2">
+            <h3 className="text-sm font-medium text-foreground">Memory</h3>
+            <p className="text-xs text-muted-foreground">
+              Facts and standing instructions the assistant has learned from your conversations.
+            </p>
+            {memories.length === 0 ? (
+              <p data-testid="memory-empty" className="text-xs text-muted-foreground">
+                Nothing learned yet.
+              </p>
+            ) : (
+              <ul data-testid="memory-list" className="space-y-1">
+                {memories.map((m) => (
+                  <li
+                    key={m.id}
+                    data-testid={`memory-item-${m.id}`}
+                    className="group flex items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-accent/40"
+                  >
+                    <span className="rounded bg-accent px-1 text-[10px] uppercase text-accent-foreground">
+                      {m.kind === 'procedural' ? 'rule' : 'fact'}
+                    </span>
+                    {editingMemory?.id === m.id ? (
+                      <input
+                        data-testid={`memory-edit-input-${m.id}`}
+                        value={editingMemory.content}
+                        onChange={(e) => setEditingMemory({ id: m.id, content: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveMemoryEdit()
+                          if (e.key === 'Escape') setEditingMemory(null)
+                        }}
+                        className="flex-1 rounded border bg-background px-1 py-0.5 text-sm focus:outline-none"
+                        autoFocus
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setEditingMemory({ id: m.id, content: m.content })}
+                        className="min-w-0 flex-1 truncate text-left text-foreground"
+                        title="Click to edit"
+                      >
+                        {m.content}
+                      </button>
+                    )}
+                    <button
+                      data-testid={`memory-delete-${m.id}`}
+                      onClick={() => deleteMemory(m.id)}
+                      aria-label="Forget this memory"
+                      className="hidden px-1 text-xs text-muted-foreground group-hover:block hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {/* Data Management */}
           <div data-testid="data-management-section" className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-2">
