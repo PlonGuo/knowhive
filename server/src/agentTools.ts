@@ -39,6 +39,8 @@ export interface AgentToolDeps {
   readNote: (relPath: string) => { path: string; content: string };
   listNotePaths: () => string[];
   sources: SourceCollector;
+  /** Episodic search over past conversations (session mode only, Phase M3). */
+  searchHistory?: (query: string) => { question: string; answer: string; when: string }[];
 }
 
 const errorValue = (err: unknown) => ({ error: (err as Error).message });
@@ -99,5 +101,22 @@ export function buildAgentTools(deps: AgentToolDeps): ToolSet {
         }
       },
     }),
+
+    ...(deps.searchHistory
+      ? {
+          search_history: tool({
+            description:
+              "Search past conversations with this user. Use when the question refers to something discussed before.",
+            inputSchema: z.object({ query: z.string().describe("keyword to search for") }),
+            execute: async ({ query }) => {
+              try {
+                return { results: deps.searchHistory!(query) };
+              } catch (err) {
+                return errorValue(err);
+              }
+            },
+          }),
+        }
+      : {}),
   };
 }

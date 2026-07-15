@@ -148,3 +148,21 @@ describe("list_notes", () => {
     expect(out.truncated).toBe(true);
   });
 });
+
+describe("search_history (M3)", () => {
+  test("absent without a searchHistory dep, present with one", () => {
+    expect(buildAgentTools(makeDeps()).search_history).toBeUndefined();
+    const tools = buildAgentTools(
+      makeDeps({ searchHistory: () => [{ question: "q", answer: "a", when: "2026-07-16" }] }),
+    );
+    expect(tools.search_history).toBeDefined();
+  });
+
+  test("returns episodic hits", async () => {
+    const tools = buildAgentTools(
+      makeDeps({ searchHistory: (q) => [{ question: `问过${q}`, answer: "a", when: "t" }] }),
+    );
+    const out = await tools.search_history!.execute!({ query: "堆" }, opts);
+    expect(out).toEqual({ results: [{ question: "问过堆", answer: "a", when: "t" }] });
+  });
+});

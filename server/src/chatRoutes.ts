@@ -30,7 +30,7 @@ import {
 } from "./memory.ts";
 import { buildAgentSystemPrompt, buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { encodeVector } from "./retrieval.ts";
-import { appendMessage, getMessages, runEviction, setSessionTitle, type MessageRow } from "./sessions.ts";
+import { appendMessage, getMessages, runEviction, searchEpisodic, setSessionTitle, type MessageRow } from "./sessions.ts";
 import type { ChunkRow } from "./store.ts";
 
 // 6 steps = pre-retrieval-backed first answer + up to 4 tool hops + guarded finale.
@@ -190,6 +190,8 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
           readNote: deps.readNote,
           listNotePaths: deps.listNotePaths,
           sources,
+          // Past-conversation search only makes sense with a session.
+          searchHistory: session_id ? (q) => searchEpisodic(deps.db, q, 5) : undefined,
         }),
         stopWhen: stepCountIs(MAX_AGENT_STEPS),
         prepareStep: ({ stepNumber }) =>

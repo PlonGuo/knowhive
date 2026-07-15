@@ -88,6 +88,30 @@ export function recallSemanticMemories(
   return hits.map((r) => r.content);
 }
 
+export interface EpisodicHit {
+  question: string;
+  answer: string;
+  when: string;
+}
+
+/** Keyword search over episodic traces (agent search_history tool, Phase M3).
+ * LIKE is enough at personal scale; traces store {question, answer, sources} JSON. */
+export function searchEpisodic(db: Database, query: string, limit: number): EpisodicHit[] {
+  const rows = db
+    .query(
+      "SELECT content, created_at FROM memories WHERE kind = 'episodic' AND content LIKE ? ORDER BY id DESC LIMIT ?",
+    )
+    .all(`%${query}%`, limit) as { content: string; created_at: string }[];
+  return rows.flatMap((r) => {
+    try {
+      const t = JSON.parse(r.content) as { question?: string; answer?: string };
+      return [{ question: t.question ?? "", answer: t.answer ?? "", when: r.created_at }];
+    } catch {
+      return [];
+    }
+  });
+}
+
 /** Apply the eviction policy (Phase M3): run at startup and after distillation. */
 export function runEviction(db: Database, policy: EvictionPolicy, now = new Date()): number {
   const rows = db

@@ -9,6 +9,7 @@ import {
   listSessions,
   setSessionTitle,
   recallSemanticMemories,
+  searchEpisodic,
 } from "./sessions.ts";
 
 const freshDb = () => openDbAt(":memory:");
@@ -125,4 +126,25 @@ test("recallSemanticMemories returns top matches above the similarity floor", ()
 
 test("recallSemanticMemories empty table returns []", () => {
   expect(recallSemanticMemories(freshDb(), [1, 0], { k: 3, minSimilarity: 0.5 })).toEqual([]);
+});
+
+test("searchEpisodic finds traces by keyword, newest first, capped", () => {
+  const db = freshDb();
+  const sid = createSession(db);
+  for (let i = 0; i < 7; i++) {
+    db.run("INSERT INTO memories (kind, session_id, content) VALUES ('episodic', ?, ?)", [
+      sid,
+      JSON.stringify({ question: `关于堆的问题${i}`, answer: `答案${i}`, sources: [] }),
+    ]);
+  }
+  db.run("INSERT INTO memories (kind, session_id, content) VALUES ('episodic', ?, ?)", [
+    sid,
+    JSON.stringify({ question: "DP问题", answer: "DP答案", sources: [] }),
+  ]);
+
+  const hits = searchEpisodic(db, "堆", 5);
+  expect(hits.length).toBe(5);
+  expect(hits[0]!.question).toBe("关于堆的问题6");
+  expect(hits[0]!.when).toBeTruthy();
+  expect(searchEpisodic(db, "不存在的词", 5)).toEqual([]);
 });
