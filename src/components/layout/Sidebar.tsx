@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import FileTree from '../knowledge/FileTree'
 import { selectFiles } from '../../lib/platform'
+import { getInitialTheme, setTheme, type Theme } from '../../lib/theme'
 
 interface ImportState {
   status: 'idle' | 'ingesting' | 'completed' | 'failed'
@@ -13,6 +14,7 @@ interface SidebarProps {
   onSettingsClick?: () => void
   onCommunityClick?: () => void
   onOverviewClick?: () => void
+  onReviewClick?: () => void
   backendUrl?: string
   onFileSelect?: (path: string) => void
   selectedPath?: string
@@ -23,6 +25,7 @@ export default function Sidebar({
   onSettingsClick,
   onCommunityClick,
   onOverviewClick,
+  onReviewClick,
   backendUrl,
   onFileSelect,
   selectedPath,
@@ -34,6 +37,23 @@ export default function Sidebar({
     processedFiles: 0,
   })
   const [collapsed, setCollapsed] = useState(false)
+  const [dueCount, setDueCount] = useState(0)
+  const [theme, setThemeState] = useState<Theme>(() =>
+    getInitialTheme(window.localStorage, window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false),
+  )
+  const toggleTheme = () => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    setThemeState(next)
+  }
+
+  useEffect(() => {
+    if (!backendUrl) return
+    fetch(`${backendUrl}/review/stats`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setDueCount(data?.due_today ?? 0))
+      .catch(() => {})
+  }, [backendUrl])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const refreshTreeRef = useRef<(() => void) | null>(null)
 
@@ -128,31 +148,28 @@ export default function Sidebar({
       data-testid="sidebar"
       className="flex w-64 flex-col overflow-hidden rounded-xl border bg-background/40 shadow-sm backdrop-blur-sm"
     >
-      {/* Top strip: drag region (window title bar is hidden) + collapse handle.
-          Left padding leaves room for the macOS traffic lights overlaying the corner. */}
-      <div data-tauri-drag-region className="flex h-9 shrink-0 items-center justify-end pl-14 pr-2">
-        <button
-          data-testid="sidebar-collapse"
-          onClick={() => setCollapsed(true)}
-          aria-label="Collapse sidebar"
-          className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          «
-        </button>
-      </div>
-
-      <div className="flex items-center justify-between px-3 pt-1 pb-1">
+      <div className="flex items-center justify-between px-3 pt-3 pb-1">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Knowledge
         </div>
-        <button
-          data-testid="import-button"
-          onClick={handleImport}
-          disabled={importState.status === 'ingesting'}
-          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-        >
-          {importState.status === 'ingesting' ? 'Importing...' : '+ Import'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            data-testid="import-button"
+            onClick={handleImport}
+            disabled={importState.status === 'ingesting'}
+            className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+          >
+            {importState.status === 'ingesting' ? 'Importing...' : '+ Import'}
+          </button>
+          <button
+            data-testid="sidebar-collapse"
+            onClick={() => setCollapsed(true)}
+            aria-label="Collapse sidebar"
+            className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
+            «
+          </button>
+        </div>
       </div>
 
       {importState.status !== 'idle' && (
@@ -183,7 +200,7 @@ export default function Sidebar({
             onRefreshReady={handleRefreshReady}
           />
         ) : (
-          <p className="px-2 text-sm text-muted-foreground">No files imported yet</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No files imported yet</p>
         )}
       </div>
 
@@ -209,6 +226,27 @@ export default function Sidebar({
         >
           Settings
         </button>
+        <div className="flex items-center justify-between px-1 pt-1">
+          {dueCount > 0 ? (
+            <button
+              data-testid="review-badge"
+              onClick={onReviewClick}
+              className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              {dueCount} due
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            data-testid="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+        </div>
       </div>
     </aside>
   )

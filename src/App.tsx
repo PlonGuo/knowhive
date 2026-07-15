@@ -8,14 +8,7 @@ import { initTheme } from './lib/theme'
 // Apply the persisted (or system) theme before first paint — avoids a light flash.
 initTheme()
 
-interface HealthStatus {
-  status: string
-  version: string
-}
-
 export default function App() {
-  const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [backendUrl, setBackendUrl] = useState('http://127.0.0.1:18200')
   const [firstRun, setFirstRun] = useState<boolean | null>(null)
 
@@ -24,16 +17,14 @@ export default function App() {
       try {
         const url = await getBackendUrl()
         setBackendUrl(url)
-        const [healthRes, setupRes] = await Promise.all([
+        // /health warms the connection check alongside the setup gate.
+        const [, setupRes] = await Promise.all([
           fetch(`${url}/health`),
           fetch(`${url}/setup/status`),
         ])
-        const healthData: HealthStatus = await healthRes.json()
         const setupData: { first_run?: boolean } = await setupRes.json()
-        setHealth(healthData)
         setFirstRun(setupData.first_run === true)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+      } catch {
         setFirstRun(false)
       }
     }
@@ -55,7 +46,7 @@ export default function App() {
   } else if (firstRun === true) {
     screen = <OnboardingPage backendUrl={backendUrl} onComplete={() => setFirstRun(false)} />
   } else {
-    screen = <AppLayout health={health} error={error} backendUrl={backendUrl} />
+    screen = <AppLayout backendUrl={backendUrl} />
   }
 
   return (

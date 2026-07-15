@@ -29,7 +29,7 @@ describe('App', () => {
     expect(screen.getByTestId('app-connecting')).toHaveTextContent('Connecting')
   })
 
-  it('displays health status on successful /health call', async () => {
+  it('probes /health alongside the setup check and renders the layout', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       json: () => Promise.resolve({ status: 'ok', version: '0.1.0' })
     } as Response)
@@ -37,19 +37,18 @@ describe('App', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Backend: ok v0.1.0')).toBeInTheDocument()
+      expect(screen.getByTestId('app-layout')).toBeInTheDocument()
     })
-
     expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:18200/health')
   })
 
-  it('displays error when backend is unreachable', async () => {
+  it('still renders the layout when the backend is unreachable', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'))
 
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Disconnected')).toBeInTheDocument()
+      expect(screen.getByTestId('app-layout')).toBeInTheDocument()
     })
   })
 

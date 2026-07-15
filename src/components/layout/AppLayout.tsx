@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import Sidebar from './Sidebar'
 import ChatArea from './ChatArea'
-import StatusBar from './StatusBar'
 import SettingsPage from '../settings/SettingsPage'
 import MarkdownEditor from '../knowledge/MarkdownEditor'
 import CommunityBrowser from '../community/CommunityBrowser'
@@ -9,15 +8,12 @@ import ReviewPage from '../review/ReviewPage'
 import KnowledgeOverview from '../knowledge/KnowledgeOverview'
 
 interface AppLayoutProps {
-  health: { status: string; version: string } | null
-  error: string | null
   backendUrl: string
 }
 
-export default function AppLayout({ health, error, backendUrl }: AppLayoutProps) {
+export default function AppLayout({ backendUrl }: AppLayoutProps) {
   const [view, setView] = useState<'chat' | 'settings' | 'editor' | 'community' | 'review' | 'overview'>('chat')
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
-  const [configVersion, setConfigVersion] = useState(0)
 
   const handleFileSelect = (path: string) => {
     setSelectedFilePath(path)
@@ -31,12 +27,21 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
 
   return (
     <div data-testid="app-layout" className="flex h-screen flex-col">
+      {/* Claude-desktop-style top strip: the native title bar is hidden, so this
+          full-width gradient (background → transparent) is the window drag区, with
+          the macOS traffic lights floating in its left edge. */}
+      <div
+        data-testid="drag-strip"
+        data-tauri-drag-region
+        className="h-9 w-full shrink-0 bg-gradient-to-b from-background via-background/70 to-transparent"
+      />
       {/* Floating panels over the DotGrid background: gap + padding lets it show through. */}
-      <div className="flex flex-1 gap-3 overflow-hidden p-3">
+      <div className="flex flex-1 gap-3 overflow-hidden px-3 pb-3">
         <Sidebar
           onSettingsClick={() => setView('settings')}
           onCommunityClick={() => setView('community')}
           onOverviewClick={() => setView('overview')}
+          onReviewClick={() => setView('review')}
           onFileSelect={handleFileSelect}
           selectedPath={selectedFilePath ?? undefined}
           backendUrl={backendUrl}
@@ -51,7 +56,7 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
           }
         >
         {view === 'settings' ? (
-          <SettingsPage backendUrl={backendUrl} onBack={() => setView('chat')} onConfigSaved={() => setConfigVersion((v) => v + 1)} />
+          <SettingsPage backendUrl={backendUrl} onBack={() => setView('chat')} />
         ) : view === 'community' ? (
           <CommunityBrowser backendUrl={backendUrl} onBack={() => setView('chat')} />
         ) : view === 'review' ? (
@@ -69,7 +74,6 @@ export default function AppLayout({ health, error, backendUrl }: AppLayoutProps)
         )}
         </div>
       </div>
-      <StatusBar health={health} error={error} backendUrl={backendUrl} configVersion={configVersion} onReviewClick={() => setView("review")} />
     </div>
   )
 }

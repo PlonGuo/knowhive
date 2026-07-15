@@ -36,12 +36,12 @@ describe('AppLayout', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders the three-panel layout (sidebar, chat, status bar)', async () => {
+  it('renders the shell (drag strip, sidebar, chat)', async () => {
     render(<App />)
     await waitFor(() => {
+      expect(screen.getByTestId('drag-strip')).toBeInTheDocument()
       expect(screen.getByTestId('sidebar')).toBeInTheDocument()
       expect(screen.getByTestId('chat-area')).toBeInTheDocument()
-      expect(screen.getByTestId('status-bar')).toBeInTheDocument()
     })
   })
 
@@ -60,13 +60,9 @@ describe('AppLayout', () => {
     expect(await screen.findByTestId('chat-area')).toHaveTextContent('Start a conversation')
   })
 
-  it('status bar shows backend connection status', async () => {
+  it('sidebar footer hosts the theme toggle (status bar removed by design)', async () => {
     render(<App />)
-    await waitFor(() => {
-      const statusBar = screen.getByTestId('status-bar')
-      expect(statusBar).toHaveTextContent('ok')
-      expect(statusBar).toHaveTextContent('v0.1.0')
-    })
+    expect(await screen.findByTestId('theme-toggle')).toBeInTheDocument()
   })
 
   it('shows a connecting placeholder while the setup check is pending', () => {
@@ -75,13 +71,10 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('app-connecting')).toHaveTextContent('Connecting')
   })
 
-  it('status bar shows error when backend is unreachable', async () => {
+  it('renders the layout even when the backend is unreachable', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'))
     render(<App />)
-    await waitFor(() => {
-      const statusBar = screen.getByTestId('status-bar')
-      expect(statusBar).toHaveTextContent('Disconnected')
-    })
+    expect(await screen.findByTestId('app-layout')).toBeInTheDocument()
   })
 
   it('sidebar has a settings button', async () => {
