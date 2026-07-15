@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { openDbAt } from "./db.ts";
+import { encodeVector } from "./retrieval.ts";
 import {
   appendMessage,
   createSession,
@@ -7,6 +8,7 @@ import {
   getMessages,
   listSessions,
   setSessionTitle,
+  recallSemanticMemories,
 } from "./sessions.ts";
 
 const freshDb = () => openDbAt(":memory:");
@@ -100,4 +102,27 @@ test("migration is idempotent: opening an old-shape db adds session_id columns",
   // openDbAt already migrated — assert the column exists and re-running is safe.
   const cols = db.query("PRAGMA table_info(chat_messages)").all() as { name: string }[];
   expect(cols.some((c) => c.name === "session_id")).toBe(true);
+});
+
+test("recallSemanticMemories returns top matches above the similarity floor", () => {
+  const db = freshDb();
+  const insert = (content: string, vec: number[]) =>
+    db.run("INSERT INTO memories (kind, content, embedding) VALUES ('semantic', ?, ?)", [
+      content,
+      encodeVector(vec),
+    ]);
+  insert("用户在准备面试", [1, 0, 0]);
+  insert("用户喜欢猫", [0, 1, 0]);
+  insert("无嵌入的记忆不参与", [0, 0, 1]);
+  db.run("INSERT INTO memories (kind, content) VALUES ('semantic', '空向量')");
+  db.run("INSERT INTO memories (kind, content, embedding) VALUES ('episodic', 'trace', ?)", [
+    encodeVector([1, 0, 0]),
+  ]);
+
+  const hits = recallSemanticMemories(db, [0.9, 0.1, 0], { k: 2, minSimilarity: 0.5 });
+  expect(hits).toEqual(["用户在准备面试"]);
+});
+
+test("recallSemanticMemories empty table returns []", () => {
+  expect(recallSemanticMemories(freshDb(), [1, 0], { k: 3, minSimilarity: 0.5 })).toEqual([]);
 });

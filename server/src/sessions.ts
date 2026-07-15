@@ -3,6 +3,7 @@
 // in db.ts adds the session_id dimension).
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
+import { cosineSimilarity, decodeVector } from "./retrieval.ts";
 
 export interface SessionRow {
   id: string;
@@ -62,6 +63,24 @@ export function getMessages(db: Database, sessionId: string): MessageRow[] {
     )
     .all(sessionId) as Array<Omit<MessageRow, "sources"> & { sources: string | null }>;
   return rows.map((r) => ({ ...r, sources: r.sources ? (JSON.parse(r.sources) as string[]) : [] }));
+}
+
+/** Brute-force cosine recall over semantic memories (same pattern as chunk KNN —
+ * a personal KB accumulates at most thousands of facts, exact scan is sub-ms). */
+export function recallSemanticMemories(
+  db: Database,
+  queryVector: ArrayLike<number>,
+  { k, minSimilarity }: { k: number; minSimilarity: number },
+): string[] {
+  const rows = db
+    .query("SELECT content, embedding FROM memories WHERE kind = 'semantic' AND embedding IS NOT NULL")
+    .all() as { content: string; embedding: Uint8Array }[];
+  return rows
+    .map((r) => ({ content: r.content, score: cosineSimilarity(queryVector, decodeVector(r.embedding)) }))
+    .filter((r) => r.score >= minSimilarity)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k)
+    .map((r) => r.content);
 }
 
 export function deleteSession(db: Database, sessionId: string): void {

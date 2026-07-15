@@ -19,6 +19,7 @@ import { ingestRoutes } from "./ingestRoutes.ts";
 import { buildTree, flattenTree, resolveSafePath } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
+import { recallSemanticMemories } from "./sessions.ts";
 import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
@@ -251,6 +252,10 @@ app.route(
       return text;
     },
     embedFacts: (facts) => embedder(facts),
+    recallMemories: async (question) => {
+      const [vec] = await embedder([question]);
+      return recallSemanticMemories(db, vec!, { k: 3, minSimilarity: 0.5 });
+    },
   }),
 );
 
