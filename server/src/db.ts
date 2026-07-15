@@ -82,6 +82,24 @@ CREATE TABLE IF NOT EXISTS summaries (
   updated_at      TEXT DEFAULT (datetime('now'))
 );
 
+-- Phase M: multi-session chat + layered memory.
+CREATE TABLE IF NOT EXISTS sessions (
+  id              TEXT PRIMARY KEY,
+  title           TEXT DEFAULT '',
+  created_at      TEXT DEFAULT (datetime('now')),
+  updated_at      TEXT DEFAULT (datetime('now'))
+);
+
+-- kind: 'episodic' (per-turn trace, no embedding) | 'semantic' (distilled fact, embedded).
+CREATE TABLE IF NOT EXISTS memories (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind            TEXT NOT NULL,
+  session_id      TEXT,
+  content         TEXT NOT NULL,
+  embedding       BLOB,
+  created_at      TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS review_items (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path       TEXT NOT NULL,
@@ -143,7 +161,21 @@ export function openDbAt(dbPath: string): Database {
     /* extension loading unavailable on this platform — brute-force path is unaffected */
   }
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+/** Idempotent column additions for tables that predate Phase M (multi-session chat).
+ * CREATE IF NOT EXISTS can't add columns, so existing DBs need ALTERs. */
+function migrate(db: Database): void {
+  const addColumnIfMissing = (table: string, column: string, ddl: string) => {
+    const cols = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+    }
+  };
+  addColumnIfMissing("chat_messages", "session_id", "session_id TEXT");
+  addColumnIfMissing("chat_summaries", "session_id", "session_id TEXT");
 }
 
 export function openDb(dataDir: string): Database {
