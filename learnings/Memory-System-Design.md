@@ -51,3 +51,16 @@ procedural 记忆（用户偏好注入 system prompt）、TTL/rolling 淘汰、�
 摘要和事实，边际成本为零。另一个值得讲的是 few-shot 泄漏：示例事实被小模型抄进用户记忆库，
 我的修法不是删示例而是把示例换到离题领域，让泄漏『既可检测又无害化』——因为污染的危害
 正比于它与真实查询的 embedding 相似度。」
+
+## M3 附记（2026-07-16）
+
+管理 UI（Settings Memory 卡：fact/rule 徽标、行内编辑、删除）、procedural 记忆
+（蒸馏第三键 preferences → 无条件注入 system）、LRU/TTL 淘汰（semantic 上限 200 按
+最近召回淘汰、episodic 90 天 TTL、**procedural 永不自动删**——常驻指令只能由用户删）、
+agent `search_history` 工具（episodic 关键词检索，仅 session 模式挂载）。
+
+新增两个小模型对抗样本：①字面 `"[]"` 被当作偏好字符串入库（括号垃圾过滤）；②空数组
+示例教会模型偏好栏永远留空、指令全进 facts（第二个 few-shot 示例修，且示例偏好刻意
+**作用域受限**——无条件注入的东西，泄漏时的危害必须被设计成惰性的）。
+
+未做：记忆管理 UI 的手动新增（编辑/删除已有）；episodic 定期回顾蒸馏。
