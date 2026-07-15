@@ -30,7 +30,17 @@
   - **壳**:原生标题栏隐藏(tauri.conf `titleBarStyle: Overlay` + `hiddenTitle`),顶部全宽「背景→透明」渐变条当拖动区(Claude desktop 式);侧栏半透明毛玻璃 + Claude 式收缩(«/»);**状态栏删除**(backend/watcher/model 指示是调试噪音),复习红点+主题切换挪侧栏底部。
   - **Chat**:Claude 式消息列(assistant 无气泡直排背景上,user 半透明胶囊,居中 max-w-3xl,悬浮输入卡);Settings/Onboarding 卡片化 + 全部硬编码颜色换 token(onboarding 原来暗色下不可读)。
   - 两轮用户视觉反馈驱动迭代;195 vitest + 176 bun + 5 cargo 绿。
-- 👉 **下一步候选**:memory system(project_memory_system)/ Phase H(写工具+权限,AI SDK 原生审批流已确认)/ 云模型 arm 评估(DeepSeek,验证「agentic 瓶颈在模型」假设,learnings/Agentic-vs-SingleShot.md)。
+- ✅ **Phase M 完成(2026-07-16)——Memory System M1+M2**(learnings/Memory-System-Design.md):
+  - 多会话持久化(sessions/chat_messages+session_id 迁移);短期 = 最近6轮原文 + 水位线压缩
+    (>20 未摘要触发,承旧 Python 机制);episodic 每轮落库;**semantic 蒸馏搭压缩顺风车**
+    (一次 LLM pass 产出摘要+事实,零额外调用)→ embedding 入 memories 表 → 问题相似度召回
+    (top3,≥0.5)注入 system。hooks 全部 fail-open;无 session_id 字节级兼容(评估管线不受影响)。
+  - 前端:侧栏 Chats 区(新建/切换/悬停删除),会话懒创建,标题取首问。
+  - 踩坑(有测试钉住):llama3.2 蒸馏偷懒(few-shot 修)→ few-shot 示例泄漏进记忆库
+    (离题示例修——污染危害正比于与真实查询的 embedding 相似度)→ 重复蒸馏(内容去重)。
+  - 真机闭环:新会话召回旧会话陈述的个人事实(KB 无此信息);重启持久。206 bun + 200 vitest 绿。
+- 👉 **下一步候选**:M3(procedural 记忆+TTL 淘汰+记忆管理 UI)/ Phase H(写工具+权限,AI SDK
+  原生审批流已确认)/ 云模型 arm 评估(DeepSeek,验证「agentic 瓶颈在模型」假设)。
 
 ## Phase D 移植明细(全部带 TDD parity 测试 + e2e)
 
