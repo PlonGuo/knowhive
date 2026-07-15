@@ -93,12 +93,37 @@ describe("parseDistillation", () => {
   });
 
   test("tolerates missing facts and garbage", () => {
-    expect(parseDistillation('{"summary":"s"}')).toEqual({ summary: "s", facts: [] });
-    expect(parseDistillation("not json at all")).toEqual({ summary: "", facts: [] });
-    expect(parseDistillation('{"summary": 42, "facts": "x"}')).toEqual({ summary: "", facts: [] });
+    expect(parseDistillation('{"summary":"s"}')).toEqual({ summary: "s", facts: [], preferences: [] });
+    expect(parseDistillation("not json at all")).toEqual({ summary: "", facts: [], preferences: [] });
+    expect(parseDistillation('{"summary": 42, "facts": "x"}')).toEqual({ summary: "", facts: [], preferences: [] });
   });
 
   test("filters non-string and blank facts", () => {
     expect(parseDistillation('{"summary":"s","facts":["ok", "", 3, "  "]}').facts).toEqual(["ok"]);
+  });
+});
+
+describe("parseDistillation preferences (M3)", () => {
+  test("extracts preferences alongside facts", () => {
+    const out = parseDistillation(
+      '{"summary":"s","facts":["f1"],"preferences":["回答用中文","解释先给直觉"]}',
+    );
+    expect(out.preferences).toEqual(["回答用中文", "解释先给直觉"]);
+  });
+  test("missing preferences defaults to []", () => {
+    expect(parseDistillation('{"summary":"s","facts":[]}').preferences).toEqual([]);
+  });
+});
+
+describe("buildChatContext instructions (M3)", () => {
+  test("standing instructions lead the system block", () => {
+    const { systemExtra } = buildChatContext({
+      history: [],
+      turns: 0,
+      summary: "sum",
+      instructions: ["回答用中文"],
+    });
+    expect(systemExtra.indexOf("回答用中文")).toBeLessThan(systemExtra.indexOf("sum"));
+    expect(systemExtra).toContain("Standing instructions");
   });
 });

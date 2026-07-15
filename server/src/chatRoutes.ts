@@ -97,6 +97,18 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       "INSERT INTO chat_summaries (summary, first_message_id, last_message_id, session_id) VALUES (?, ?, ?, ?)",
       [distilled.summary, slice[0]!.id, slice.at(-1)!.id, sessionId],
     );
+    // Preferences become procedural rows (no embedding — injected unconditionally).
+    for (const pref of distilled.preferences) {
+      const exists = deps.db
+        .query("SELECT 1 FROM memories WHERE kind = 'procedural' AND content = ?")
+        .get(pref);
+      if (!exists) {
+        deps.db.run("INSERT INTO memories (kind, session_id, content) VALUES ('procedural', ?, ?)", [
+          sessionId,
+          pref,
+        ]);
+      }
+    }
     if (distilled.facts.length > 0) {
       // Dedupe by exact content — repeated compressions re-derive the same facts.
       const fresh = distilled.facts.filter(
@@ -135,11 +147,17 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     if (session_id) {
       const state = loadSessionState(deps.db, session_id);
       const recalled = question && deps.recallMemories ? await deps.recallMemories(question) : [];
+      const instructions = (
+        deps.db.query("SELECT content FROM memories WHERE kind = 'procedural' ORDER BY id").all() as {
+          content: string;
+        }[]
+      ).map((r) => r.content);
       const ctx = buildChatContext({
         history: state.history,
         turns: config.chat_memory_turns,
         summary: state.summary,
         memories: recalled,
+        instructions,
       });
       modelMessages = [...ctx.modelMessages, { role: "user", content: question }];
       systemExtra = ctx.systemExtra;
