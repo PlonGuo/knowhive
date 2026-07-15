@@ -4,6 +4,8 @@ import { simulateReadableStream } from "ai";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { AppConfigSchema, type AppConfig } from "../../shared/schema.ts";
 import { chatRoutes, type ChatRoutesDeps } from "./chatRoutes.ts";
+import { openDbAt } from "./db.ts";
+import { appendMessage, createSession, getMessages } from "./sessions.ts";
 import type { ChunkRow } from "./store.ts";
 
 function chunk(file_path: string, content: string): ChunkRow {
@@ -85,9 +87,14 @@ function makeDeps(overrides: Partial<ChatRoutesDeps> = {}): ChatRoutesDeps {
     retrieve: async () => [chunk("notes/pre.md", "prefetched context")],
     readNote: () => ({ path: "notes/pre.md", content: "# full note" }),
     listNotePaths: () => ["notes/pre.md"],
+    db: openDbAt(":memory:"),
+    generate: async () => '{"summary":"","facts":[]}',
     ...overrides,
   };
 }
+
+/** Post-exchange hooks are fire-and-forget — give them a beat to land. */
+const settle = () => new Promise((r) => setTimeout(r, 30));
 
 const userMessage = (text: string) => ({
   messages: [{ id: "1", role: "user", parts: [{ type: "text", text }] }],
@@ -220,5 +227,101 @@ describe("agentic mode", () => {
     expect(model.doStreamCalls.length).toBe(6);
     const lastCall = model.doStreamCalls.at(-1)!;
     expect(lastCall.tools ?? []).toHaveLength(0);
+  });
+});
+
+describe("session mode (Phase M)", () => {
+  test("persists the exchange, sets the title, and records an episodic memory", async () => {
+    const deps = makeDeps();
+    const sid = createSession(deps.db);
+    await postChat(deps, { ...userMessage("什么是区间DP？"), session_id: sid });
+    await settle();
+
+    const msgs = getMessages(deps.db, sid);
+    expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(msgs[1]!.content).toBe("hello");
+    expect(msgs[1]!.sources).toEqual(["notes/pre.md"]);
+
+    const session = deps.db.query("SELECT title FROM sessions WHERE id = ?").get(sid) as {
+      title: string;
+    };
+    expect(session.title).toBe("什么是区间DP？");
+
+    const episodic = deps.db
+      .query("SELECT content FROM memories WHERE kind = 'episodic' AND session_id = ?")
+      .all(sid) as { content: string }[];
+    expect(episodic.length).toBe(1);
+    expect(JSON.parse(episodic[0]!.content).question).toBe("什么是区间DP？");
+  });
+
+  test("persisted history and summary are injected on the next turn", async () => {
+    const config = AppConfigSchema.parse({ chat_memory_turns: 4 });
+    const model = textOnlyModel("second answer");
+    const deps = makeDeps({ getConfig: () => config, chatModel: () => model as never });
+    const sid = createSession(deps.db);
+    appendMessage(deps.db, sid, { role: "user", content: "earlier question about heaps" });
+    appendMessage(deps.db, sid, { role: "assistant", content: "earlier answer about heaps" });
+    deps.db.run(
+      "INSERT INTO chat_summaries (summary, first_message_id, last_message_id, session_id) VALUES ('older turns summary', 0, 0, ?)",
+      [sid],
+    );
+
+    await postChat(deps, { ...userMessage("follow-up"), session_id: sid });
+
+    const call = model.doStreamCalls[0]!;
+    const prompt = JSON.stringify(call.prompt);
+    expect(prompt).toContain("earlier question about heaps");
+    expect(prompt).toContain("older turns summary");
+  });
+
+  test("crossing the threshold compresses old turns and distills facts", async () => {
+    const config = AppConfigSchema.parse({ chat_memory_turns: 2, memory_compression_threshold: 4 });
+    const prompts: string[] = [];
+    const deps = makeDeps({
+      getConfig: () => config,
+      generate: async (p) => {
+        prompts.push(p);
+        return '{"summary":"压缩后的摘要","facts":["用户在准备面试"]}';
+      },
+    });
+    const sid = createSession(deps.db);
+    for (let i = 0; i < 4; i++) {
+      appendMessage(deps.db, sid, { role: i % 2 ? "assistant" : "user", content: `old-${i}` });
+    }
+
+    await postChat(deps, { ...userMessage("trigger"), session_id: sid });
+    await settle();
+
+    const summary = deps.db
+      .query("SELECT summary FROM chat_summaries WHERE session_id = ?")
+      .get(sid) as { summary: string } | null;
+    expect(summary?.summary).toBe("压缩后的摘要");
+    const facts = deps.db
+      .query("SELECT content FROM memories WHERE kind = 'semantic'")
+      .all() as { content: string }[];
+    expect(facts.map((f) => f.content)).toEqual(["用户在准备面试"]);
+    // the summarizer saw the old turns, not the fresh window
+    expect(prompts[0]).toContain("old-0");
+  });
+
+  test("recalled memories are injected into the system prompt", async () => {
+    const model = textOnlyModel("with memory");
+    const deps = makeDeps({
+      chatModel: () => model as never,
+      recallMemories: async () => ["用户偏好中文回答"],
+    });
+    const sid = createSession(deps.db);
+    await postChat(deps, { ...userMessage("hi"), session_id: sid });
+    const system = JSON.stringify(model.doStreamCalls[0]!.prompt.find((m) => m.role === "system"));
+    expect(system).toContain("用户偏好中文回答");
+  });
+
+  test("stateless requests (no session_id) behave exactly as before", async () => {
+    const deps = makeDeps();
+    const sse = await postChat(deps, userMessage("stateless"));
+    await settle();
+    expect(sse).toContain("hello");
+    const count = deps.db.query("SELECT COUNT(*) AS n FROM chat_messages").get() as { n: number };
+    expect(count.n).toBe(0);
   });
 });

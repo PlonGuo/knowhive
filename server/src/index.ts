@@ -19,6 +19,7 @@ import { ingestRoutes } from "./ingestRoutes.ts";
 import { buildTree, flattenTree, resolveSafePath } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
+import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { hybridSearch } from "./store.ts";
 import { rerankCrossEncoder } from "./crossEncoder.ts";
@@ -243,8 +244,18 @@ app.route(
       return { path: relPath, content: readFileSync(abs, "utf8") };
     },
     listNotePaths: () => flattenTree(buildTree(knowledgeDir)),
+    db,
+    // Summarizer for compression+distillation follows the main chat model.
+    generate: async (prompt) => {
+      const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
+      return text;
+    },
+    embedFacts: (facts) => embedder(facts),
   }),
 );
+
+// Chat sessions (Phase M): list/create/read/delete conversations.
+app.route("/", sessionRoutes({ db }));
 
 console.log(
   `[server] KnowHive sidecar listening on http://127.0.0.1:${port} ` +
