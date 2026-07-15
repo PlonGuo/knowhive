@@ -273,10 +273,12 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
           >
             &larr; Back
           </button>
-          <h1 className="text-xl font-bold text-foreground">Settings</h1>
+          <h1 className="font-serif text-2xl font-semibold text-foreground">Settings</h1>
         </div>
 
         <div className="space-y-5">
+          <div className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-3">
+          <h3 className="text-sm font-medium text-foreground">Model</h3>
           {/* LLM Provider */}
           <div>
             <label className={labelClass}>LLM Provider</label>
@@ -402,8 +404,10 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
             </div>
           )}
 
+          </div>
+
           {/* RAG Settings */}
-          <div className="rounded-md border p-3 space-y-3">
+          <div className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-3">
             <h3 className="text-sm font-medium text-foreground">RAG Settings</h3>
 
             {/* Pre-retrieval Strategy */}
@@ -574,7 +578,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
           )}
 
           {/* Data Management */}
-          <div data-testid="data-management-section" className="rounded-md border p-3 space-y-2">
+          <div data-testid="data-management-section" className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-2">
             <h3 className="text-sm font-medium text-foreground">Data Management</h3>
             <div className="flex gap-2">
               <button

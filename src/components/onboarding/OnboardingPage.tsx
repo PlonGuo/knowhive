@@ -52,7 +52,7 @@ const EMBEDDING_MODEL_BY_LANGUAGE: Record<LLMConfig['embedding_language'], strin
 }
 
 function StatusIcon({ ok }: { ok: boolean | null }) {
-  if (ok === null) return <span className="text-gray-400">…</span>
+  if (ok === null) return <span className="text-muted-foreground">…</span>
   return ok
     ? <span className="text-green-500 font-bold">✓</span>
     : <span className="text-red-500 font-bold">✗</span>
@@ -161,8 +161,8 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
   }
 
   const inputClass =
-    'w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-  const labelClass = 'block text-sm font-medium text-gray-700 mb-1'
+    'w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring'
+  const labelClass = 'block text-sm font-medium text-foreground mb-1'
 
   const allModelsReady = ollama?.running === true && (ollama.required ?? []).every((r) => r.installed)
 
@@ -170,17 +170,17 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
   if (step === 1) {
     return (
       <div data-testid="onboarding-page" className="flex flex-1 flex-col items-center justify-center gap-8 p-12">
-        <h1 className="text-2xl font-bold">Welcome to KnowHive</h1>
-        <p className="text-gray-500">How do you want to run your AI model?</p>
+        <h1 className="font-serif text-3xl font-semibold">Welcome to KnowHive</h1>
+        <p className="text-muted-foreground">How do you want to run your AI model?</p>
 
         <div className="flex gap-6">
           <button
             data-testid="onboarding-mode-local"
             onClick={() => selectMode('local')}
-            className="w-64 rounded-lg border border-gray-200 bg-white p-6 text-left shadow-sm hover:border-blue-500 hover:shadow"
+            className="w-64 rounded-lg border border bg-background/80 backdrop-blur-sm p-6 text-left shadow-sm hover:border-primary hover:shadow"
           >
             <div className="text-lg font-semibold mb-1">Local (Ollama)</div>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Private and free. Runs models on your machine via Ollama. We'll detect it and
               download what's needed.
             </p>
@@ -188,10 +188,10 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
           <button
             data-testid="onboarding-mode-cloud"
             onClick={() => selectMode('cloud')}
-            className="w-64 rounded-lg border border-gray-200 bg-white p-6 text-left shadow-sm hover:border-blue-500 hover:shadow"
+            className="w-64 rounded-lg border border bg-background/80 backdrop-blur-sm p-6 text-left shadow-sm hover:border-primary hover:shadow"
           >
             <div className="text-lg font-semibold mb-1">Cloud API</div>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Use Anthropic or any OpenAI-compatible API with your own key. Embeddings still run
               locally through Ollama.
             </p>
@@ -205,9 +205,9 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
   if (step === 2) {
     return (
       <div data-testid="onboarding-step2" className="flex flex-1 flex-col items-center justify-center gap-6 p-12">
-        <h1 className="text-2xl font-bold">{mode === 'local' ? 'Set up Ollama' : 'Configure your API'}</h1>
+        <h1 className="font-serif text-3xl font-semibold">{mode === 'local' ? 'Set up Ollama' : 'Configure your API'}</h1>
 
-        <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-sm space-y-4">
+        <div className="w-full max-w-md rounded-lg border border bg-background/80 backdrop-blur-sm p-6 shadow-sm space-y-4">
           {mode === 'cloud' && (
             <>
               <div>
@@ -266,7 +266,7 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
                   data-testid="onboarding-test-btn"
                   onClick={handleTestConnection}
                   disabled={testing}
-                  className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
                 >
                   {testing ? 'Testing…' : 'Test Connection'}
                 </button>
@@ -313,13 +313,13 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
               <option value="chinese">Chinese (bge-m3)</option>
               <option value="mixed">Mixed / 中英混合 (bge-m3)</option>
             </select>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-muted-foreground">
               Embeddings always run locally via Ollama ({EMBEDDING_MODEL_BY_LANGUAGE[config.embedding_language]}).
             </p>
           </div>
 
           {/* Ollama readiness panel */}
-          <div data-testid="onboarding-ollama-panel" className="rounded-md bg-gray-50 p-3 space-y-2">
+          <div data-testid="onboarding-ollama-panel" className="rounded-md bg-muted/60 p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-medium text-sm">Ollama</span>
               <div className="flex items-center gap-2">
@@ -327,7 +327,7 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
                 <button
                   data-testid="onboarding-ollama-refresh"
                   onClick={() => refreshOllama(config)}
-                  className="text-xs text-blue-600 underline"
+                  className="text-xs text-primary underline"
                 >
                   Refresh
                 </button>
@@ -346,7 +346,7 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
               (ollama.required ?? []).map((r) => (
                 <div key={r.name} data-testid={`onboarding-model-${r.purpose}`} className="flex items-center justify-between text-sm">
                   <span>
-                    {r.name} <span className="text-gray-400">({r.purpose})</span>
+                    {r.name} <span className="text-muted-foreground">({r.purpose})</span>
                   </span>
                   <StatusIcon ok={r.installed} />
                 </div>
@@ -355,22 +355,22 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
               <button
                 data-testid="onboarding-download-btn"
                 onClick={handleDownloadMissing}
-                className="w-full rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white font-medium"
+                className="w-full rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground font-medium"
               >
                 Download missing models
               </button>
             )}
             {pull && (
               <div data-testid="onboarding-pull-progress" className="space-y-1">
-                <div className="flex justify-between text-xs text-gray-500">
+                <div className="flex justify-between text-xs text-muted-foreground">
                   <span>
                     {pull.model} — {pull.error ?? pull.status}
                   </span>
                   <span>{pull.percent}%</span>
                 </div>
-                <div className="h-2 w-full rounded bg-gray-200">
+                <div className="h-2 w-full rounded bg-muted">
                   <div
-                    className="h-2 rounded bg-blue-600 transition-all"
+                    className="h-2 rounded bg-primary transition-all"
                     style={{ width: `${pull.percent}%` }}
                   />
                 </div>
@@ -394,7 +394,7 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
               await saveConfig(config)
               setStep(3)
             }}
-            className="rounded-md bg-blue-600 px-6 py-2 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            className="rounded-md bg-primary px-6 py-2 text-primary-foreground font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Next
           </button>
@@ -409,29 +409,29 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
       <div className="flex items-center justify-center w-16 h-16 rounded-full bg-green-100">
         <span className="text-green-600 text-3xl font-bold">✓</span>
       </div>
-      <h1 className="text-2xl font-bold">All Set!</h1>
-      <p className="text-gray-500 text-center max-w-sm">
+      <h1 className="font-serif text-3xl font-semibold">All Set!</h1>
+      <p className="text-muted-foreground text-center max-w-sm">
         KnowHive is ready. You can always change these settings later.
       </p>
 
       <div
         data-testid="onboarding-summary"
-        className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-2 text-sm text-gray-700"
+        className="w-full max-w-md rounded-lg border border bg-background/80 backdrop-blur-sm p-4 shadow-sm space-y-2 text-sm text-foreground"
       >
         <div className="flex justify-between">
-          <span className="text-gray-500">Mode</span>
+          <span className="text-muted-foreground">Mode</span>
           <span>{mode === 'local' ? 'Local (Ollama)' : 'Cloud API'}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-500">Provider</span>
+          <span className="text-muted-foreground">Provider</span>
           <span>{config.llm_provider}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-500">Chat Model</span>
+          <span className="text-muted-foreground">Chat Model</span>
           <span>{config.model_name}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-500">Embedding</span>
+          <span className="text-muted-foreground">Embedding</span>
           <span>{EMBEDDING_MODEL_BY_LANGUAGE[config.embedding_language]}</span>
         </div>
       </div>
@@ -439,7 +439,7 @@ export default function OnboardingPage({ backendUrl, onComplete }: OnboardingPag
       <button
         data-testid="onboarding-finish-btn"
         onClick={handleFinish}
-        className="rounded-md bg-blue-600 px-8 py-2 text-white font-medium"
+        className="rounded-md bg-primary px-8 py-2 text-primary-foreground font-medium"
       >
         Get Started
       </button>
