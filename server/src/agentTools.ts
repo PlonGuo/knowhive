@@ -41,6 +41,13 @@ export interface AgentToolDeps {
   sources: SourceCollector;
   /** Episodic search over past conversations (session mode only, Phase M3). */
   searchHistory?: (query: string) => { question: string; answer: string; when: string }[];
+  /** Note write operations (Phase H). Absent = readonly mode: tools not mounted.
+   * Approval gating happens at the streamText layer (toolApprovalFor), not here. */
+  writeNotes?: {
+    create: (relPath: string, content: string) => Promise<{ path: string; bytes: number }>;
+    update: (relPath: string, content: string) => Promise<{ path: string; bytes: number }>;
+    remove: (relPath: string) => Promise<{ path: string }>;
+  };
 }
 
 const errorValue = (err: unknown) => ({ error: (err as Error).message });
@@ -101,6 +108,56 @@ export function buildAgentTools(deps: AgentToolDeps): ToolSet {
         }
       },
     }),
+
+    ...(deps.writeNotes
+      ? {
+          create_note: tool({
+            description:
+              "Create a new markdown note in the knowledge base. Fails if the path already exists.",
+            inputSchema: z.object({
+              path: z.string().describe("new note path relative to the knowledge base, e.g. ideas/plan.md"),
+              content: z.string().describe("markdown content"),
+            }),
+            execute: async ({ path, content }) => {
+              try {
+                const r = await deps.writeNotes!.create(path, content);
+                deps.sources.add(r.path);
+                return { ...r, status: "created" };
+              } catch (err) {
+                return errorValue(err);
+              }
+            },
+          }),
+          update_note: tool({
+            description: "Replace the full content of an existing note.",
+            inputSchema: z.object({
+              path: z.string().describe("existing note path"),
+              content: z.string().describe("new markdown content (full replacement)"),
+            }),
+            execute: async ({ path, content }) => {
+              try {
+                const r = await deps.writeNotes!.update(path, content);
+                deps.sources.add(r.path);
+                return { ...r, status: "updated" };
+              } catch (err) {
+                return errorValue(err);
+              }
+            },
+          }),
+          delete_note: tool({
+            description: "Permanently delete a note from the knowledge base.",
+            inputSchema: z.object({ path: z.string().describe("note path to delete") }),
+            execute: async ({ path }) => {
+              try {
+                const r = await deps.writeNotes!.remove(path);
+                return { ...r, status: "deleted" };
+              } catch (err) {
+                return errorValue(err);
+              }
+            },
+          }),
+        }
+      : {}),
 
     ...(deps.searchHistory
       ? {

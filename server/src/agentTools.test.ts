@@ -166,3 +166,62 @@ describe("search_history (M3)", () => {
     expect(out).toEqual({ results: [{ question: "问过堆", answer: "a", when: "t" }] });
   });
 });
+
+describe("write tools (Phase H)", () => {
+  test("absent without writeNotes deps, present with them", () => {
+    expect(buildAgentTools(makeDeps()).create_note).toBeUndefined();
+    const tools = buildAgentTools(
+      makeDeps({
+        writeNotes: {
+          create: async (p, c) => ({ path: p, bytes: c.length }),
+          update: async (p, c) => ({ path: p, bytes: c.length }),
+          remove: async (p) => ({ path: p }),
+        },
+      }),
+    );
+    expect(tools.create_note).toBeDefined();
+    expect(tools.update_note).toBeDefined();
+    expect(tools.delete_note).toBeDefined();
+  });
+
+  test("create/update return compact results and collect the source", async () => {
+    const sources = new SourceCollector();
+    const tools = buildAgentTools(
+      makeDeps({
+        sources,
+        writeNotes: {
+          create: async (p, c) => ({ path: p, bytes: c.length }),
+          update: async (p, c) => ({ path: p, bytes: c.length }),
+          remove: async (p) => ({ path: p }),
+        },
+      }),
+    );
+    const out = await tools.create_note!.execute!({ path: "new.md", content: "# hi" }, opts);
+    expect(out).toEqual({ path: "new.md", bytes: 4, status: "created" });
+    const upd = await tools.update_note!.execute!({ path: "new.md", content: "# hello" }, opts);
+    expect(upd).toEqual({ path: "new.md", bytes: 7, status: "updated" });
+    expect(sources.list()).toEqual(["new.md"]);
+  });
+
+  test("delete returns status and write errors become {error} values", async () => {
+    const tools = buildAgentTools(
+      makeDeps({
+        writeNotes: {
+          create: async () => {
+            throw new Error("File already exists: x.md");
+          },
+          update: async (p, c) => ({ path: p, bytes: c.length }),
+          remove: async (p) => ({ path: p }),
+        },
+      }),
+    );
+    expect(await tools.delete_note!.execute!({ path: "old.md" }, opts)).toEqual({
+      path: "old.md",
+      status: "deleted",
+    });
+    const err = (await tools.create_note!.execute!({ path: "x.md", content: "c" }, opts)) as {
+      error: string;
+    };
+    expect(err.error).toContain("already exists");
+  });
+});
