@@ -1,7 +1,7 @@
 // Knowledge-dir helpers: file tree building + safe path resolution.
 // Ports backend/app/routers/knowledge.py (_build_tree, _resolve_safe_path).
-import { readdirSync } from "node:fs";
-import { basename, join, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
 
 export interface TreeNode {
   name: string;
@@ -43,6 +43,26 @@ function buildChildren(directory: string, base: string): TreeNode[] {
       ? { name: entry.name, path: rel, type: "directory" as const, children: buildChildren(abs, base) }
       : { name: entry.name, path: rel, type: "file" as const };
   });
+}
+
+/** Create a new note (agent write tool + future UI). Refuses to overwrite. */
+export function createNoteFile(root: string, relPath: string, content: string): string {
+  const resolved = resolveSafePath(root, relPath);
+  if (existsSync(resolved)) throw new Error(`File already exists: ${relPath}`);
+  mkdirSync(dirname(resolved), { recursive: true });
+  writeFileSync(resolved, content);
+  return resolved;
+}
+
+/** Overwrite an existing note's content. */
+export function updateNoteFile(root: string, relPath: string, content: string): string {
+  const resolved = resolveSafePath(root, relPath);
+  if (existsSync(resolved) && statSync(resolved).isDirectory()) {
+    throw new Error(`Cannot write to a directory: ${relPath}`);
+  }
+  if (!existsSync(resolved)) throw new Error(`File not found: ${relPath}`);
+  writeFileSync(resolved, content);
+  return resolved;
 }
 
 /** Flatten a tree into file paths only, depth-first (tree order: dirs first, alpha). */

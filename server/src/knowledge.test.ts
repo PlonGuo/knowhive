@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildTree, flattenTree, resolveSafePath, SafePathError } from "./knowledge.ts";
+import { buildTree, createNoteFile, flattenTree, resolveSafePath, SafePathError, updateNoteFile } from "./knowledge.ts";
 
 // Parity tests against backend/app/routers/knowledge.py (_build_tree, _resolve_safe_path).
 
@@ -55,4 +55,19 @@ test("resolveSafePath rejects traversal outside the root", () => {
 test("flattenTree returns file paths only, depth-first (empty dirs contribute nothing)", () => {
   const tree = buildTree(makeKnowledgeDir());
   expect(flattenTree(tree)).toEqual([join("Algo", "sort.md"), "Apple.md", "zebra.md"]);
+});
+
+test("createNoteFile writes a new file, creating parent dirs; refuses to overwrite", () => {
+  const dir = makeKnowledgeDir();
+  const abs = createNoteFile(dir, "new/notes/idea.md", "# idea");
+  expect(abs.endsWith(join("new", "notes", "idea.md"))).toBe(true);
+  expect(() => createNoteFile(dir, "new/notes/idea.md", "again")).toThrow(/exists/i);
+  expect(() => createNoteFile(dir, "../escape.md", "x")).toThrow(SafePathError);
+});
+
+test("updateNoteFile overwrites an existing file; refuses missing paths and dirs", () => {
+  const dir = makeKnowledgeDir();
+  updateNoteFile(dir, "Apple.md", "# updated");
+  expect(() => updateNoteFile(dir, "nope.md", "x")).toThrow(/not found/i);
+  expect(() => updateNoteFile(dir, "Algo", "x")).toThrow(/director/i);
 });

@@ -23,6 +23,9 @@ export type RerankerBackend = z.infer<typeof RerankerBackend>;
 export const ChatMode = z.enum(["single", "agentic"]);
 export type ChatMode = z.infer<typeof ChatMode>;
 
+export const ChatPermissionMode = z.enum(["ask", "accept-edits", "readonly"]);
+export type ChatPermissionMode = z.infer<typeof ChatPermissionMode>;
+
 /** Mirrors backend/app/config.py:AppConfig (field names + defaults). */
 export const AppConfigSchema = z.object({
   llm_provider: LLMProvider.default("ollama"),
@@ -39,6 +42,9 @@ export const AppConfigSchema = z.object({
   // "single" = one-shot RAG; "agentic" = tool-use loop (Phase G). Default flips
   // only after the Task 7 eval gate passes.
   chat_mode: ChatMode.default("single"),
+  // Write-tool gate for agentic chat (Phase H). Fail-closed default: every
+  // write asks; deletes ask even in accept-edits.
+  chat_permission_mode: ChatPermissionMode.default("ask"),
   // Recent turns sent verbatim in session mode (Phase M). 0 = question only.
   chat_memory_turns: z.number().int().default(6),
   memory_compression_threshold: z.number().int().default(20),
