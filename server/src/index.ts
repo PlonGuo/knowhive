@@ -56,9 +56,13 @@ const knowledgeDir = join(dataDir, "knowledge");
 setModelCacheDir(join(dataDir, "models"));
 
 // Embedder reading the live config each call (endpoint + language→model mapping).
+// Embeddings ALWAYS come from local Ollama: base_url is the chat provider's URL,
+// which may be a cloud API when llm_provider != ollama.
+const ollamaUrl = () =>
+  (config.llm_provider === "ollama" ? config.base_url : config.ollama_base_url).replace(/\/+$/, "");
 const embedder: Embedder = (texts) =>
   ollamaEmbed(texts, {
-    baseUrl: config.base_url,
+    baseUrl: ollamaUrl(),
     model: embeddingModelFor(config.embedding_language),
   });
 

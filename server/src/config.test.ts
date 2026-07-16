@@ -23,6 +23,7 @@ test("loadConfig returns defaults when config.yaml is missing", () => {
     reranker_backend: "cross-encoder",
     chat_mode: "single",
     chat_permission_mode: "ask",
+    ollama_base_url: "http://localhost:11434",
     chat_memory_turns: 6,
     memory_compression_threshold: 20,
     custom_system_prompt: "",
@@ -83,4 +84,12 @@ test("chat_mode defaults to single and survives legacy yaml without the field", 
 test("chat_mode accepts agentic and rejects unknown values", () => {
   expect(AppConfigSchema.parse({ chat_mode: "agentic" }).chat_mode).toBe("agentic");
   expect(() => AppConfigSchema.parse({ chat_mode: "yolo" })).toThrow();
+});
+
+test("cloud provider keeps embeddings on ollama_base_url (regression: DeepSeek 401)", () => {
+  const cfg = AppConfigSchema.parse({
+    llm_provider: "openai-compatible",
+    base_url: "https://api.deepseek.com/v1",
+  });
+  expect(cfg.ollama_base_url).toBe("http://localhost:11434");
 });

@@ -16,7 +16,13 @@ const STATUS_TIMEOUT_MS = 2000;
 export function ollamaRoutes(deps: OllamaRoutesDeps): Hono {
   const app = new Hono();
   const fetchFn = deps.fetchFn ?? fetch;
-  const baseUrl = () => deps.getConfig().base_url.replace(/\/+$/, "");
+  // Ollama endpoint: base_url only when Ollama IS the chat provider; otherwise the
+  // dedicated ollama_base_url (base_url then points at a cloud chat API).
+  const baseUrl = () => {
+    const config = deps.getConfig();
+    const url = config.llm_provider === "ollama" ? config.base_url : config.ollama_base_url;
+    return url.replace(/\/+$/, "");
+  };
 
   app.get("/ollama/status", async (c) => {
     const config = deps.getConfig();

@@ -32,6 +32,10 @@ export const AppConfigSchema = z.object({
   model_name: z.string().default("llama3.2"),
   base_url: z.string().default("http://localhost:11434"),
   api_key: z.string().nullable().default(null),
+  // Local Ollama endpoint for embeddings/model management. base_url is the CHAT
+  // provider's URL — when that's a cloud API (DeepSeek etc.), embeddings must
+  // still reach local Ollama. (Latent since R3, exposed by the first real cloud key.)
+  ollama_base_url: z.string().default("http://localhost:11434"),
   embedding_language: EmbeddingLanguage.default("english"),
   first_run_complete: z.boolean().default(false),
   pre_retrieval_strategy: PreRetrievalStrategy.default("none"),

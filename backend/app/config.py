@@ -39,6 +39,7 @@ class AppConfig(BaseModel):
     reranker_backend: str = "cross-encoder"  # "llm" | "cross-encoder" — mirrors shared/schema.ts
     chat_mode: str = "single"  # "single" | "agentic" — mirrors shared/schema.ts
     chat_permission_mode: str = "ask"  # "ask" | "accept-edits" | "readonly" — mirrors shared/schema.ts
+    ollama_base_url: str = "http://localhost:11434"  # embeddings/model mgmt — mirrors shared/schema.ts
     chat_memory_turns: int = 6  # mirrors shared/schema.ts (Phase M)
     memory_compression_threshold: int = 20
     custom_system_prompt: str = ""
