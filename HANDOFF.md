@@ -39,8 +39,18 @@
   - 踩坑(有测试钉住):llama3.2 蒸馏偷懒(few-shot 修)→ few-shot 示例泄漏进记忆库
     (离题示例修——污染危害正比于与真实查询的 embedding 相似度)→ 重复蒸馏(内容去重)。
   - 真机闭环:新会话召回旧会话陈述的个人事实(KB 无此信息);重启持久。206 bun + 200 vitest 绿。
-- 👉 **下一步候选**:M3(procedural 记忆+TTL 淘汰+记忆管理 UI)/ Phase H(写工具+权限,AI SDK
-  原生审批流已确认)/ 云模型 arm 评估(DeepSeek,验证「agentic 瓶颈在模型」假设)。
+- ✅ **Phase H 完成(2026-07-16)——写工具 + fail-closed 权限系统**:
+  - agentic chat 获得 create/update/delete_note(复用 knowledge 服务,写后重嵌入/删后清索引);
+    权限三档 `chat_permission_mode`(默认 **ask**):ask 全部写操作逐次审批、accept-edits 放行
+    编辑但**删除永远确认**、readonly 干脆不挂载写工具(fail-closed 强于 denied)。
+  - 审批走 **AI SDK 原生流**:`streamText({toolApproval})` 暂停发 tool-approval-request →
+    前端工具行变 Allow/Deny → `addToolApprovalResponse` + `sendAutomaticallyWhen` 自动续传 →
+    服务端经 `convertToModelMessages` 恢复执行(拒绝则给模型 execution-denied)。
+    持久化门:onFinish 只在 finishReason==='stop' 落库,审批暂停不产生半截记录。
+  - 真机四路径全通:ask 创建审批往返(文件落盘+立即可检索)、deny 后文件幸存、accept-edits
+    直接执行、accept-edits 下删除仍拦。顺带修:模型会回传检索结果里的绝对路径,
+    relativizeIfInside 宽容化(库内相对化,库外仍拒)。
+- 👉 **下一步候选**:云模型 arm 评估(DeepSeek,验证「agentic 瓶颈在模型」假设)/ H2(HMAC 审批签名、规则持久化「always allow」)/ 记忆小尾巴(手动新增、episodic 回顾蒸馏)。
 
 ## Phase D 移植明细(全部带 TDD parity 测试 + e2e)
 
