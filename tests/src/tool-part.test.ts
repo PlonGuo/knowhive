@@ -29,3 +29,17 @@ describe('toolPart helpers', () => {
     expect(toolPartLabel({ type: 'tool-unknown_thing', input: {} })).toBe('unknown_thing')
   })
 })
+
+describe('write tool parts (Phase H)', () => {
+  it('labels write tools with their path', () => {
+    expect(toolPartLabel({ type: 'tool-create_note', input: { path: 'a.md' } })).toBe('Create note: a.md')
+    expect(toolPartLabel({ type: 'tool-update_note', input: { path: 'a.md' } })).toBe('Update note: a.md')
+    expect(toolPartLabel({ type: 'tool-delete_note', input: { path: 'a.md' } })).toBe('Delete note: a.md')
+  })
+
+  it('maps approval states', () => {
+    expect(toolPartStatus({ type: 'tool-create_note', state: 'approval-requested' })).toBe('needs-approval')
+    expect(toolPartStatus({ type: 'tool-create_note', state: 'approval-responded' })).toBe('running')
+    expect(toolPartStatus({ type: 'tool-create_note', state: 'output-denied' })).toBe('denied')
+  })
+})

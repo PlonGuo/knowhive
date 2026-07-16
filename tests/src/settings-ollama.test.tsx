@@ -130,3 +130,20 @@ describe('Settings — agent mode toggle (Phase G)', () => {
     })
   })
 })
+
+describe('Settings — agent write permissions (Phase H)', () => {
+  it('selects a permission mode and saves it', async () => {
+    const state = mockBackend({ embeddingInstalled: true })
+    render(<SettingsPage backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('permission-mode-select'))
+
+    fireEvent.change(screen.getByTestId('permission-mode-select'), {
+      target: { value: 'accept-edits' },
+    })
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => {
+      const put = state.puts.at(-1) as { chat_permission_mode?: string } | undefined
+      expect(put?.chat_permission_mode).toBe('accept-edits')
+    })
+  })
+})

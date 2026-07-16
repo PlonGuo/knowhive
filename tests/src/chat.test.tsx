@@ -211,3 +211,37 @@ describe('ChatArea agent tool parts', () => {
     expect(screen.getByTestId('chat-area')).toHaveTextContent('final answer')
   })
 })
+
+describe('ChatArea approval flow (Phase H)', () => {
+  function approvalStream(): string {
+    const chunks = [
+      { type: 'start' },
+      { type: 'start-step' },
+      { type: 'tool-input-start', toolCallId: 'wc1', toolName: 'create_note' },
+      { type: 'tool-input-available', toolCallId: 'wc1', toolName: 'create_note', input: { path: 'a.md', content: 'hi' } },
+      { type: 'tool-approval-request', approvalId: 'app1', toolCallId: 'wc1' },
+      { type: 'finish-step' },
+      { type: 'finish', finishReason: 'tool-calls' },
+    ]
+    return chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n'
+  }
+
+  it('renders Allow/Deny for a pending write and resends on Allow', async () => {
+    const calls = mockChat(approvalStream())
+    render(<ChatArea backendUrl={BACKEND} />)
+    await typeAndSend('建个笔记')
+
+    const tool = screen.getByTestId('tool-part-0')
+    expect(tool).toHaveAttribute('data-tool-status', 'needs-approval')
+    expect(tool).toHaveTextContent('Create note: a.md')
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('tool-approve-0'))
+      await new Promise((r) => setTimeout(r, 80))
+    })
+    // sendAutomaticallyWhen fires a second /chat POST carrying the approval
+    expect(calls.filter((c) => c.url.endsWith('/chat')).length).toBeGreaterThanOrEqual(2)
+    const second = calls.filter((c) => c.url.endsWith('/chat')).at(-1)!
+    expect(JSON.stringify(second.body)).toContain('"approved":true')
+  })
+})

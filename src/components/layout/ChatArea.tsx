@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport, type UIMessage } from 'ai'
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  type UIMessage,
+} from 'ai'
 import FadeContent from '../reactbits/FadeContent'
 import ShinyText from '../reactbits/ShinyText'
 import { isToolPart, toolPartLabel, toolPartStatus, type ToolPartLike } from '../../lib/toolPart'
@@ -23,8 +27,17 @@ function messageSources(m: UIMessage): string[] {
   return meta?.sources ?? []
 }
 
-/** One line of agent tool activity: spinner/✓/✗ + compact label. */
-function ToolActivity({ part, index }: { part: ToolPartLike; index: number }) {
+/** One line of agent tool activity: spinner/✓/✗ + compact label; write tools that
+ * need approval render Allow/Deny inline (Claude Code-style). */
+function ToolActivity({
+  part,
+  index,
+  onApproval,
+}: {
+  part: ToolPartLike
+  index: number
+  onApproval?: (id: string, approved: boolean) => void
+}) {
   const status = toolPartStatus(part)
   const label = toolPartLabel(part)
   return (
@@ -54,6 +67,33 @@ function ToolActivity({ part, index }: { part: ToolPartLike; index: number }) {
           </span>
         </>
       )}
+      {status === 'denied' && (
+        <>
+          <span className="text-red-500">✗</span>
+          <span className="line-through">{label}</span>
+          <span>denied</span>
+        </>
+      )}
+      {status === 'needs-approval' && (
+        <>
+          <span className="text-amber-500">⚠</span>
+          <span className="font-medium text-foreground">{label}</span>
+          <button
+            data-testid={`tool-approve-${index}`}
+            onClick={() => part.approval && onApproval?.(part.approval.id, true)}
+            className="rounded-md border bg-primary px-2 py-0.5 text-primary-foreground hover:bg-primary/90"
+          >
+            Allow
+          </button>
+          <button
+            data-testid={`tool-deny-${index}`}
+            onClick={() => part.approval && onApproval?.(part.approval.id, false)}
+            className="rounded-md border px-2 py-0.5 hover:bg-accent"
+          >
+            Deny
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -73,8 +113,17 @@ export default function ChatArea({
     [backendUrl],
   )
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({ transport })
+  const { messages, sendMessage, status, error, setMessages, addToolApprovalResponse } = useChat({
+    transport,
+    // After the user answers every pending Allow/Deny, resend automatically so the
+    // server can resume (or skip) the gated tool call.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+  })
   const streaming = status === 'submitted' || status === 'streaming'
+
+  const handleApproval = (id: string, approved: boolean) => {
+    addToolApprovalResponse({ id, approved })
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -188,7 +237,9 @@ export default function ChatArea({
                         }
                         if (isToolPart(part)) {
                           toolIdx += 1
-                          return <ToolActivity key={j} part={part} index={toolIdx} />
+                          return (
+                            <ToolActivity key={j} part={part} index={toolIdx} onApproval={handleApproval} />
+                          )
                         }
                         return null
                       })

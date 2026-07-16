@@ -11,6 +11,7 @@ interface AppConfig {
   pre_retrieval_strategy: 'none' | 'hyde' | 'multi_query' | 'auto' | 'auto_llm'
   use_reranker: boolean
   chat_mode: 'single' | 'agentic'
+  chat_permission_mode: 'ask' | 'accept-edits' | 'readonly'
   chat_memory_turns: number
   custom_system_prompt: string
 }
@@ -64,6 +65,7 @@ const defaultConfig: AppConfig = {
   pre_retrieval_strategy: 'none',
   use_reranker: false,
   chat_mode: 'single',
+  chat_permission_mode: 'ask',
   chat_memory_turns: 0,
   custom_system_prompt: '',
 }
@@ -495,6 +497,26 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
                   }`}
                 />
               </button>
+            </div>
+
+            {/* Agent write permissions (Phase H) */}
+            <div>
+              <label className={labelClass}>Agent Write Permissions</label>
+              <select
+                data-testid="permission-mode-select"
+                value={config.chat_permission_mode}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    chat_permission_mode: e.target.value as AppConfig['chat_permission_mode'],
+                  })
+                }
+                className={selectClass}
+              >
+                <option value="ask">Ask — confirm every create/update/delete</option>
+                <option value="accept-edits">Accept edits — auto-approve edits, deletions still ask</option>
+                <option value="readonly">Read only — the agent cannot modify notes</option>
+              </select>
             </div>
 
             {/* Reranker Toggle */}
