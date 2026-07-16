@@ -1,6 +1,6 @@
 // KnowHive TS/bun sidecar entrypoint. Spawned by the Tauri shell as
 // `bun run src/index.ts --port <port> --data-dir <dir>` (see src-tauri/src/sidecar.rs).
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -16,14 +16,14 @@ import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
 import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
 import { ingestRoutes } from "./ingestRoutes.ts";
-import { buildTree, flattenTree, resolveSafePath } from "./knowledge.ts";
+import { buildTree, createNoteFile, flattenTree, resolveSafePath, updateNoteFile } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
 import { memoryRoutes } from "./memoryRoutes.ts";
 import { recallSemanticMemories, runEviction } from "./sessions.ts";
 import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
-import { hybridSearch } from "./store.ts";
+import { deleteChunksForFile, hybridSearch } from "./store.ts";
 import { rerankCrossEncoder } from "./crossEncoder.ts";
 import {
   crossEncoderScore,
@@ -256,6 +256,27 @@ app.route(
     recallMemories: async (question) => {
       const [vec] = await embedder([question]);
       return recallSemanticMemories(db, vec!, { k: 3, minSimilarity: 0.5 });
+    },
+    // Agent write tools (Phase H) — reuse the knowledge services and keep the
+    // index in sync exactly like the HTTP handlers do.
+    writeNotes: {
+      create: async (relPath, content) => {
+        const abs = createNoteFile(knowledgeDir, relPath, content);
+        await ingestText(db, abs, content, embedder);
+        return { path: relPath, bytes: content.length };
+      },
+      update: async (relPath, content) => {
+        const abs = updateNoteFile(knowledgeDir, relPath, content);
+        await ingestText(db, abs, content, embedder);
+        return { path: relPath, bytes: content.length };
+      },
+      remove: async (relPath) => {
+        const abs = resolveSafePath(knowledgeDir, relPath);
+        deleteChunksForFile(db, abs);
+        db.run("DELETE FROM documents WHERE file_path = ?", [abs]);
+        unlinkSync(abs);
+        return { path: relPath };
+      },
     },
   }),
 );

@@ -12,6 +12,8 @@
 // LLM pass distills durable facts into the memories table (zero extra calls).
 import { Hono } from "hono";
 import {
+  convertToModelMessages,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
   stepCountIs,
   streamText,
   type LanguageModel,
@@ -28,6 +30,7 @@ import {
   parseDistillation,
   sliceForCompression,
 } from "./memory.ts";
+import { toolApprovalFor, writeToolsEnabled } from "./permissions.ts";
 import { buildAgentSystemPrompt, buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
 import { encodeVector } from "./retrieval.ts";
 import { appendMessage, getMessages, runEviction, searchEpisodic, setSessionTitle, type MessageRow } from "./sessions.ts";
@@ -53,6 +56,13 @@ export interface ChatRoutesDeps {
   recallMemories?: (question: string) => Promise<string[]>;
   /** Embed distilled facts for future recall (Phase M Task 3; optional). */
   embedFacts?: (facts: string[]) => Promise<number[][]>;
+  /** Note write operations for agent write tools (Phase H; optional). Whether they
+   * are mounted and how they're gated is decided by chat_permission_mode. */
+  writeNotes?: {
+    create: (relPath: string, content: string) => Promise<{ path: string; bytes: number }>;
+    update: (relPath: string, content: string) => Promise<{ path: string; bytes: number }>;
+    remove: (relPath: string) => Promise<{ path: string }>;
+  };
 }
 
 interface SessionState {
@@ -181,24 +191,45 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       const sources = new SourceCollector();
       sources.add(...extractSources(chunks));
 
+      const permissionMode = config.chat_permission_mode;
+      const tools = buildAgentTools({
+        retrieve: deps.retrieve,
+        readNote: deps.readNote,
+        listNotePaths: deps.listNotePaths,
+        sources,
+        // Past-conversation search only makes sense with a session.
+        searchHistory: session_id ? (q) => searchEpisodic(deps.db, q, 5) : undefined,
+        // readonly mode: write tools are not mounted at all (fail-closed).
+        writeNotes: writeToolsEnabled(permissionMode) ? deps.writeNotes : undefined,
+      });
+
+      // Approval continuation: the client re-sent the conversation with the user's
+      // Allow/Deny recorded on the pending tool call. Those parts must round-trip
+      // intact, so this path uses the official UIMessage→ModelMessage conversion
+      // instead of our text-only mapping.
+      if (lastAssistantMessageIsCompleteWithApprovalResponses({ messages })) {
+        modelMessages = await convertToModelMessages(messages, {
+          tools,
+          ignoreIncompleteToolCalls: true,
+        });
+      }
+
       const result = streamText({
         model: deps.chatModel(),
         system: withExtra(buildAgentSystemPrompt(chunks, config.custom_system_prompt)),
         messages: modelMessages,
-        tools: buildAgentTools({
-          retrieve: deps.retrieve,
-          readNote: deps.readNote,
-          listNotePaths: deps.listNotePaths,
-          sources,
-          // Past-conversation search only makes sense with a session.
-          searchHistory: session_id ? (q) => searchEpisodic(deps.db, q, 5) : undefined,
-        }),
+        tools,
+        toolApproval: toolApprovalFor(permissionMode),
         stopWhen: stepCountIs(MAX_AGENT_STEPS),
         prepareStep: ({ stepNumber }) =>
           stepNumber >= MAX_AGENT_STEPS - 1
             ? { activeTools: [], toolChoice: "none" as const }
             : undefined,
-        onFinish: ({ text }) => persist(text, sources.list()),
+        // Persist only on real completion — an approval pause ends this stream with
+        // finishReason 'tool-calls'; the continuation request persists the exchange.
+        onFinish: ({ text, finishReason }) => {
+          if (finishReason === "stop") persist(text, sources.list());
+        },
       });
 
       return result.toUIMessageStreamResponse({

@@ -358,3 +358,159 @@ describe("procedural injection (M3)", () => {
     expect(system).toContain("Standing instructions");
   });
 });
+
+// ---- Phase H: write tools + approval flow ----
+
+function writeNotesMock() {
+  const calls: string[] = [];
+  return {
+    calls,
+    writeNotes: {
+      create: async (p: string, c: string) => {
+        calls.push(`create:${p}`);
+        return { path: p, bytes: c.length };
+      },
+      update: async (p: string, c: string) => {
+        calls.push(`update:${p}`);
+        return { path: p, bytes: c.length };
+      },
+      remove: async (p: string) => {
+        calls.push(`remove:${p}`);
+        return { path: p };
+      },
+    },
+  };
+}
+
+/** Mock model that calls a write tool once, then (second request) answers. */
+function writeToolModel(toolName: string, input: object) {
+  return new MockLanguageModelV3({
+    doStream: [
+      {
+        stream: simulateReadableStream<LanguageModelV3StreamPart>({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "tool-call", toolCallId: "wc1", toolName, input: JSON.stringify(input) },
+            { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
+          ],
+        }),
+      },
+      {
+        stream: simulateReadableStream<LanguageModelV3StreamPart>({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "done" },
+            { type: "text-end", id: "t1" },
+            { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+          ],
+        }),
+      },
+    ],
+  });
+}
+
+describe("write tools + permissions (Phase H)", () => {
+  test("ask mode: write tool call pauses with a tool-approval-request, nothing executes", async () => {
+    const w = writeNotesMock();
+    const deps = makeDeps({
+      chatModel: () => writeToolModel("create_note", { path: "a.md", content: "hi" }) as never,
+      writeNotes: w.writeNotes,
+    });
+    const sse = await postChat(deps, { ...userMessage("建个笔记"), mode: "agentic" });
+    expect(sse).toContain('"type":"tool-approval-request"');
+    expect(w.calls).toEqual([]);
+  });
+
+  test("accept-edits: create executes without approval, delete still pauses", async () => {
+    const config = AppConfigSchema.parse({ chat_permission_mode: "accept-edits" });
+    const w = writeNotesMock();
+    const deps = makeDeps({
+      getConfig: () => config,
+      chatModel: () => writeToolModel("create_note", { path: "a.md", content: "hi" }) as never,
+      writeNotes: w.writeNotes,
+    });
+    const sse = await postChat(deps, { ...userMessage("建个笔记"), mode: "agentic" });
+    expect(sse).toContain('"type":"tool-output-available"');
+    expect(w.calls).toEqual(["create:a.md"]);
+
+    const w2 = writeNotesMock();
+    const deps2 = makeDeps({
+      getConfig: () => config,
+      chatModel: () => writeToolModel("delete_note", { path: "a.md" }) as never,
+      writeNotes: w2.writeNotes,
+    });
+    const sse2 = await postChat(deps2, { ...userMessage("删掉它"), mode: "agentic" });
+    expect(sse2).toContain('"type":"tool-approval-request"');
+    expect(w2.calls).toEqual([]);
+  });
+
+  test("readonly: write tools are not mounted at all", async () => {
+    const config = AppConfigSchema.parse({ chat_permission_mode: "readonly" });
+    const model = toolThenTextModel("q", "t");
+    const deps = makeDeps({
+      getConfig: () => config,
+      chatModel: () => model as never,
+      writeNotes: writeNotesMock().writeNotes,
+    });
+    await postChat(deps, { ...userMessage("q"), mode: "agentic" });
+    const names = (model.doStreamCalls[0]!.tools ?? []).map((t) => t.name);
+    expect(names).not.toContain("create_note");
+    expect(names).toContain("search_knowledge");
+  });
+
+  test("approval continuation: Allow executes the write, Deny does not", async () => {
+    const approvalMessages = (approved: boolean) => ({
+      mode: "agentic",
+      messages: [
+        { id: "1", role: "user", parts: [{ type: "text", text: "建个笔记" }] },
+        {
+          id: "2",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-create_note",
+              toolCallId: "wc1",
+              state: "approval-responded",
+              input: { path: "a.md", content: "hi" },
+              approval: { id: "app1", approved },
+            },
+          ],
+        },
+      ],
+    });
+
+    const w = writeNotesMock();
+    const deps = makeDeps({
+      chatModel: () => writeToolModel("create_note", { path: "a.md", content: "hi" }) as never,
+      writeNotes: w.writeNotes,
+    });
+    const sse = await postChat(deps, approvalMessages(true));
+    expect(w.calls).toEqual(["create:a.md"]);
+    expect(sse).toContain('"type":"tool-output-available"');
+
+    const w2 = writeNotesMock();
+    const model2 = writeToolModel("create_note", { path: "a.md", content: "hi" });
+    const deps2 = makeDeps({
+      chatModel: () => model2 as never,
+      writeNotes: w2.writeNotes,
+    });
+    await postChat(deps2, approvalMessages(false));
+    expect(w2.calls).toEqual([]);
+    // The denial is relayed to the model as a tool-approval-response, not re-streamed.
+    const prompt = JSON.stringify(model2.doStreamCalls[0]!.prompt);
+    expect(prompt).toContain('execution-denied');
+  });
+
+  test("approval pause does not persist the exchange; only real completion does", async () => {
+    const w = writeNotesMock();
+    const deps = makeDeps({
+      chatModel: () => writeToolModel("create_note", { path: "a.md", content: "hi" }) as never,
+      writeNotes: w.writeNotes,
+    });
+    const sid = createSession(deps.db);
+    await postChat(deps, { ...userMessage("建个笔记"), mode: "agentic", session_id: sid });
+    await settle();
+    expect(getMessages(deps.db, sid)).toEqual([]);
+  });
+});
