@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildTree, createNoteFile, flattenTree, resolveSafePath, SafePathError, updateNoteFile } from "./knowledge.ts";
+import { buildTree, createNoteFile, flattenTree, relativizeIfInside, resolveSafePath, SafePathError, updateNoteFile } from "./knowledge.ts";
 
 // Parity tests against backend/app/routers/knowledge.py (_build_tree, _resolve_safe_path).
 
@@ -70,4 +70,11 @@ test("updateNoteFile overwrites an existing file; refuses missing paths and dirs
   updateNoteFile(dir, "Apple.md", "# updated");
   expect(() => updateNoteFile(dir, "nope.md", "x")).toThrow(/not found/i);
   expect(() => updateNoteFile(dir, "Algo", "x")).toThrow(/director/i);
+});
+
+test("relativizeIfInside strips the root prefix but leaves foreign paths alone", () => {
+  const dir = makeKnowledgeDir();
+  expect(relativizeIfInside(dir, join(dir, "Algo", "sort.md"))).toBe(join("Algo", "sort.md"));
+  expect(relativizeIfInside(dir, "Algo/sort.md")).toBe("Algo/sort.md");
+  expect(relativizeIfInside(dir, "/etc/passwd")).toBe("/etc/passwd"); // still rejected downstream
 });

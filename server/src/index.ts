@@ -16,7 +16,7 @@ import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
 import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
 import { ingestRoutes } from "./ingestRoutes.ts";
-import { buildTree, createNoteFile, flattenTree, resolveSafePath, updateNoteFile } from "./knowledge.ts";
+import { buildTree, createNoteFile, flattenTree, relativizeIfInside, resolveSafePath, updateNoteFile } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
 import { memoryRoutes } from "./memoryRoutes.ts";
@@ -242,8 +242,9 @@ app.route(
     chatModel,
     retrieve,
     readNote: (relPath) => {
-      const abs = resolveSafePath(knowledgeDir, relPath);
-      return { path: relPath, content: readFileSync(abs, "utf8") };
+      const rel = relativizeIfInside(knowledgeDir, relPath);
+      const abs = resolveSafePath(knowledgeDir, rel);
+      return { path: rel, content: readFileSync(abs, "utf8") };
     },
     listNotePaths: () => flattenTree(buildTree(knowledgeDir)),
     db,
@@ -261,21 +262,24 @@ app.route(
     // index in sync exactly like the HTTP handlers do.
     writeNotes: {
       create: async (relPath, content) => {
-        const abs = createNoteFile(knowledgeDir, relPath, content);
+        const rel = relativizeIfInside(knowledgeDir, relPath);
+        const abs = createNoteFile(knowledgeDir, rel, content);
         await ingestText(db, abs, content, embedder);
-        return { path: relPath, bytes: content.length };
+        return { path: rel, bytes: content.length };
       },
       update: async (relPath, content) => {
-        const abs = updateNoteFile(knowledgeDir, relPath, content);
+        const rel = relativizeIfInside(knowledgeDir, relPath);
+        const abs = updateNoteFile(knowledgeDir, rel, content);
         await ingestText(db, abs, content, embedder);
-        return { path: relPath, bytes: content.length };
+        return { path: rel, bytes: content.length };
       },
       remove: async (relPath) => {
-        const abs = resolveSafePath(knowledgeDir, relPath);
+        const rel = relativizeIfInside(knowledgeDir, relPath);
+        const abs = resolveSafePath(knowledgeDir, rel);
         deleteChunksForFile(db, abs);
         db.run("DELETE FROM documents WHERE file_path = ?", [abs]);
         unlinkSync(abs);
-        return { path: relPath };
+        return { path: rel };
       },
     },
   }),

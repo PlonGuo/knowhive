@@ -45,6 +45,14 @@ function buildChildren(directory: string, base: string): TreeNode[] {
   });
 }
 
+/** Models echo the absolute paths they see in search results — tolerate absolute
+ * paths that live inside the knowledge root by relativizing them. Foreign absolute
+ * paths pass through unchanged and get rejected by resolveSafePath downstream. */
+export function relativizeIfInside(root: string, p: string): string {
+  const resolvedRoot = resolve(root);
+  return p.startsWith(resolvedRoot + sep) ? p.slice(resolvedRoot.length + 1) : p;
+}
+
 /** Create a new note (agent write tool + future UI). Refuses to overwrite. */
 export function createNoteFile(root: string, relPath: string, content: string): string {
   const resolved = resolveSafePath(root, relPath);
