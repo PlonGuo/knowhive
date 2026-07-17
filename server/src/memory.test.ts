@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   selectEvictions,
   buildChatContext,
+  buildUserPreface,
   needsCompression,
   parseDistillation,
   sliceForCompression,
@@ -37,22 +38,43 @@ describe("buildChatContext", () => {
     expect(modelMessages).toEqual([]);
   });
 
-  test("summary and memories become a system context block", () => {
-    const { systemExtra } = buildChatContext({
-      history,
-      turns: 1,
-      summary: "早前讨论了区间DP",
-      memories: ["用户在准备面试", "用户偏好中文回答"],
-    });
-    expect(systemExtra).toContain("早前讨论了区间DP");
-    expect(systemExtra).toContain("用户在准备面试");
-    expect(systemExtra).toContain("用户偏好中文回答");
-    expect(systemExtra.indexOf("memor")).toBeGreaterThanOrEqual(0); // labelled sections
+  // Tier 1-3: volatile summary + memories are no longer accepted by buildChatContext
+  // (they moved to buildUserPreface) — systemExtra now carries only stable instructions.
+  test("only stable procedural instructions remain in systemExtra", () => {
+    const { systemExtra } = buildChatContext({ history, turns: 1, instructions: ["回答用中文"] });
+    expect(systemExtra).toContain("回答用中文");
   });
 
-  test("no summary and no memories yields empty systemExtra", () => {
+  test("no instructions yields empty systemExtra", () => {
     const { systemExtra } = buildChatContext({ history, turns: 1 });
     expect(systemExtra).toBe("");
+  });
+});
+
+describe("buildUserPreface (Tier 1-3: volatile block for the current user message)", () => {
+  test("orders summary, then memories, then retrieved context (context closest to the question)", () => {
+    const p = buildUserPreface({
+      summary: "早前讨论了区间DP",
+      memories: ["用户在准备面试", "用户偏好中文回答"],
+      context: "<retrieved_context>\n[Source: a.md]\nAAA\n</retrieved_context>",
+    });
+    expect(p).toContain("早前讨论了区间DP");
+    expect(p).toContain("用户在准备面试");
+    expect(p).toContain("用户偏好中文回答");
+    expect(p).toContain("<retrieved_context>");
+    expect(p.indexOf("早前讨论")).toBeLessThan(p.indexOf("用户在准备面试"));
+    expect(p.indexOf("用户偏好中文回答")).toBeLessThan(p.indexOf("<retrieved_context>"));
+  });
+
+  test("omits empty pieces", () => {
+    const p = buildUserPreface({ context: "<retrieved_context>\nX\n</retrieved_context>" });
+    expect(p).toContain("<retrieved_context>");
+    expect(p).not.toContain("Summary");
+    expect(p).not.toContain("memories");
+  });
+
+  test("everything empty yields empty string", () => {
+    expect(buildUserPreface({})).toBe("");
   });
 });
 
@@ -117,15 +139,14 @@ describe("parseDistillation preferences (M3)", () => {
 });
 
 describe("buildChatContext instructions (M3)", () => {
-  test("standing instructions lead the system block", () => {
+  test("standing instructions are the stable system block", () => {
     const { systemExtra } = buildChatContext({
       history: [],
       turns: 0,
-      summary: "sum",
       instructions: ["回答用中文"],
     });
-    expect(systemExtra.indexOf("回答用中文")).toBeLessThan(systemExtra.indexOf("sum"));
     expect(systemExtra).toContain("Standing instructions");
+    expect(systemExtra).toContain("回答用中文");
   });
 });
 

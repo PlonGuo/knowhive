@@ -26,12 +26,19 @@ import { SourceCollector, buildAgentTools } from "./agentTools.ts";
 import {
   buildChatContext,
   buildDistillationPrompt,
+  buildUserPreface,
   needsCompression,
   parseDistillation,
   sliceForCompression,
 } from "./memory.ts";
 import { toolApprovalFor, writeToolsEnabled } from "./permissions.ts";
-import { buildAgentSystemPrompt, buildSystemPrompt, extractSources, uiMessageText } from "./rag.ts";
+import {
+  buildAgentSystemPrompt,
+  buildContextBlock,
+  buildSystemPrompt,
+  extractSources,
+  uiMessageText,
+} from "./rag.ts";
 import { encodeVector } from "./retrieval.ts";
 import { appendMessage, getMessages, runEviction, searchEpisodic, setSessionTitle, type MessageRow } from "./sessions.ts";
 import type { ChunkRow } from "./store.ts";
@@ -69,6 +76,25 @@ interface SessionState {
   history: MessageRow[];
   summary: string | undefined;
   watermark: number;
+}
+
+/** Prepend the volatile preface (summary + memories + retrieved context) to the
+ * last user message. Keeping it here — not in the system prompt — preserves a
+ * stable, cacheable system+history prefix (Tier 1-3). No-op when empty or when the
+ * tail isn't a fresh user turn (e.g. an approval continuation). */
+function withPreface(msgs: ModelMessage[], preface: string): ModelMessage[] {
+  if (!preface) return msgs;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]!;
+    if (m.role === "user" && typeof m.content === "string") {
+      const copy = [...msgs];
+      // Label the real question so it's unmistakably separate from any instruction
+      // embedded in the untrusted context above it (spotlighting reinforcement).
+      copy[i] = { ...m, content: `${preface}\n\nMy question (answer only this): ${m.content}` };
+      return copy;
+    }
+  }
+  return msgs;
 }
 
 function loadSessionState(db: Database, sessionId: string): SessionState {
@@ -151,11 +177,16 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     const question = uiMessageText(lastUser);
     const chunks = question ? await deps.retrieve(question, 5) : [];
+    const contextBlock = buildContextBlock(chunks);
 
     // Session mode: server-side history is the source of truth (recent window +
     // summary); stateless mode maps the client's transient array as before.
+    // Tier 1-3: the system prompt holds only STABLE content (instructions live in
+    // systemExtra); volatile summary + memories + retrieved context go into a
+    // preface on the current user message so the cache prefix spans the session.
     let modelMessages: ModelMessage[];
     let systemExtra = "";
+    let preface: string;
     if (session_id) {
       const state = loadSessionState(deps.db, session_id);
       const recalled = question && deps.recallMemories ? await deps.recallMemories(question) : [];
@@ -167,16 +198,16 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       const ctx = buildChatContext({
         history: state.history,
         turns: config.chat_memory_turns,
-        summary: state.summary,
-        memories: recalled,
         instructions,
       });
       modelMessages = [...ctx.modelMessages, { role: "user", content: question }];
       systemExtra = ctx.systemExtra;
+      preface = buildUserPreface({ summary: state.summary, memories: recalled, context: contextBlock });
     } else {
       modelMessages = messages
         .map((m) => ({ role: m.role, content: uiMessageText(m) }) as ModelMessage)
         .filter((m) => typeof m.content === "string" && m.content.length > 0);
+      preface = buildUserPreface({ context: contextBlock });
     }
 
     const withExtra = (base: string) => (systemExtra ? `${base}\n\n${systemExtra}` : base);
@@ -206,18 +237,17 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       // Approval continuation: the client re-sent the conversation with the user's
       // Allow/Deny recorded on the pending tool call. Those parts must round-trip
       // intact, so this path uses the official UIMessage→ModelMessage conversion
-      // instead of our text-only mapping.
-      if (lastAssistantMessageIsCompleteWithApprovalResponses({ messages })) {
-        modelMessages = await convertToModelMessages(messages, {
-          tools,
-          ignoreIncompleteToolCalls: true,
-        });
-      }
+      // instead of our text-only mapping. No preface here — context was already
+      // supplied on the first pass; the tail is an approval turn, not a fresh question.
+      const isContinuation = lastAssistantMessageIsCompleteWithApprovalResponses({ messages });
+      const agenticMessages = isContinuation
+        ? await convertToModelMessages(messages, { tools, ignoreIncompleteToolCalls: true })
+        : withPreface(modelMessages, preface);
 
       const result = streamText({
         model: deps.chatModel(),
-        system: withExtra(buildAgentSystemPrompt(chunks, config.custom_system_prompt)),
-        messages: modelMessages,
+        system: withExtra(buildAgentSystemPrompt(config.custom_system_prompt)),
+        messages: agenticMessages,
         tools,
         toolApproval: toolApprovalFor(permissionMode),
         stopWhen: stepCountIs(MAX_AGENT_STEPS),
@@ -239,8 +269,8 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
 
     const result = streamText({
       model: deps.chatModel(),
-      system: withExtra(buildSystemPrompt(chunks, config.custom_system_prompt)),
-      messages: modelMessages,
+      system: withExtra(buildSystemPrompt(config.custom_system_prompt)),
+      messages: withPreface(modelMessages, preface),
       onFinish: ({ text }) => persist(text, extractSources(chunks)),
     });
 

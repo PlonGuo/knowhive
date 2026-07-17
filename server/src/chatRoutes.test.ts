@@ -120,12 +120,18 @@ describe("single-pass mode (default)", () => {
     expect(sse).not.toContain("tool-input");
   });
 
-  test("injects retrieved context into the system prompt", async () => {
+  test("injects retrieved context into the user message, not the system prompt (cache-friendly)", async () => {
     const model = textOnlyModel("ok");
     await postChat(makeDeps({ chatModel: () => model as never }), userMessage("q"));
     const call = model.doStreamCalls[0]!;
+    // Tier 1-3: context moved out of the (stable, cacheable) system prompt into
+    // the current user turn. The guard stays in system; the data rides the tail.
     const system = JSON.stringify(call.prompt.find((m) => m.role === "system"));
-    expect(system).toContain("prefetched context");
+    expect(system).not.toContain("prefetched context");
+    expect(system).toContain("UNTRUSTED DATA");
+    const lastUser = JSON.stringify([...call.prompt].reverse().find((m) => m.role === "user"));
+    expect(lastUser).toContain("prefetched context");
+    expect(lastUser).toContain("<retrieved_context>");
     expect(call.tools ?? []).toHaveLength(0);
   });
 });
@@ -304,7 +310,7 @@ describe("session mode (Phase M)", () => {
     expect(prompts[0]).toContain("old-0");
   });
 
-  test("recalled memories are injected into the system prompt", async () => {
+  test("recalled memories ride the user message (volatile), not the stable system prompt", async () => {
     const model = textOnlyModel("with memory");
     const deps = makeDeps({
       chatModel: () => model as never,
@@ -312,8 +318,10 @@ describe("session mode (Phase M)", () => {
     });
     const sid = createSession(deps.db);
     await postChat(deps, { ...userMessage("hi"), session_id: sid });
-    const system = JSON.stringify(model.doStreamCalls[0]!.prompt.find((m) => m.role === "system"));
-    expect(system).toContain("用户偏好中文回答");
+    const call = model.doStreamCalls[0]!;
+    expect(JSON.stringify(call.prompt.find((m) => m.role === "system"))).not.toContain("用户偏好中文回答");
+    const lastUser = JSON.stringify([...call.prompt].reverse().find((m) => m.role === "user"));
+    expect(lastUser).toContain("用户偏好中文回答");
   });
 
   test("stateless requests (no session_id) behave exactly as before", async () => {

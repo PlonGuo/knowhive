@@ -8,25 +8,22 @@ export interface ChatContextInput {
   history: MessageRow[];
   /** Number of recent turns (user+assistant pairs) sent verbatim. 0 = none. */
   turns: number;
-  /** Rolling summary of everything below the watermark. */
-  summary?: string;
-  /** Recalled semantic memories (already ranked). */
-  memories?: string[];
-  /** Procedural memories — standing instructions, injected unconditionally. */
+  /** Procedural memories — standing instructions, kept in the stable system block.
+   * Volatile summary + recalled memories are assembled by buildUserPreface. */
   instructions?: string[];
 }
 
 export interface ChatContext {
   modelMessages: ModelMessage[];
-  /** Extra system-prompt block: summary + recalled memories (empty when neither). */
+  /** STABLE system-prompt block: standing (procedural) instructions only. Kept in
+   * the system prompt because it rarely changes, so DeepSeek's prefix cache holds.
+   * Volatile summary + recalled memories moved to buildUserPreface (Tier 1-3). */
   systemExtra: string;
 }
 
 export function buildChatContext({
   history,
   turns,
-  summary,
-  memories,
   instructions,
 }: ChatContextInput): ChatContext {
   const recent = turns > 0 ? history.slice(-turns * 2) : [];
@@ -34,17 +31,33 @@ export function buildChatContext({
     (m) => ({ role: m.role, content: m.content }) as ModelMessage,
   );
 
+  const systemExtra =
+    instructions && instructions.length > 0
+      ? `Standing instructions from the user:\n- ${instructions.join("\n- ")}`
+      : "";
+  return { modelMessages, systemExtra };
+}
+
+/** Volatile per-turn preface prepended to the CURRENT user message: rolling
+ * summary + recalled memories + retrieved context, in that order (context sits
+ * closest to the question). Keeping these OUT of the system prompt is what lets
+ * DeepSeek's prefix cache span the conversation (Tier 1-3). Empty pieces omitted. */
+export function buildUserPreface({
+  summary,
+  memories,
+  context,
+}: {
+  summary?: string;
+  memories?: string[];
+  context?: string;
+}): string {
   const blocks: string[] = [];
-  if (instructions && instructions.length > 0) {
-    blocks.push(`Standing instructions from the user:\n- ${instructions.join("\n- ")}`);
-  }
-  if (summary) {
-    blocks.push(`Summary of the earlier conversation:\n${summary}`);
-  }
+  if (summary) blocks.push(`Summary of the earlier conversation:\n${summary}`);
   if (memories && memories.length > 0) {
     blocks.push(`Relevant memories about the user (from past conversations):\n- ${memories.join("\n- ")}`);
   }
-  return { modelMessages, systemExtra: blocks.join("\n\n") };
+  if (context) blocks.push(context);
+  return blocks.join("\n\n");
 }
 
 /** Python parity: compress only when strictly more than threshold; <=0 disables. */
