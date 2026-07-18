@@ -8,6 +8,8 @@ A **local-first AI knowledge base** desktop app. Import your Markdown notes, cha
 - **RAGAS-validated migration** — the entire backend was ported from Python/FastAPI to TypeScript/bun with a RAGAS quality gate at every phase; the final stack beats the original Python baseline on all four metrics (faithfulness 0.749, answer relevancy 0.808, context precision 0.914, context recall 0.780).
 - **Small, honest desktop bundle** — Tauri v2 shell (Rust) + bun sidecar: **126MB .app / 43MB dmg**. The 571MB reranker model is downloaded on demand into the app data dir, never shipped in the installer.
 - **100% local by default** — Ollama for chat and embeddings; cloud LLMs are opt-in.
+- **Self-built cross-session memory, proven with an A/B eval** — a distillation-based long-term memory (semantic / procedural / episodic) that remembers durable facts across separate conversations. Measured: on user-specific questions, memory lifts answer recall from **0% → 100%** ([learnings/Memory-Eval.md](learnings/Memory-Eval.md)).
+- **Red-teamed prompt-injection defense** — a canary-based indirect-injection harness + spotlighting mitigation. Cut the agentic compromise rate to **0** and single-shot from 0.40 → 0.27; fail-closed write permissions + HITL are the backstop ([learnings/Prompt-Injection-Redteam.md](learnings/Prompt-Injection-Redteam.md)).
 
 ## Features
 
@@ -15,6 +17,7 @@ A **local-first AI knowledge base** desktop app. Import your Markdown notes, cha
 |---------|-------------|
 | **RAG Chat** | Ask questions about your knowledge base with source citations and token streaming (Vercel AI SDK v7) |
 | **Agent Mode (opt-in)** | A self-built tool-use loop: the model can search and read notes on its own for multi-hop questions, with live tool activity in the chat UI |
+| **Cross-Session Memory** | Multi-session chat (Claude-style history) with a distillation-based long-term memory — semantic facts, standing preferences, and episodic traces that carry across separate conversations, with LRU/TTL eviction and a management UI |
 | **File Management** | Import `.md` files; rename, delete, and edit Markdown in-app with automatic re-indexing |
 | **File Watcher** | Files edited outside the app (e.g. in Obsidian) are re-indexed automatically |
 | **Spaced Repetition** | SM-2 algorithm with AI-generated summaries for review scheduling |
@@ -25,7 +28,7 @@ A **local-first AI knowledge base** desktop app. Import your Markdown notes, cha
 | **Multi-Provider LLM** | Ollama, any OpenAI-compatible endpoint, or Anthropic Claude |
 | **Onboarding Wizard** | First-run setup: local Ollama (with model download progress) or cloud API |
 
-> Not (yet) included: PDF ingestion, persistent chat history / conversation memory (a full layered-memory system is designed and queued), community knowledge packs.
+> Not (yet) included: PDF ingestion, community knowledge packs, a CRAG relevance gate for corrective re-retrieval (designed, deferred pending a trigger-rate spike).
 
 ## Architecture
 
@@ -125,16 +128,27 @@ cd server && bun test    # sidecar (must run from server/, not the repo root)
 cd src-tauri && cargo test
 ```
 
-### RAG Evaluation (RAGAS)
+### Evaluation & Results
 
-The Python code under `backend/` is retained only as the RAGAS eval harness (it needs the ragas/langchain ecosystem); it is not part of the app:
+Every non-trivial claim in this project is backed by a measurement, not a vibe. The Python code under `backend/` is retained only as the eval/red-team harness (it needs the ragas/langchain ecosystem); it is not part of the app.
 
 ```bash
 cd backend
-uv run python -m app.eval_ragas_ts   # evaluates the running TS sidecar
+uv run python -m app.eval_ragas_ts        # RAGAS quality eval against the running sidecar
+uv run python -m app.redteam_injection    # prompt-injection red-team (canary-based)
+uv run python -m app.memory_eval --db <sidecar-db>   # cross-session memory A/B
 ```
 
-Metrics: faithfulness, answer relevancy, context precision, context recall. Full methodology and phase-by-phase results: [learnings/Stack-Migration-and-RAGAS-Validation.md](learnings/Stack-Migration-and-RAGAS-Validation.md).
+| Question I measured | Result | Writeup |
+|---|---|---|
+| Does the TS rewrite match the Python baseline? | Beats it on all 4 RAGAS metrics (faithfulness 0.749, relevancy 0.808, precision 0.914, recall 0.780) | [Stack-Migration-and-RAGAS-Validation](learnings/Stack-Migration-and-RAGAS-Validation.md) |
+| Does the agentic loop beat single-shot RAG? | Partial: cloud model gains on retrieval (source_recall +0.07), but multi-hop answer synthesis regresses on both models — default stays single | [Agentic-vs-SingleShot](learnings/Agentic-vs-SingleShot.md) |
+| Is my RAG vulnerable to prompt injection? | Baseline 0.40 single / 0.13 agentic → mitigated **0.27 / 0.00** via spotlighting; permissions + HITL backstop | [Prompt-Injection-Redteam](learnings/Prompt-Injection-Redteam.md) |
+| Does my memory system actually help? | User-specific answer recall **0% → 100%** (A/B, with a leak self-check) | [Memory-Eval](learnings/Memory-Eval.md) |
+| Is the chat request cache-friendly? | Multi-turn cache hit **0% → 22%** by moving volatile context off the stable prefix (caught + fixed a security regression in the process) | [Prompt-Cache](learnings/Prompt-Cache.md) |
+| Where does time-to-first-token go? | Cross-encoder rerank is 46% of TTFT; killed a redundant embed (recall 156ms → 1ms) | [Latency-Waterfall](learnings/Latency-Waterfall.md) |
+
+Full learnings index (spikes, tradeoffs, negative results): [learnings/](learnings/).
 
 ## Building
 
