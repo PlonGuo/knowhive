@@ -209,14 +209,27 @@ app.route(
 // Retrieve: hybrid (vector KNN ⊕ FTS5 via RRF), and when use_reranker is on,
 // over-fetch RERANK_CANDIDATES and rerank down to k with the configured backend:
 // "cross-encoder" = in-process ONNX (Phase E2), "llm" = LLM-as-reranker (Phase E1).
-const retrieve = async (query: string, k: number) => {
-  const [queryVector] = await embedder([query]);
-  if (!config.use_reranker) return hybridSearch(db, queryVector!, query, k);
+const retrieve = async (query: string, k: number, precomputedVector?: number[]) => {
+  // Env-gated internal split (KNOWHIVE_TIMING=1) so the latency waterfall can drill
+  // into retrieve when it dominates: embed vs hybrid-search vs rerank.
+  const T = process.env.KNOWHIVE_TIMING ? () => performance.now() : null;
+  const t0 = T ? T() : 0;
+  // /chat passes a shared vector so the question is embedded once, not twice.
+  const queryVector = precomputedVector ?? (await embedder([query]))[0];
+  const t1 = T ? T() : 0;
+  if (!config.use_reranker) {
+    const hits = hybridSearch(db, queryVector!, query, k);
+    if (T) console.log(`[timing.retrieve] embed=${Math.round(t1 - t0)}ms search=${Math.round(T() - t1)}ms rerank=0ms`);
+    return hits;
+  }
 
   const candidates = hybridSearch(db, queryVector!, query, RERANK_CANDIDATES);
+  const t2 = T ? T() : 0;
 
   if (config.reranker_backend === "cross-encoder") {
-    return rerankCrossEncoder(query, candidates, k, crossEncoderScore);
+    const hits = await rerankCrossEncoder(query, candidates, k, crossEncoderScore);
+    if (T) console.log(`[timing.retrieve] embed=${Math.round(t1 - t0)}ms search=${Math.round(t2 - t1)}ms rerank=${Math.round(T() - t2)}ms`);
+    return hits;
   }
   return rerankChunks(
     query,
@@ -258,8 +271,9 @@ app.route(
       return text;
     },
     embedFacts: (facts) => embedder(facts),
-    recallMemories: async (question) => {
-      const [vec] = await embedder([question]);
+    embedQuery: async (text) => (await embedder([text]))[0]!,
+    recallMemories: async (question, queryVector) => {
+      const vec = queryVector ?? (await embedder([question]))[0];
       return recallSemanticMemories(db, vec!, { k: 3, minSimilarity: 0.5 });
     },
     // Agent write tools (Phase H) — reuse the knowledge services and keep the

@@ -52,15 +52,21 @@ export interface ChatRoutesDeps {
   getConfig: () => AppConfig;
   /** Fresh model per call so config changes take effect without restart. */
   chatModel: () => LanguageModel;
-  retrieve: (query: string, k: number) => Promise<ChunkRow[]>;
+  /** Optional precomputed query vector skips retrieve's internal embed — lets /chat
+   * embed the question once and share it with recall (latency: kills a redundant
+   * ~156ms Ollama round-trip, see learnings/Latency-Waterfall.md). */
+  retrieve: (query: string, k: number, queryVector?: number[]) => Promise<ChunkRow[]>;
+  /** Embed one query string (for the embed-once/reuse dedup). */
+  embedQuery?: (text: string) => Promise<number[]>;
   /** Read a note by knowledge-dir-relative path (throws SafePathError / not-found). */
   readNote: (relPath: string) => { path: string; content: string };
   listNotePaths: () => string[];
   db: Database;
   /** Plain-text generation for the summarizer (compression + distillation). */
   generate: (prompt: string) => Promise<string>;
-  /** Recall semantic memories relevant to the question (Phase M Task 3; optional). */
-  recallMemories?: (question: string) => Promise<string[]>;
+  /** Recall semantic memories relevant to the question (Phase M Task 3; optional).
+   * Accepts the shared query vector to avoid re-embedding the question. */
+  recallMemories?: (question: string, queryVector?: number[]) => Promise<string[]>;
   /** Embed distilled facts for future recall (Phase M Task 3; optional). */
   embedFacts?: (facts: string[]) => Promise<number[][]>;
   /** Note write operations for agent write tools (Phase H; optional). Whether they
@@ -174,9 +180,19 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     const config = deps.getConfig();
     const chatMode: ChatMode = mode ?? config.chat_mode;
 
+    // Env-gated latency instrumentation (KNOWHIVE_TIMING=1). Off by default → zero
+    // cost + no behavior change. Stage times ride messageMetadata so a probe reads
+    // them from the stream; the LLM TTFT is the probe's first-delta minus preLlmMs.
+    const timing = process.env.KNOWHIVE_TIMING
+      ? ({ t0: performance.now() } as { t0: number; retrieve?: number; ready?: number })
+      : null;
+
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     const question = uiMessageText(lastUser);
-    const chunks = question ? await deps.retrieve(question, 5) : [];
+    // Embed the question once and share the vector with retrieve + recall (dedup).
+    const queryVector = question && deps.embedQuery ? await deps.embedQuery(question) : undefined;
+    const chunks = question ? await deps.retrieve(question, 5, queryVector) : [];
+    if (timing) timing.retrieve = performance.now() - timing.t0;
     const contextBlock = buildContextBlock(chunks);
 
     // Session mode: server-side history is the source of truth (recent window +
@@ -189,7 +205,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     let preface: string;
     if (session_id) {
       const state = loadSessionState(deps.db, session_id);
-      const recalled = question && deps.recallMemories ? await deps.recallMemories(question) : [];
+      const recalled = question && deps.recallMemories ? await deps.recallMemories(question, queryVector) : [];
       const instructions = (
         deps.db.query("SELECT content FROM memories WHERE kind = 'procedural' ORDER BY id").all() as {
           content: string;
@@ -209,6 +225,12 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
         .filter((m) => typeof m.content === "string" && m.content.length > 0);
       preface = buildUserPreface({ context: contextBlock });
     }
+
+    if (timing) timing.ready = performance.now() - timing.t0;
+    // Stage times folded into messageMetadata when instrumentation is on.
+    const timings = timing
+      ? { retrieveMs: Math.round(timing.retrieve ?? 0), preLlmMs: Math.round(timing.ready ?? 0) }
+      : undefined;
 
     const withExtra = (base: string) => (systemExtra ? `${base}\n\n${systemExtra}` : base);
     const persist = (answer: string, sources: string[]) => {
@@ -263,7 +285,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       });
 
       return result.toUIMessageStreamResponse({
-        messageMetadata: () => ({ sources: sources.list() }),
+        messageMetadata: () => ({ sources: sources.list(), ...(timings ? { timings } : {}) }),
       });
     }
 
@@ -275,7 +297,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     });
 
     return result.toUIMessageStreamResponse({
-      messageMetadata: () => ({ sources: extractSources(chunks) }),
+      messageMetadata: () => ({ sources: extractSources(chunks), ...(timings ? { timings } : {}) }),
     });
   });
 
