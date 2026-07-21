@@ -1,42 +1,61 @@
 import { useEffect, useState } from 'react'
 import AppLayout from './components/layout/AppLayout'
 import OnboardingPage from './components/onboarding/OnboardingPage'
+import DotGrid from './components/reactbits/DotGrid'
+import { getBackendUrl } from './lib/platform'
+import { initTheme } from './lib/theme'
 
-interface HealthStatus {
-  status: string
-  version: string
-}
+// Apply the persisted (or system) theme before first paint — avoids a light flash.
+initTheme()
 
 export default function App() {
-  const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [backendUrl, setBackendUrl] = useState('http://127.0.0.1:8000')
+  const [backendUrl, setBackendUrl] = useState('http://127.0.0.1:18200')
   const [firstRun, setFirstRun] = useState<boolean | null>(null)
 
   useEffect(() => {
     const init = async () => {
       try {
-        const url = await window.api?.getBackendUrl?.() ?? 'http://127.0.0.1:8000'
+        const url = await getBackendUrl()
         setBackendUrl(url)
-        const [healthRes, setupRes] = await Promise.all([
+        // /health warms the connection check alongside the setup gate.
+        const [, setupRes] = await Promise.all([
           fetch(`${url}/health`),
           fetch(`${url}/setup/status`),
         ])
-        const healthData: HealthStatus = await healthRes.json()
         const setupData: { first_run?: boolean } = await setupRes.json()
-        setHealth(healthData)
         setFirstRun(setupData.first_run === true)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+      } catch {
         setFirstRun(false)
       }
     }
     init()
   }, [])
 
-  if (firstRun === true) {
-    return <OnboardingPage backendUrl={backendUrl} onComplete={() => setFirstRun(false)} />
+  // Don't mount AppLayout until the setup check resolves — its children would fire
+  // requests against the placeholder URL and the layout would flash before onboarding.
+  let screen: React.ReactNode
+  if (firstRun === null) {
+    screen = (
+      <div
+        data-testid="app-connecting"
+        className="flex h-screen items-center justify-center text-sm text-muted-foreground"
+      >
+        Connecting to backend…
+      </div>
+    )
+  } else if (firstRun === true) {
+    screen = <OnboardingPage backendUrl={backendUrl} onComplete={() => setFirstRun(false)} />
+  } else {
+    screen = <AppLayout backendUrl={backendUrl} />
   }
 
-  return <AppLayout health={health} error={error} backendUrl={backendUrl} />
+  return (
+    <>
+      {/* Global interactive background — content panels float above it (z-10). */}
+      <div className="fixed inset-0 z-0 bg-background">
+        <DotGrid />
+      </div>
+      <div className="relative z-10 h-screen">{screen}</div>
+    </>
+  )
 }

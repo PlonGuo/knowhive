@@ -1,245 +1,217 @@
 # KnowHive
 
-A **local-first AI knowledge base** desktop app. Import your Markdown and PDF files, chat with them using any LLM (Ollama, OpenAI, or Anthropic Claude), and build a spaced-repetition review practice — all without your data leaving your machine.
+A **local-first AI knowledge base** desktop app. Import your Markdown notes, chat with them using any LLM (Ollama, OpenAI-compatible, or Anthropic Claude), and build a spaced-repetition review practice — all without your data leaving your machine.
 
-<p align="center">
-  <img src="build/icon.png" alt="KnowHive" width="128" />
-</p>
+![KnowHive — chat with your knowledge base](app_cover.png)
 
 ## Highlights
 
-- **Multi-Strategy RAG Pipeline** — LangGraph-orchestrated retrieval with dynamic query routing (HyDE / multi-query / direct), heading-aware chunking, and CrossEncoder reranking
-- **Layered Conversation Memory** — Watermark-based compression preserves recent messages verbatim while summarizing older context, with LLM-powered query rewriting for multi-turn resolution
-- **Process-Isolated Sidecar Architecture** — Electron + FastAPI with crash recovery and health-polling, enabling zero-downtime model switching across LLM backends
-- **100% Local by Default** — All data stays on your machine; cloud LLMs are opt-in
+- **Hybrid retrieval + in-process reranking** — vector KNN ⊕ SQLite FTS5 fused with Reciprocal Rank Fusion, then reranked by a cross-encoder (`bge-reranker-v2-m3`, int8 ONNX) running **inside the bun sidecar** via transformers.js — no Python, no external reranker service. An LLM-as-reranker backend is kept as a zero-dependency fallback.
+- **RAGAS-validated migration** — the entire backend was ported from Python/FastAPI to TypeScript/bun with a RAGAS quality gate at every phase; the final stack beats the original Python baseline on all four metrics (faithfulness 0.749, answer relevancy 0.808, context precision 0.914, context recall 0.780).
+- **Small, honest desktop bundle** — Tauri v2 shell (Rust) + bun sidecar: **126MB .app / 43MB dmg**. The 571MB reranker model is downloaded on demand into the app data dir, never shipped in the installer.
+- **100% local by default** — Ollama for chat and embeddings; cloud LLMs are opt-in.
+- **Self-built cross-session memory, proven with an A/B eval** — a distillation-based long-term memory (semantic / procedural / episodic) that remembers durable facts across separate conversations. Measured: on user-specific questions, memory lifts answer recall from **0% → 100%** ([learnings/evals/Memory-Eval.md](learnings/evals/Memory-Eval.md)).
+- **Red-teamed prompt-injection defense** — a canary-based indirect-injection harness + spotlighting mitigation. Cut the agentic compromise rate to **0** and single-shot from 0.40 → 0.27; fail-closed write permissions + HITL are the backstop ([learnings/evals/Prompt-Injection-Redteam.md](learnings/evals/Prompt-Injection-Redteam.md)).
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
-| **RAG Chat** | Ask questions about your knowledge base with source citations and SSE streaming |
-| **File Management** | Import `.md` and `.pdf` files; rename, delete, and edit Markdown in-app |
-| **File Watcher** | Automatically re-indexes files when they change on disk |
+| **RAG Chat** | Ask questions about your knowledge base with source citations and token streaming (Vercel AI SDK v7) |
+| **Agent Mode (opt-in)** | A self-built tool-use loop: the model can search and read notes on its own for multi-hop questions — and create/edit/delete notes behind a fail-closed approval gate — with live tool activity in the chat UI |
+| **Cross-Session Memory** | Multi-session chat (Claude-style history) with a distillation-based long-term memory — semantic facts, standing preferences, and episodic traces that carry across separate conversations, with LRU/TTL eviction and a management UI |
+| **File Management** | Import `.md` files; rename, delete, and edit Markdown in-app with automatic re-indexing |
+| **File Watcher** | Files edited outside the app (e.g. in Obsidian) are re-indexed automatically |
 | **Spaced Repetition** | SM-2 algorithm with AI-generated summaries for review scheduling |
-| **Knowledge Overview** | Browse all documents with on-demand AI summaries |
-| **Community Packs** | Import curated knowledge packs from the community manifest |
-| **Embedding Models** | Download and switch sentence-transformer models (English / Chinese / Mixed) |
-| **Data Export** | Export your full knowledge base + chat history as a ZIP |
+| **Knowledge Overview** | Browse all documents with on-demand, cached AI summaries |
+| **Reranker Control** | Toggle reranking; switch between in-process cross-encoder and LLM-as-reranker backends |
+| **Embedding Models** | English (`nomic-embed-text`) / Chinese / Mixed (`bge-m3`) via Ollama, with background re-embedding on switch |
+| **Data Export** | Export your full knowledge base + config as a ZIP |
 | **Multi-Provider LLM** | Ollama, any OpenAI-compatible endpoint, or Anthropic Claude |
-| **Custom System Prompt** | Tailor the AI assistant's behavior to your use case |
-| **Onboarding Wizard** | First-run setup to check dependencies and configure your LLM |
+| **Onboarding Wizard** | First-run setup: local Ollama (with model download progress) or cloud API |
+
+> Not (yet) included: PDF ingestion, community knowledge packs, a CRAG relevance gate for corrective re-retrieval (designed, deferred pending a trigger-rate spike).
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│            Electron Desktop Shell            │
-│  ┌───────────────────────────────────────┐   │
-│  │   React 18 + TypeScript + Tailwind    │   │
-│  │   (Chat, Knowledge, Review, Settings) │   │
-│  └──────────────────┬────────────────────┘   │
-│                HTTP / SSE                     │
-├─────────────────────┴───────────────────────┤
-│           FastAPI Sidecar (Python)           │
-│  ┌────────────┐  ┌────────────────────────┐  │
-│  │  Routers   │  │       Services         │  │
-│  │ chat       │  │ RAG (LangGraph)        │  │
-│  │ config     │  │ Ingest + Chunking      │  │
-│  │ ingest     │  │ Embedding + Reranking  │  │
-│  │ knowledge  │  │ Memory Compression     │  │
-│  │ review     │  │ Strategy Classifier    │  │
-│  │ community  │  │ Spaced Repetition      │  │
-│  │ export     │  │ LLM Factory            │  │
-│  └────────────┘  └────────────────────────┘  │
-│  ┌────────────────────────────────────────┐  │
-│  │  ChromaDB (vectors) + SQLite (metadata) │  │
-│  └────────────────────────────────────────┘  │
-└──────────────────────┬──────────────────────┘
-                  HTTP API
-┌──────────────────────┴──────────────────────┐
-│     Ollama  /  OpenAI-compatible  /  Claude  │
-└──────────────────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│           Tauri v2 Shell (Rust)               │
+│  ┌─────────────────────────────────────────┐  │
+│  │    React 18 + TypeScript + Tailwind     │  │
+│  │   (Chat, Knowledge, Review, Settings)   │  │
+│  └───────────────────┬─────────────────────┘  │
+│               HTTP / streaming                │
+├────────────────────── ┴ ──────────────────────┤
+│           bun Sidecar (TypeScript)            │
+│  ┌────────────┐  ┌─────────────────────────┐  │
+│  │ Hono routes│  │        Services         │  │
+│  │ chat       │  │ Hybrid retrieval (RRF)  │  │
+│  │ config     │  │ Cross-encoder reranker  │  │
+│  │ ingest     │  │ Ingest + chunking       │  │
+│  │ knowledge  │  │ Watcher + sync          │  │
+│  │ review     │  │ SM-2 spaced repetition  │  │
+│  │ ollama     │  │ Summaries + export      │  │
+│  └────────────┘  └─────────────────────────┘  │
+│  ┌─────────────────────────────────────────┐  │
+│  │   bun:sqlite — chunks + vectors + FTS5  │  │
+│  └─────────────────────────────────────────┘  │
+└────────────────────── ┬ ──────────────────────┘
+                    HTTP API
+┌────────────────────── ┴ ──────────────────────┐
+│     Ollama  /  OpenAI-compatible  /  Claude   │
+└───────────────────────────────────────────────┘
 ```
 
-### RAG Pipeline (LangGraph)
+The Rust shell finds a free port (18200–18300), spawns the sidecar, polls `/health` until ready, restarts it on crash (up to 3 attempts), and stops it on exit. The sidecar also self-terminates if it ever finds itself orphaned. In dev the sidecar runs from source with the system `bun`; in the packaged app a bundled bun runtime executes a pre-bundled `index.js` from the app resources.
 
-The retrieval pipeline is orchestrated as a LangGraph `StateGraph` with conditional routing:
+### RAG Pipeline
 
 ```
-Query → [Rewrite (if memory enabled)]
-           ↓
-      [Route Pre-Retrieval]
-       ├─ HyDE: generate hypothetical passage → embed → retrieve
-       ├─ Multi-Query: expand to 3-5 variants → retrieve per variant → deduplicate
-       └─ Direct: standard semantic search
-           ↓
-      [Retrieve from ChromaDB]
-           ↓
-      [Rerank (CrossEncoder, optional)]
-           ↓
-      [Build Prompt + Generate (SSE stream)]
+Query → embed (Ollama) → hybrid retrieve (vector KNN ⊕ FTS5, RRF-fused, top 20)
+      → rerank to top 5
+          ├─ cross-encoder (default): bge-reranker-v2-m3 int8 ONNX, in-process, ~50ms/pair
+          └─ llm (fallback): listwise coverage-prompt rerank with the configured chat model
+      → system prompt injection → streamText → UI-message stream with source metadata
 ```
 
-**Strategy classifier** selects the pre-retrieval approach per query — either via rule-based heuristics or LLM-based intent classification.
+Reranking fails open: any scorer error falls back to hybrid order. Retrieval design choices (candidate count, k, coverage vs relevance prompt) were selected by a k-sweep experiment — see [learnings/evals/Reranker-K-Sweep.md](learnings/evals/Reranker-K-Sweep.md).
 
-### Conversation Memory
+### Agent Mode (tool-use loop)
 
-| Layer | Behavior |
-|-------|----------|
-| **Short-term** | Last N messages stored verbatim in SQLite |
-| **Long-term** | Older messages compressed via LLM summarization |
-| **Watermark** | Tracks compression boundary — avoids redundant re-summarization |
-| **Query Rewriting** | LLM rewrites follow-up questions using conversation context |
+`chat_mode: agentic` upgrades the pipeline to a self-built agent loop (no framework — AI SDK v7 primitives): the same pre-retrieval runs first (so a model that never calls tools degrades to single-pass, not zero context), then the model can call `search_knowledge` / `read_note` / `list_notes` for follow-up hops — plus `search_history` over past conversations in session mode, and `create_note` / `update_note` / `delete_note` write tools gated by `chat_permission_mode` (`ask` by default; deletes ask even in `accept-edits`; `readonly` doesn't mount write tools at all) — capped at 6 steps with a tools-stripped final step that structurally guarantees a text answer. Tool failures return error values instead of throwing, sources aggregate across steps, and the chat UI streams tool activity live.
 
-### Sidecar Process Management
-
-The `SidecarManager` in Electron handles the FastAPI backend lifecycle:
-
-- **Dynamic port selection** — finds a free port at startup
-- **Health polling** — GET `/health` every 200ms until ready (15s timeout)
-- **Auto-restart** — up to 3 restart attempts on crash
-- **Graceful shutdown** — SIGTERM → 2s grace period → force kill
+It ships **off by default** — a pre-registered eval gate (single vs agentic, 4 arms, RAGAS + a deterministic `source_recall` metric) showed that with a local 3B model the loop's retrieval gains don't survive answer synthesis. The write-up, including why that negative result is the interesting part, is in [learnings/evals/Agentic-vs-SingleShot.md](learnings/evals/Agentic-vs-SingleShot.md).
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Desktop shell | Electron 28 |
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui |
-| Backend | FastAPI + Python 3.11+ |
-| RAG orchestration | LangGraph (StateGraph) |
-| LLM integrations | LangChain (Ollama, OpenAI, Anthropic) |
-| Vector store | ChromaDB |
-| Embeddings | sentence-transformers (local) |
-| Reranker | CrossEncoder (local) |
-| Database | SQLite (aiosqlite) |
-| File parsing | Heading-aware Markdown splitter + PyMuPDF (PDF) |
-| File watching | watchdog |
-| Evaluation | RAGAS framework |
-| Package managers | pnpm (frontend) + uv (backend) |
+| Desktop shell | Tauri v2 (Rust) |
+| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
+| Sidecar runtime | bun + Hono |
+| LLM integration | Vercel AI SDK v7 (streamText / useChat) |
+| Storage & search | bun:sqlite — one DB for chunks, brute-force cosine KNN, FTS5 |
+| Embeddings | Ollama (`nomic-embed-text` / `bge-m3`) |
+| Reranker | `onnx-community/bge-reranker-v2-m3-ONNX` int8 via @huggingface/transformers (onnxruntime-node) |
+| Evaluation | RAGAS (Python harness in `backend/`, dev-only) |
+| Package manager | bun (root + `server/`) |
 
 ## Prerequisites
 
 | Requirement | Notes |
 |-------------|-------|
-| Node.js 18+ | Electron/React frontend |
-| pnpm | `npm install -g pnpm` |
-| Python 3.11+ | FastAPI sidecar |
-| [uv](https://docs.astral.sh/uv/getting-started/installation/) | Python package manager |
-| [Ollama](https://ollama.com/) *(optional)* | Local LLM runner; or use OpenAI / Anthropic |
+| [bun](https://bun.sh/) | Runtime + package manager for everything JS/TS |
+| [Rust toolchain](https://rustup.rs/) | Tauri shell (`cargo` must be on PATH) |
+| [Ollama](https://ollama.com/) | Local LLM runner with `llama3.2`, `nomic-embed-text`, `bge-m3` pulled — or configure a cloud provider in onboarding |
 
-## Installation
+## Development
 
 ```bash
 git clone https://github.com/PlonGuo/knowhive.git
 cd knowhive
+bun install
+cd server && bun install && cd ..
 
-# Install frontend dependencies
-pnpm install
-
-# Install backend dependencies
-cd backend && uv sync && cd ..
+bun run tauri:dev        # Tauri shell + vite + sidecar, all wired
 ```
 
-## Development
-
-Run all three processes (backend + Vite + Electron) in one command:
+The sidecar can also run standalone (useful for API work and evals):
 
 ```bash
-pnpm dev:all
-```
-
-Or start them separately:
-
-```bash
-# Terminal 1 — FastAPI backend
-cd backend
-uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 18200
-
-# Terminal 2 — Electron + Vite (after backend is up)
-BACKEND_URL=http://127.0.0.1:18200 pnpm dev
+bun run server/src/index.ts --port 18200 --data-dir /tmp/knowhive-dev
 ```
 
 ## Testing
 
 ```bash
-# Frontend + Electron tests (Vitest)
-pnpm test
-
-# Backend tests (pytest)
-cd backend
-uv run pytest
+bun run test             # frontend (vitest — note: `bun run test`, not `bun test`)
+cd server && bun test    # sidecar (must run from server/, not the repo root)
+cd src-tauri && cargo test
 ```
 
-### RAG Evaluation (RAGAS)
+### Evaluation & Results
+
+Every non-trivial claim in this project is backed by a measurement, not a vibe. The Python code under `backend/` is retained only as the eval/red-team harness (it needs the ragas/langchain ecosystem); it is not part of the app.
 
 ```bash
 cd backend
-uv run python -m app.eval_ragas
+uv run python -m app.eval_ragas_ts        # RAGAS quality eval against the running sidecar
+uv run python -m app.redteam_injection    # prompt-injection red-team (canary-based)
+uv run python -m app.memory_eval --db <sidecar-db>   # cross-session memory A/B
 ```
 
-Evaluates the RAG pipeline against `eval_dataset.json` using RAGAS metrics: faithfulness, answer relevancy, context precision, and context recall.
+| Question I measured | Result | Writeup |
+|---|---|---|
+| Does the TS rewrite match the Python baseline? | Beats it on all 4 RAGAS metrics (faithfulness 0.749, relevancy 0.808, precision 0.914, recall 0.780) | [Stack-Migration-and-RAGAS-Validation](learnings/decisions/Stack-Migration-and-RAGAS-Validation.md) |
+| Does the agentic loop beat single-shot RAG? | Partial: cloud model gains on retrieval (source_recall +0.07), but multi-hop answer synthesis regresses on both models — default stays single | [Agentic-vs-SingleShot](learnings/evals/Agentic-vs-SingleShot.md) |
+| Is my RAG vulnerable to prompt injection? | Baseline 0.40 single / 0.13 agentic → mitigated **0.27 / 0.00** via spotlighting; permissions + HITL backstop | [Prompt-Injection-Redteam](learnings/evals/Prompt-Injection-Redteam.md) |
+| Does my memory system actually help? | User-specific answer recall **0% → 100%** (A/B, with a leak self-check) | [Memory-Eval](learnings/evals/Memory-Eval.md) |
+| Is the chat request cache-friendly? | Multi-turn cache hit **0% → 22%** by moving volatile context off the stable prefix (caught + fixed a security regression in the process) | [Prompt-Cache](learnings/evals/Prompt-Cache.md) |
+| Where does time-to-first-token go? | Cross-encoder rerank is 46% of TTFT; killed a redundant embed (recall 156ms → 1ms) | [Latency-Waterfall](learnings/evals/Latency-Waterfall.md) |
+
+Full learnings index (spikes, tradeoffs, negative results): [learnings/](learnings/).
 
 ## Building
 
 ```bash
-# macOS (arm64 + x64 universal DMG)
-pnpm build:mac
-
-# Windows
-pnpm build:win
+bun run tauri:build      # → src-tauri/target/release/bundle/{macos/KnowHive.app, dmg/}
 ```
+
+The build bundles three pieces (see [server/build-dist.ts](server/build-dist.ts)):
+
+1. `resources/server/index.js` — the sidecar bundled to a single JS file, with native packages left external
+2. `resources/server/node_modules` — a real, minimal install of just the native packages (onnxruntime dylibs must live on disk), trimmed to the host platform
+3. `binaries/bun-<triple>` — the bun runtime itself, shipped as a Tauri externalBin
+
+Why not a single `bun build --compile` binary? It works — we spiked it — but native `.node` addons and their dylibs make it fragile. The trade-off analysis and revert triggers are documented in [learnings/decisions/Bun-Compile-Native-Deps-Spike.md](learnings/decisions/Bun-Compile-Native-Deps-Spike.md).
 
 ## Project Structure
 
 ```
 knowhive/
 ├── src/                      # React frontend (TypeScript)
-│   └── components/
-│       ├── layout/           # AppLayout, Sidebar, ChatArea, StatusBar
-│       ├── knowledge/        # FileTree, MarkdownEditor, KnowledgeOverview
-│       ├── settings/         # SettingsPage (LLM config, RAG options)
-│       ├── review/           # ReviewPage (spaced repetition)
-│       ├── community/        # CommunityBrowser
-│       └── onboarding/       # OnboardingPage (first-run wizard)
-├── electron/                 # Electron main process
-│   ├── main.ts               # BrowserWindow, IPC handlers
-│   ├── sidecar.ts            # FastAPI process lifecycle manager
-│   └── preload.ts            # contextBridge API
-├── backend/                  # FastAPI sidecar (Python)
-│   └── app/
-│       ├── main.py           # App factory, lifespan, service wiring
-│       ├── routers/          # API endpoints (chat, config, ingest, ...)
-│       └── services/         # Core logic
-│           ├── rag_graph.py              # LangGraph RAG pipeline
-│           ├── rag_service.py            # ChromaDB retrieval + prompt assembly
-│           ├── llm_factory.py            # Multi-provider LLM instantiation
-│           ├── hyde_service.py           # HyDE pre-retrieval strategy
-│           ├── multi_query_service.py    # Multi-query expansion
-│           ├── strategy_classifier.py    # Query intent → strategy routing
-│           ├── query_rewriter.py         # Context-aware query rewriting
-│           ├── memory_compression_service.py  # Layered memory compression
-│           ├── reranker_service.py       # CrossEncoder reranking
-│           ├── heading_chunker.py        # Heading-aware Markdown splitting
-│           ├── ingest_service.py         # File import + embedding pipeline
-│           ├── embedding_service.py      # sentence-transformer management
-│           └── spaced_repetition_service.py   # SM-2 algorithm
-└── tests/                    # Vitest (frontend) + pytest (backend)
+│   ├── components/
+│   │   ├── layout/           # AppLayout, Sidebar, ChatArea, StatusBar
+│   │   ├── knowledge/        # FileTree, MarkdownEditor, KnowledgeOverview
+│   │   ├── settings/         # SettingsPage (LLM config, RAG options)
+│   │   ├── review/           # ReviewPage (spaced repetition)
+│   │   └── onboarding/       # OnboardingPage (first-run wizard)
+│   └── lib/                  # platform adapter (Tauri/browser), Ollama client
+├── src-tauri/                # Tauri shell (Rust)
+│   ├── src/sidecar.rs        # sidecar lifecycle: spawn, health, restart, stop
+│   └── tauri.conf.json       # bundling: externalBin bun + server resources
+├── server/                   # bun sidecar (TypeScript + Hono)
+│   ├── src/index.ts          # assembly: routes wired with injected deps
+│   ├── src/db.ts             # bun:sqlite + FTS5 + triggers
+│   ├── src/store.ts          # hybrid search (vector ⊕ FTS5, RRF)
+│   ├── src/crossEncoder*.ts  # in-process ONNX reranker (Phase E2)
+│   ├── src/rerank.ts         # LLM-as-reranker (Phase E1, fallback)
+│   ├── src/*Routes.ts        # Hono sub-routes (dependency-injected, unit-tested)
+│   └── build-dist.ts         # packaged-app dist builder
+├── shared/schema.ts          # Zod config contract shared by frontend + sidecar
+├── backend/                  # Python — RAGAS eval harness only (not shipped)
+├── learnings/                # categorized records — evals/ decisions/ design/ career/ (index: learnings/README.md)
+└── tests/                    # vitest (frontend)
 ```
 
 ## Configuration
 
-All settings are managed through the in-app Settings page or `config.yaml`:
+All settings are managed through the in-app Settings page or `config.yaml` in the app data dir (`~/Library/Application Support/com.plonguo.knowhive/` on macOS):
 
 ```yaml
-llm_provider: openai-compatible   # ollama | openai-compatible | anthropic
-model_name: gpt-4o-mini
-base_url: https://api.openai.com/v1
-embedding_language: english        # english | chinese | mixed
-pre_retrieval_strategy: none       # none | hyde | multi_query | auto | auto_llm
+llm_provider: ollama              # ollama | openai-compatible | anthropic
+model_name: llama3.2
+base_url: http://localhost:11434  # chat provider URL (local or cloud)
+api_key: null                     # required for cloud providers
+ollama_base_url: http://localhost:11434  # embeddings always use local Ollama, even with a cloud chat provider
+embedding_language: english       # english | chinese | mixed
 use_reranker: false
-chat_memory_turns: 0               # 0 = disabled
-memory_compression_threshold: 20
+reranker_backend: cross-encoder   # cross-encoder | llm
+chat_mode: single                 # single | agentic (tool-use loop)
+chat_permission_mode: ask         # ask | accept-edits | readonly — write-tool gate for agentic chat
+chat_memory_turns: 6              # recent turns sent verbatim in session mode
+memory_compression_threshold: 20  # unsummarized messages before watermark compression kicks in
 custom_system_prompt: ''
 ```
 

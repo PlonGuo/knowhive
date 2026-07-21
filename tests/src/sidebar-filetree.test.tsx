@@ -28,17 +28,19 @@ function mockFetchResponses(responses: Record<string, unknown>) {
   })
 }
 
+// Mock the platform adapter (the file-picker seam) — components never touch
+// native APIs directly. The factory can't reference later consts (hoisting).
+const { selectFilesMock } = vi.hoisted(() => ({ selectFilesMock: vi.fn() }))
+vi.mock('../../src/lib/platform', () => ({
+  getBackendUrl: () => Promise.resolve('http://127.0.0.1:18200'),
+  getSidecarStatus: () => Promise.resolve('running'),
+  selectFiles: selectFilesMock,
+  saveFile: () => Promise.resolve(null),
+}))
+
 describe('Sidebar with FileTree', () => {
   beforeEach(() => {
-    Object.defineProperty(window, 'api', {
-      value: {
-        getBackendUrl: vi.fn().mockResolvedValue(mockBackendUrl),
-        getSidecarStatus: vi.fn().mockResolvedValue('running'),
-        selectFiles: vi.fn().mockResolvedValue([]),
-      },
-      writable: true,
-      configurable: true,
-    })
+    selectFilesMock.mockResolvedValue([])
     mockFetchResponses({ '/knowledge/tree': mockTree })
   })
 
@@ -59,23 +61,14 @@ describe('Sidebar with FileTree', () => {
     expect(screen.getByTestId('import-button')).toBeInTheDocument()
   })
 
-  it('import button triggers IPC file picker', async () => {
-    const selectFiles = vi.fn().mockResolvedValue(['/path/to/file.md'])
-    Object.defineProperty(window, 'api', {
-      value: {
-        getBackendUrl: vi.fn().mockResolvedValue(mockBackendUrl),
-        getSidecarStatus: vi.fn().mockResolvedValue('running'),
-        selectFiles: selectFiles,
-      },
-      writable: true,
-      configurable: true,
-    })
+  it('import button triggers the native file picker', async () => {
+    selectFilesMock.mockResolvedValue(['/path/to/file.md'])
 
     render(<Sidebar backendUrl={mockBackendUrl} />)
     fireEvent.click(screen.getByTestId('import-button'))
 
     await waitFor(() => {
-      expect(selectFiles).toHaveBeenCalled()
+      expect(selectFilesMock).toHaveBeenCalled()
     })
   })
 
@@ -93,5 +86,19 @@ describe('Sidebar with FileTree', () => {
   it('still has settings button', () => {
     render(<Sidebar backendUrl={mockBackendUrl} />)
     expect(screen.getByTestId('settings-button')).toBeInTheDocument()
+  })
+})
+
+describe('Sidebar collapse (Claude-style)', () => {
+  it('collapses to a rail and expands back', async () => {
+    render(<Sidebar backendUrl={mockBackendUrl} />)
+    await waitFor(() => expect(screen.getByTestId('filetree')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('sidebar-collapse'))
+    expect(screen.queryByTestId('filetree')).not.toBeInTheDocument()
+    expect(screen.getByTestId('sidebar-rail')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('sidebar-expand'))
+    await waitFor(() => expect(screen.getByTestId('filetree')).toBeInTheDocument())
   })
 })

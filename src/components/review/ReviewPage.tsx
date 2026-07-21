@@ -180,7 +180,7 @@ export default function ReviewPage({ backendUrl, onBack }: ReviewPageProps) {
                             : q === 2
                             ? 'bg-yellow-500 text-white hover:bg-yellow-600'
                             : q === 3
-                            ? 'bg-blue-500 text-white hover:bg-blue-600'
+                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                             : 'bg-green-500 text-white hover:bg-green-600'
                         }`}
                       >

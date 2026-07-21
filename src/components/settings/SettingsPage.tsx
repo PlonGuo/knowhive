@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { fetchOllamaStatus, pullModel, type OllamaStatus } from '../../lib/ollama'
+import { saveFile } from '../../lib/platform'
 
 interface AppConfig {
   llm_provider: 'ollama' | 'openai-compatible' | 'anthropic'
@@ -8,6 +10,8 @@ interface AppConfig {
   embedding_language: 'english' | 'chinese' | 'mixed'
   pre_retrieval_strategy: 'none' | 'hyde' | 'multi_query' | 'auto' | 'auto_llm'
   use_reranker: boolean
+  chat_mode: 'single' | 'agentic'
+  chat_permission_mode: 'ask' | 'accept-edits' | 'readonly'
   chat_memory_turns: number
   custom_system_prompt: string
 }
@@ -18,19 +22,6 @@ interface TestResult {
   error?: string
 }
 
-interface EmbeddingModel {
-  language: string
-  name: string
-  size_mb: number
-  downloaded: boolean
-}
-
-interface EmbeddingStatus {
-  language?: string
-  status: string | null
-  progress?: number
-}
-
 interface SettingsPageProps {
   backendUrl: string
   onBack?: () => void
@@ -38,6 +29,7 @@ interface SettingsPageProps {
 }
 
 interface RerankerStatus {
+  available?: boolean
   model: string
   size_mb: number
   downloaded: boolean
@@ -50,6 +42,20 @@ interface RerankerDownloadStatus {
   error?: string
 }
 
+interface MemoryItem {
+  id: number
+  kind: 'semantic' | 'procedural'
+  content: string
+  created_at: string
+}
+
+interface EmbeddingPull {
+  model: string
+  percent: number
+  status: string
+  error?: string
+}
+
 const defaultConfig: AppConfig = {
   llm_provider: 'ollama',
   model_name: 'llama3',
@@ -58,6 +64,8 @@ const defaultConfig: AppConfig = {
   embedding_language: 'english',
   pre_retrieval_strategy: 'none',
   use_reranker: false,
+  chat_mode: 'single',
+  chat_permission_mode: 'ask',
   chat_memory_turns: 0,
   custom_system_prompt: '',
 }
@@ -67,16 +75,16 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
-  const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModel[]>([])
-  const [downloadStatus, setDownloadStatus] = useState<EmbeddingStatus | null>(null)
-  const [downloading, setDownloading] = useState(false)
+  const [ollama, setOllama] = useState<OllamaStatus | null>(null)
+  const [embeddingPull, setEmbeddingPull] = useState<EmbeddingPull | null>(null)
   const [showEmbeddingWarning, setShowEmbeddingWarning] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [rerankerStatus, setRerankerStatus] = useState<RerankerStatus | null>(null)
+  const [memories, setMemories] = useState<MemoryItem[]>([])
+  const [editingMemory, setEditingMemory] = useState<{ id: number; content: string } | null>(null)
   const [rerankerDownloading, setRerankerDownloading] = useState(false)
   const [rerankerDownloadStatus, setRerankerDownloadStatus] = useState<RerankerDownloadStatus | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const rerankerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -87,12 +95,9 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   }, [backendUrl])
 
   useEffect(() => {
-    fetch(`${backendUrl}/embedding/models`)
-      .then((r) => r.ok ? r.json() : Promise.resolve([]))
-      .then((data: EmbeddingModel[]) => {
-        if (Array.isArray(data)) setEmbeddingModels(data)
-      })
-      .catch(() => {})
+    fetchOllamaStatus(backendUrl)
+      .then(setOllama)
+      .catch(() => setOllama(null))
   }, [backendUrl])
 
   useEffect(() => {
@@ -104,53 +109,56 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
       .catch(() => {})
   }, [backendUrl])
 
+  useEffect(() => {
+    fetch(`${backendUrl}/memories`)
+      .then((r) => (r.ok ? r.json() : { memories: [] }))
+      .then((data: { memories: MemoryItem[] }) => setMemories(data.memories ?? []))
+      .catch(() => {})
+  }, [backendUrl])
+
+  const deleteMemory = async (id: number) => {
+    await fetch(`${backendUrl}/memories/${id}`, { method: 'DELETE' }).catch(() => {})
+    setMemories((prev) => prev.filter((m) => m.id !== id))
+  }
+
+  const saveMemoryEdit = async () => {
+    if (!editingMemory) return
+    const { id, content } = editingMemory
+    if (content.trim()) {
+      await fetch(`${backendUrl}/memories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }).catch(() => {})
+      setMemories((prev) => prev.map((m) => (m.id === id ? { ...m, content } : m)))
+    }
+    setEditingMemory(null)
+  }
+
   // Stop polling on unmount
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
       if (rerankerPollRef.current) clearInterval(rerankerPollRef.current)
     }
   }, [])
 
-  const currentModel = embeddingModels.find((m) => m.language === config.embedding_language)
+  // /ollama/status derives the required embedding model from the *saved* config, so
+  // the indicator reflects the saved language; a changed dropdown applies on Save.
+  const embeddingModel = ollama?.required?.find((r) => r.purpose === 'embedding') ?? null
 
-  const startStatusPolling = (language: string) => {
-    if (pollRef.current) clearInterval(pollRef.current)
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${backendUrl}/embedding/status?language=${language}`)
-        const data: EmbeddingStatus = await res.json()
-        setDownloadStatus(data)
-        if (data.status === 'complete' || data.status === 'error') {
-          clearInterval(pollRef.current!)
-          pollRef.current = null
-          setDownloading(false)
-          // Refresh model list
-          const modelsRes = await fetch(`${backendUrl}/embedding/models`)
-          const models: EmbeddingModel[] = await modelsRes.json()
-          setEmbeddingModels(models)
-        }
-      } catch {
-        clearInterval(pollRef.current!)
-        pollRef.current = null
-        setDownloading(false)
-      }
-    }, 1000)
-  }
-
-  const handleDownload = async () => {
-    setDownloading(true)
-    setDownloadStatus({ status: 'downloading', progress: 0 })
-    try {
-      await fetch(`${backendUrl}/embedding/download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: config.embedding_language }),
-      })
-      startStatusPolling(config.embedding_language)
-    } catch {
-      setDownloading(false)
+  const handleDownloadEmbedding = async () => {
+    if (!embeddingModel) return
+    const model = embeddingModel.name
+    setEmbeddingPull({ model, percent: 0, status: 'starting' })
+    const result = await pullModel(backendUrl, model, (percent, status) =>
+      setEmbeddingPull({ model, percent, status }),
+    )
+    if (!result.ok) {
+      setEmbeddingPull({ model, percent: 0, status: 'error', error: result.error })
+      return
     }
+    setEmbeddingPull(null)
+    fetchOllamaStatus(backendUrl).then(setOllama).catch(() => {})
   }
 
   const startRerankerPolling = () => {
@@ -192,11 +200,6 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
     setTestResult(null)
     setShowEmbeddingWarning(false)
 
-    // Warn if selected model is not downloaded
-    if (currentModel && !currentModel.downloaded) {
-      setShowEmbeddingWarning(true)
-    }
-
     try {
       await fetch(`${backendUrl}/config`, {
         method: 'PUT',
@@ -205,6 +208,16 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
       })
       setSaveMessage('Settings saved')
       onConfigSaved?.()
+      // Refresh model readiness against the newly saved config; warn if the
+      // embedding model for the selected language isn't installed.
+      try {
+        const status = await fetchOllamaStatus(backendUrl)
+        setOllama(status)
+        const embedding = status.required?.find((r) => r.purpose === 'embedding')
+        if (embedding && !embedding.installed) setShowEmbeddingWarning(true)
+      } catch {
+        // status refresh is best-effort
+      }
     } catch {
       setSaveMessage('Failed to save settings')
     }
@@ -217,7 +230,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
       const res = await fetch(`${backendUrl}/export/full`, { method: 'POST' })
       const blob = await res.blob()
       const defaultName = `knowhive-export-${new Date().toISOString().slice(0, 10)}.zip`
-      const savePath = await window.api?.saveFile?.(defaultName)
+      const savePath = await saveFile(defaultName)
       if (savePath) {
         // In Electron, trigger download via anchor
         const url = URL.createObjectURL(blob)
@@ -284,8 +297,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   const selectClass =
     'w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
-  const isDownloading = downloading || downloadStatus?.status === 'downloading'
-  const downloadProgress = downloadStatus?.progress ?? 0
+  const isPullingEmbedding = embeddingPull !== null && !embeddingPull.error
 
   return (
     <div data-testid="settings-page" className="flex-1 overflow-y-auto p-6">
@@ -298,10 +310,12 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
           >
             &larr; Back
           </button>
-          <h1 className="text-xl font-bold text-foreground">Settings</h1>
+          <h1 className="font-serif text-2xl font-semibold text-foreground">Settings</h1>
         </div>
 
         <div className="space-y-5">
+          <div className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-3">
+          <h3 className="text-sm font-medium text-foreground">Model</h3>
           {/* LLM Provider */}
           <div>
             <label className={labelClass}>LLM Provider</label>
@@ -380,17 +394,17 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
             </select>
           </div>
 
-          {/* Embedding Model Info */}
-          {currentModel && (
+          {/* Embedding Model Info (served by local Ollama) */}
+          {embeddingModel && (
             <div
               data-testid="embedding-model-section"
               className="rounded-md border bg-muted/40 p-3 space-y-2"
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
-                  {currentModel.name} — {currentModel.size_mb} MB
+                  {embeddingModel.name} <span className="text-xs">(via Ollama)</span>
                 </span>
-                {currentModel.downloaded ? (
+                {embeddingModel.installed ? (
                   <span
                     data-testid="embedding-ready-indicator"
                     className="text-xs font-medium text-green-600"
@@ -400,32 +414,37 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
                 ) : (
                   <button
                     data-testid="download-embedding-button"
-                    onClick={handleDownload}
-                    disabled={isDownloading}
+                    onClick={handleDownloadEmbedding}
+                    disabled={isPullingEmbedding}
                     className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                   >
-                    {isDownloading ? 'Downloading...' : 'Download'}
+                    {isPullingEmbedding ? 'Downloading...' : 'Download'}
                   </button>
                 )}
               </div>
-              {isDownloading && (
+              {ollama && !ollama.running && (
+                <p className="text-xs text-red-600">Ollama is not running — embeddings unavailable.</p>
+              )}
+              {embeddingPull && (
                 <div data-testid="embedding-progress-bar" className="w-full">
                   <div className="h-1.5 w-full rounded-full bg-muted">
                     <div
                       className="h-1.5 rounded-full bg-primary transition-all"
-                      style={{ width: `${Math.round(downloadProgress * 100)}%` }}
+                      style={{ width: `${embeddingPull.percent}%` }}
                     />
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {Math.round(downloadProgress * 100)}% downloaded
+                    {embeddingPull.error ?? `${embeddingPull.percent}% — ${embeddingPull.status}`}
                   </p>
                 </div>
               )}
             </div>
           )}
 
+          </div>
+
           {/* RAG Settings */}
-          <div className="rounded-md border p-3 space-y-3">
+          <div className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-3">
             <h3 className="text-sm font-medium text-foreground">RAG Settings</h3>
 
             {/* Pre-retrieval Strategy */}
@@ -450,6 +469,56 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
               </select>
             </div>
 
+            {/* Agent Mode Toggle (Phase G: /chat tool-use loop) */}
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-foreground">Agent Mode</label>
+                <p className="text-xs text-muted-foreground">
+                  Let the AI search and read notes on its own for multi-hop questions
+                </p>
+              </div>
+              <button
+                data-testid="chat-mode-toggle"
+                onClick={() =>
+                  setConfig({
+                    ...config,
+                    chat_mode: config.chat_mode === 'agentic' ? 'single' : 'agentic',
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  config.chat_mode === 'agentic' ? 'bg-primary' : 'bg-muted'
+                }`}
+                role="switch"
+                aria-checked={config.chat_mode === 'agentic'}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    config.chat_mode === 'agentic' ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Agent write permissions (Phase H) */}
+            <div>
+              <label className={labelClass}>Agent Write Permissions</label>
+              <select
+                data-testid="permission-mode-select"
+                value={config.chat_permission_mode}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    chat_permission_mode: e.target.value as AppConfig['chat_permission_mode'],
+                  })
+                }
+                className={selectClass}
+              >
+                <option value="ask">Ask — confirm every create/update/delete</option>
+                <option value="accept-edits">Accept edits — auto-approve edits, deletions still ask</option>
+                <option value="readonly">Read only — the agent cannot modify notes</option>
+              </select>
+            </div>
+
             {/* Reranker Toggle */}
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-foreground">Use Reranker</label>
@@ -471,7 +540,13 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
             </div>
 
             {/* Reranker Model Download */}
-            {config.use_reranker && rerankerStatus && (
+            {config.use_reranker && rerankerStatus?.available === false && (
+              <p data-testid="reranker-unavailable-note" className="text-xs text-muted-foreground">
+                Reranking is not available in this build yet (planned: Phase E). Hybrid retrieval
+                (vector + keyword) already covers most of the gap.
+              </p>
+            )}
+            {config.use_reranker && rerankerStatus && rerankerStatus.available !== false && (
               <div
                 data-testid="reranker-model-section"
                 className="rounded-md border bg-muted/40 p-3 space-y-2"
@@ -559,8 +634,64 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
             </p>
           )}
 
+          {/* Memory (Phase M3): what the assistant has learned about you */}
+          <div data-testid="memory-section" className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-2">
+            <h3 className="text-sm font-medium text-foreground">Memory</h3>
+            <p className="text-xs text-muted-foreground">
+              Facts and standing instructions the assistant has learned from your conversations.
+            </p>
+            {memories.length === 0 ? (
+              <p data-testid="memory-empty" className="text-xs text-muted-foreground">
+                Nothing learned yet.
+              </p>
+            ) : (
+              <ul data-testid="memory-list" className="space-y-1">
+                {memories.map((m) => (
+                  <li
+                    key={m.id}
+                    data-testid={`memory-item-${m.id}`}
+                    className="group flex items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-accent/40"
+                  >
+                    <span className="rounded bg-accent px-1 text-[10px] uppercase text-accent-foreground">
+                      {m.kind === 'procedural' ? 'rule' : 'fact'}
+                    </span>
+                    {editingMemory?.id === m.id ? (
+                      <input
+                        data-testid={`memory-edit-input-${m.id}`}
+                        value={editingMemory.content}
+                        onChange={(e) => setEditingMemory({ id: m.id, content: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveMemoryEdit()
+                          if (e.key === 'Escape') setEditingMemory(null)
+                        }}
+                        className="flex-1 rounded border bg-background px-1 py-0.5 text-sm focus:outline-none"
+                        autoFocus
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setEditingMemory({ id: m.id, content: m.content })}
+                        className="min-w-0 flex-1 truncate text-left text-foreground"
+                        title="Click to edit"
+                      >
+                        {m.content}
+                      </button>
+                    )}
+                    <button
+                      data-testid={`memory-delete-${m.id}`}
+                      onClick={() => deleteMemory(m.id)}
+                      aria-label="Forget this memory"
+                      className="hidden px-1 text-xs text-muted-foreground group-hover:block hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {/* Data Management */}
-          <div data-testid="data-management-section" className="rounded-md border p-3 space-y-2">
+          <div data-testid="data-management-section" className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-2">
             <h3 className="text-sm font-medium text-foreground">Data Management</h3>
             <div className="flex gap-2">
               <button

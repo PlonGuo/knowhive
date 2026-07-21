@@ -1,5 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import FileTree from '../knowledge/FileTree'
+import { selectFiles } from '../../lib/platform'
+import { getInitialTheme, setTheme, type Theme } from '../../lib/theme'
 
 interface ImportState {
   status: 'idle' | 'ingesting' | 'completed' | 'failed'
@@ -8,30 +10,79 @@ interface ImportState {
   error?: string
 }
 
+interface SessionSummary {
+  id: string
+  title: string
+  updated_at: string
+}
+
 interface SidebarProps {
   onSettingsClick?: () => void
   onCommunityClick?: () => void
   onOverviewClick?: () => void
+  onReviewClick?: () => void
   backendUrl?: string
   onFileSelect?: (path: string) => void
   selectedPath?: string
   onRefreshReady?: (refresh: () => void) => void
+  activeSessionId?: string | null
+  onSessionSelect?: (id: string | null) => void
+  /** Bumped by the layout when sessions change (new chat, finished exchange). */
+  sessionsVersion?: number
 }
 
 export default function Sidebar({
   onSettingsClick,
   onCommunityClick,
   onOverviewClick,
+  onReviewClick,
   backendUrl,
   onFileSelect,
   selectedPath,
   onRefreshReady,
+  activeSessionId,
+  onSessionSelect,
+  sessionsVersion,
 }: SidebarProps) {
   const [importState, setImportState] = useState<ImportState>({
     status: 'idle',
     totalFiles: 0,
     processedFiles: 0,
   })
+  const [collapsed, setCollapsed] = useState(false)
+  const [dueCount, setDueCount] = useState(0)
+  const [theme, setThemeState] = useState<Theme>(() =>
+    getInitialTheme(window.localStorage, window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false),
+  )
+  const toggleTheme = () => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    setThemeState(next)
+  }
+
+  useEffect(() => {
+    if (!backendUrl) return
+    fetch(`${backendUrl}/review/stats`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setDueCount(data?.due_today ?? 0))
+      .catch(() => {})
+  }, [backendUrl])
+
+  const [chatSessions, setChatSessions] = useState<SessionSummary[]>([])
+  useEffect(() => {
+    if (!backendUrl) return
+    fetch(`${backendUrl}/sessions`)
+      .then((res) => (res.ok ? res.json() : { sessions: [] }))
+      .then((data) => setChatSessions(data.sessions ?? []))
+      .catch(() => {})
+  }, [backendUrl, sessionsVersion])
+
+  const deleteChatSession = async (id: string) => {
+    if (!backendUrl) return
+    await fetch(`${backendUrl}/sessions/${id}`, { method: 'DELETE' }).catch(() => {})
+    setChatSessions((prev) => prev.filter((s) => s.id !== id))
+    if (activeSessionId === id) onSessionSelect?.(null)
+  }
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const refreshTreeRef = useRef<(() => void) | null>(null)
 
@@ -77,7 +128,7 @@ export default function Sidebar({
 
   const handleImport = async () => {
     try {
-      const files: string[] = await window.api.selectFiles()
+      const files: string[] = await selectFiles()
       if (files.length === 0 || !backendUrl) return
 
       setImportState({ status: 'ingesting', totalFiles: files.length, processedFiles: 0 })
@@ -105,27 +156,93 @@ export default function Sidebar({
       ? Math.round((importState.processedFiles / importState.totalFiles) * 100)
       : 0
 
+  if (collapsed) {
+    // Claude-style collapsed rail: just an expand handle below the traffic lights.
+    return (
+      <div data-testid="sidebar-rail" className="flex w-8 flex-col items-center pt-8">
+        <button
+          data-testid="sidebar-expand"
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand sidebar"
+          className="rounded-lg border bg-background/40 px-1.5 py-1 text-sm text-muted-foreground backdrop-blur-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          »
+        </button>
+      </div>
+    )
+  }
+
   return (
     <aside
       data-testid="sidebar"
-      className="flex w-64 flex-col border-r bg-secondary/50"
+      className="flex w-64 flex-col overflow-hidden rounded-xl border bg-background/40 shadow-sm backdrop-blur-sm"
     >
-      <div className="flex h-12 items-center gap-2 border-b px-4">
-        <span className="text-lg font-bold text-foreground">KnowHive</span>
-      </div>
-
+      {/* Chats (Phase M): new conversation + recent sessions. */}
       <div className="flex items-center justify-between px-3 pt-3 pb-1">
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Chats
+        </div>
+        <button
+          data-testid="new-chat-button"
+          onClick={() => onSessionSelect?.(null)}
+          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          + New
+        </button>
+      </div>
+      {chatSessions.length > 0 && (
+        <div data-testid="session-list" className="max-h-40 overflow-y-auto px-1 pb-1">
+          {chatSessions.map((s) => (
+            <div
+              key={s.id}
+              className={`group flex items-center justify-between rounded-md px-2 py-1 text-sm ${
+                s.id === activeSessionId
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-accent/50'
+              }`}
+            >
+              <button
+                data-testid={`session-item-${s.id}`}
+                onClick={() => onSessionSelect?.(s.id)}
+                className="min-w-0 flex-1 truncate text-left"
+              >
+                {s.title || 'New chat'}
+              </button>
+              <button
+                data-testid={`session-delete-${s.id}`}
+                onClick={() => deleteChatSession(s.id)}
+                aria-label="Delete conversation"
+                className="hidden px-1 text-xs group-hover:block hover:text-red-500"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between px-3 pt-2 pb-1">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Knowledge
         </div>
-        <button
-          data-testid="import-button"
-          onClick={handleImport}
-          disabled={importState.status === 'ingesting'}
-          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-        >
-          {importState.status === 'ingesting' ? 'Importing...' : '+ Import'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            data-testid="import-button"
+            onClick={handleImport}
+            disabled={importState.status === 'ingesting'}
+            className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+          >
+            {importState.status === 'ingesting' ? 'Importing...' : '+ Import'}
+          </button>
+          <button
+            data-testid="sidebar-collapse"
+            onClick={() => setCollapsed(true)}
+            aria-label="Collapse sidebar"
+            className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
+            «
+          </button>
+        </div>
       </div>
 
       {importState.status !== 'idle' && (
@@ -156,7 +273,7 @@ export default function Sidebar({
             onRefreshReady={handleRefreshReady}
           />
         ) : (
-          <p className="px-2 text-sm text-muted-foreground">No files imported yet</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No files imported yet</p>
         )}
       </div>
 
@@ -182,6 +299,27 @@ export default function Sidebar({
         >
           Settings
         </button>
+        <div className="flex items-center justify-between px-1 pt-1">
+          {dueCount > 0 ? (
+            <button
+              data-testid="review-badge"
+              onClick={onReviewClick}
+              className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              {dueCount} due
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            data-testid="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+        </div>
       </div>
     </aside>
   )

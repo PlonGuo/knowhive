@@ -41,3 +41,11 @@ tsconfig.web.tsbuildinfo
 
 # env
 .env
+# Tauri frontend build output
+dist-web/
+.gstack/
+
+# Phase F dist artifacts (rebuilt by build:sidecar)
+src-tauri/binaries/
+src-tauri/resources/
+*.bun-build

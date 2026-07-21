@@ -36,66 +36,54 @@ describe('AppLayout', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders the three-panel layout (sidebar, chat, status bar)', async () => {
+  it('renders the shell (drag strip, sidebar, chat)', async () => {
     render(<App />)
     await waitFor(() => {
+      expect(screen.getByTestId('drag-strip')).toBeInTheDocument()
       expect(screen.getByTestId('sidebar')).toBeInTheDocument()
       expect(screen.getByTestId('chat-area')).toBeInTheDocument()
-      expect(screen.getByTestId('status-bar')).toBeInTheDocument()
     })
   })
 
-  it('sidebar contains KnowHive branding', async () => {
+  it('sidebar has a collapse handle (title row removed by design)', async () => {
     render(<App />)
-    const sidebar = screen.getByTestId('sidebar')
-    expect(sidebar).toHaveTextContent('KnowHive')
+    expect(await screen.findByTestId('sidebar-collapse')).toBeInTheDocument()
   })
 
   it('sidebar has a placeholder for file tree', async () => {
     render(<App />)
-    expect(screen.getByTestId('sidebar')).toHaveTextContent('Knowledge')
+    expect(await screen.findByTestId('sidebar')).toHaveTextContent('Knowledge')
   })
 
   it('chat area shows a placeholder message', async () => {
     render(<App />)
-    expect(screen.getByTestId('chat-area')).toHaveTextContent('Start a conversation')
+    expect(await screen.findByTestId('chat-area')).toHaveTextContent('Start a conversation')
   })
 
-  it('status bar shows backend connection status', async () => {
+  it('sidebar footer hosts the theme toggle (status bar removed by design)', async () => {
     render(<App />)
-    await waitFor(() => {
-      const statusBar = screen.getByTestId('status-bar')
-      expect(statusBar).toHaveTextContent('ok')
-      expect(statusBar).toHaveTextContent('v0.1.0')
-    })
+    expect(await screen.findByTestId('theme-toggle')).toBeInTheDocument()
   })
 
-  it('status bar shows connecting state initially', () => {
+  it('shows a connecting placeholder while the setup check is pending', () => {
     vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
     render(<App />)
-    const statusBar = screen.getByTestId('status-bar')
-    expect(statusBar).toHaveTextContent('Connecting')
+    expect(screen.getByTestId('app-connecting')).toHaveTextContent('Connecting')
   })
 
-  it('status bar shows error when backend is unreachable', async () => {
+  it('renders the layout even when the backend is unreachable', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'))
     render(<App />)
-    await waitFor(() => {
-      const statusBar = screen.getByTestId('status-bar')
-      expect(statusBar).toHaveTextContent('Disconnected')
-    })
+    expect(await screen.findByTestId('app-layout')).toBeInTheDocument()
   })
 
-  it('sidebar has a settings button', () => {
-    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
+  it('sidebar has a settings button', async () => {
     render(<App />)
-    expect(screen.getByTestId('settings-button')).toBeInTheDocument()
+    expect(await screen.findByTestId('settings-button')).toBeInTheDocument()
   })
 
-  it('layout fills the full viewport', () => {
-    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
+  it('layout fills the full viewport', async () => {
     render(<App />)
-    const layout = screen.getByTestId('app-layout')
-    expect(layout).toHaveClass('h-screen')
+    expect(await screen.findByTestId('app-layout')).toHaveClass('h-screen')
   })
 })
