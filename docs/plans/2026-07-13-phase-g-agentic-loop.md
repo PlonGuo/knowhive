@@ -5,7 +5,7 @@
 
 ## Context（为什么做）
 
-迁移主线 A–F 收官后，项目向 Agent 方向演进，参照 `learnings/HARNESS_DEEP_DIVE.md`（Claude Code
+迁移主线 A–F 收官后，项目向 Agent 方向演进，参照 `learnings/design/HARNESS_DEEP_DIVE.md`（Claude Code
 harness 分析），为「本地知识库问答 Agent」落地有价值的 harness 子集。现状 `/chat` 是单趟管线
 （retrieve 一次 → 注入 → 生成），模型无自主性，多跳问题（跨笔记对比/聚合）天然做不好。
 
@@ -73,7 +73,7 @@ llama3.2 必跑；若小模型不达标，闸对云模型生效 + 结论进 lear
 - streamText + 假工具 + stepCountIs(4)，3 个多跳 prompt × 10 次：tool-call 发起率、参数 JSON
   合法率、流式 tool call 走通与否、结果回填后第二步行为、num_ctx 4096 vs 8192
 - 闸：≥70% 合法率走完整 loop；否则确认降级路径、调整评估闸范围
-- 产出 `learnings/Llama32-Tool-Call-Spike.md`；spike 脚本放 scratchpad 不提交
+- 产出 `learnings/evals/Llama32-Tool-Call-Spike.md`；spike 脚本放 scratchpad 不提交
 
 **Task 1（TDD）：SourceCollector + buildAgentTools**
 - 建 `server/src/agentTools.ts` + 测试；`knowledge.ts` 加 `flattenTree`
@@ -97,7 +97,7 @@ llama3.2 必跑；若小模型不达标，闸对云模型生效 + 结论进 lear
 **Task 6：多跳数据集 + 评估脚本扩展**（先干跑 2 样本验证解析再全量）
 
 **Task 7（GATE）：评估 A/B**——4 arm：{单跳20, 多跳10} × {single, agentic}；结果进
-`backend/eval_results/`；产出 `learnings/Agentic-vs-SingleShot.md`（数据 + 行为分析 + 默认值决策）
+`backend/eval_results/`；产出 `learnings/evals/Agentic-vs-SingleShot.md`（数据 + 行为分析 + 默认值决策）
 
 **Task 8：收尾**——HANDOFF/README 更新；闸过则独立小 commit 翻 `chat_mode` 默认 agentic（好回滚）
 

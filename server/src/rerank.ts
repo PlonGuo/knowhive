@@ -13,7 +13,7 @@ export type RerankGenerator = (prompt: string) => Promise<string>;
 
 /** "relevance" = plain listwise ranking; "coverage" = MMR-style diversity hint that
  * asks the model to cover different aspects of the query instead of stacking
- * redundant passages (experiment: k-sweep, see learnings/Reranker-K-Sweep.md). */
+ * redundant passages (experiment: k-sweep, see learnings/evals/Reranker-K-Sweep.md). */
 export type RerankPromptStyle = "relevance" | "coverage";
 
 export function buildRerankPrompt(

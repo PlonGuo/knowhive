@@ -10,19 +10,19 @@
 - ✅ **RAGAS 验证通过**:TS 无rerank 全面优于 Python 无rerank 基线,检索指标追平 Python 有rerank 基线。**迁移无退化。**
 - ✅ **Phase D + R3 完成(D1–D8 共 8 个 commit)**:config / knowledge CRUD / ingest 任务进度 / watcher+sync / SM-2 review / summary / export / setup+ollama+onboarding 全部移植到 TS。**136 bun 测试绿**,每块都有真 Ollama e2e。
 - ✅ **R3 onboarding 浏览器 e2e 通过(2026-07-04)**:headless Chromium + 真 sidecar + 真 Ollama pull 走完整流程——本地/云端两条路、语言切换更新所需模型、缺模型时 pull 进度条 0→100% 流式渲染后解锁 Next、完成态持久化。发现并修掉一个 bug(App.tsx 在 setup check 期间闪 AppLayout + 打旧 8000 端口)。chat.test.tsx 已按 useChat 重写(mock 用真机抓的 AI SDK v7 wire format)。**前端 vitest 253/253 全绿。**
-- ✅ **Phase E1 完成(2026-07-04)**:LLM-as-reranker(20候选→llama3.2 listwise→top5,零依赖,fail-open)。RAGAS 复评:0.696/0.805/0.829/0.660,answer_relevancy +0.12,**追平 Python CrossEncoder 完整栈基线**。后续 k-sweep:recall 由 k 决定而非 rerank;coverage prompt 转正(learnings/Reranker-K-Sweep.md);顺带修了 startup sync 会删外部导入文件的继承 bug。
+- ✅ **Phase E1 完成(2026-07-04)**:LLM-as-reranker(20候选→llama3.2 listwise→top5,零依赖,fail-open)。RAGAS 复评:0.696/0.805/0.829/0.660,answer_relevancy +0.12,**追平 Python CrossEncoder 完整栈基线**。后续 k-sweep:recall 由 k 决定而非 rerank;coverage prompt 转正(learnings/evals/Reranker-K-Sweep.md);顺带修了 startup sync 会删外部导入文件的继承 bug。
 - ✅ **Phase E2 完成(2026-07-06)**:进程内 cross-encoder(bge-reranker-v2-m3 **int8 ONNX**,transformers.js 跑在 bun 里,571MB 懒加载单例)。RAGAS 质量闸**零掉点、四指标全面胜出 LLM 基线**:0.749/0.808/**0.914**/**0.780**;warm rerank ~1.25s vs LLM 2-8s,冷加载 892ms(缓存后)。**默认 `reranker_backend=cross-encoder`**,LLM 后备保留可切;/reranker/* 路由接真状态/下载。bun 注意:装依赖后要 `bun pm trust onnxruntime-node protobufjs`。
 - ✅ **Phase F 完成(2026-07-08)——迁移收官**:
-  - **Task 0 spike**:`bun build --compile` 单二进制**验证可行**(四层坑:dylib @rpath、sharp 动态 require、--external+compile 不兼容、bunfs 只读 cache),但工程权衡后**选 Path C**(bundle.js + 随包 bun runtime + 最小真实 node_modules)——Electron/VSCode 同款形态,细节见 `learnings/Bun-Compile-Native-Deps-Spike.md`(含回切触发条件)。
+  - **Task 0 spike**:`bun build --compile` 单二进制**验证可行**(四层坑:dylib @rpath、sharp 动态 require、--external+compile 不兼容、bunfs 只读 cache),但工程权衡后**选 Path C**(bundle.js + 随包 bun runtime + 最小真实 node_modules)——Electron/VSCode 同款形态,细节见 `learnings/decisions/Bun-Compile-Native-Deps-Spike.md`(含回切触发条件)。
   - **Task 1 dist 构建**:`server/build-dist.ts`(bundle→合成 package.json→`bun install --production`→裁非本机 onnx 平台二进制 233→58MB);Rust release 分支 spawn 随包 bun;模型 cache 显式指到 data dir(.app resources 只读);`/reranker/download` 改异步+轮询(Bun.serve 10s idleTimeout 会杀长请求,全局提到 120s)。
   - **Task 2 发布闸抓到 2 个真 bug**:①lib.rs 拼 `resource_dir()/server` 但 Tauri 保留相对路径实际在 `resources/server` 下→release sidecar 永远起不来;②macOS Apple Events 退出路径不触发 ExitRequested→sidecar 变孤儿。双修:Rust 加 `RunEvent::Exit`,sidecar 加孤儿看门狗(ppid==1 自退)。7 项打包验证 API 级全绿(无 PATH bun 启动/导入/重排检索/chat 流式带 sources/watcher/export/重启持久无重下载)。**体积:.app 126MB(bun 60 + resources 58 + shell 8.8),dmg 43MB;模型 571MB 首次用时下到 data dir;冷加载 687ms。**
   - **Task 3**:Electron 全删(净删 3235 行);platform.ts 只剩 Tauri+浏览器分支;import 测试改 mock platform 模块。
   - **Task 4**:根目录 pnpm→bun(bun.lock;tauri.conf 前置命令改 `bun run`;**vitest 保留,经 `bun run test` 跑**)。
 - ✅ **Phase G 完成(2026-07-15)——Agentic loop(自研 harness,AI SDK v7 底座)**:
   - `/chat` 双模式:`body.mode ?? config.chat_mode`——single(原单趟)/ agentic(混合式 tool-use loop:预检索保底 + search_knowledge/read_note/list_notes 只读三工具,`stepCountIs(6)` + `prepareStep` 末步物理禁工具)。工具层 DI 可单测(agentTools.ts);chatRoutes.ts 提取,`ai/test` MockLanguageModelV3 无模型测完整 loop。sources 跨步聚合(SourceCollector→messageMetadata)。**Provider 无关**:openai-compatible 路径已就绪(用户计划以 DeepSeek 为主力云模型)。
-  - Task 0 spike:llama3.2 tool-call 83%发起/80%干净,过 70% 闸(learnings/Llama32-Tool-Call-Spike.md)。
+  - Task 0 spike:llama3.2 tool-call 83%发起/80%干净,过 70% 闸(learnings/evals/Llama32-Tool-Call-Spike.md)。
   - 前端:ChatArea 按 parts 顺序渲染,工具活动行(spinner+ShinyText→✓/✗);React Bits 进场(ShinyText/FadeContent,新依赖 motion);Settings 加 Agent Mode 开关。
-  - **Task 7 评估闸未过(learnings/Agentic-vs-SingleShot.md):默认保持 `chat_mode=single`**。llama3.2 调工具后 relevancy −0.20(答案复述工具输出),多跳 source_recall 持平;recall +0.07 证明检索有效但小模型综合不动。**结论:瓶颈在模型不在 harness**,云模型 arm(DeepSeek)是下一个可验证假设。发现:stepCountIs 限步数不限单步调用数→2/30 失控尾部(15-17min),后续需单步调用上限+重复查询去重。
+  - **Task 7 评估闸未过(learnings/evals/Agentic-vs-SingleShot.md):默认保持 `chat_mode=single`**。llama3.2 调工具后 relevancy −0.20(答案复述工具输出),多跳 source_recall 持平;recall +0.07 证明检索有效但小模型综合不动。**结论:瓶颈在模型不在 harness**,云模型 arm(DeepSeek)是下一个可验证假设。发现:stepCountIs 限步数不限单步调用数→2/30 失控尾部(15-17min),后续需单步调用上限+重复查询去重。
   - 顺带:孤儿看门狗改 opt-in(`KNOWHIVE_PARENT_WATCHDOG`,Rust spawn 注入)——原先误杀独立起的评估 sidecar;评估管线全客户端加显式超时(Clash TUN 代理下无超时客户端僵死 3 次,learnings 有记录)。
 - ✅ **Phase UI 完成(2026-07-15)——全 UI 重构**:
   - **主题系统**:两套色板走现有 HSL token(亮=OpenAI 冷中性,暗=Claude desktop 级暖炭 #181614 + terracotta 主色);`src/lib/theme.ts` 纯函数(存储优先→系统回退,TDD);切换钮在侧栏底部,首帧前应用防闪白。
@@ -30,7 +30,7 @@
   - **壳**:原生标题栏隐藏(tauri.conf `titleBarStyle: Overlay` + `hiddenTitle`),顶部全宽「背景→透明」渐变条当拖动区(Claude desktop 式);侧栏半透明毛玻璃 + Claude 式收缩(«/»);**状态栏删除**(backend/watcher/model 指示是调试噪音),复习红点+主题切换挪侧栏底部。
   - **Chat**:Claude 式消息列(assistant 无气泡直排背景上,user 半透明胶囊,居中 max-w-3xl,悬浮输入卡);Settings/Onboarding 卡片化 + 全部硬编码颜色换 token(onboarding 原来暗色下不可读)。
   - 两轮用户视觉反馈驱动迭代;195 vitest + 176 bun + 5 cargo 绿。
-- ✅ **Phase M 完成(2026-07-16)——Memory System M1+M2**(learnings/Memory-System-Design.md):
+- ✅ **Phase M 完成(2026-07-16)——Memory System M1+M2**(learnings/design/Memory-System-Design.md):
   - 多会话持久化(sessions/chat_messages+session_id 迁移);短期 = 最近6轮原文 + 水位线压缩
     (>20 未摘要触发,承旧 Python 机制);episodic 每轮落库;**semantic 蒸馏搭压缩顺风车**
     (一次 LLM pass 产出摘要+事实,零额外调用)→ embedding 入 memories 表 → 问题相似度召回

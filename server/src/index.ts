@@ -239,7 +239,7 @@ const retrieve = async (query: string, k: number, precomputedVector?: number[]) 
       const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
       return text;
     },
-    // "coverage" won the k-sweep (learnings/Reranker-K-Sweep.md): best precision AND
+    // "coverage" won the k-sweep (learnings/evals/Reranker-K-Sweep.md): best precision AND
     // recall at k=5. The env override remains for re-running the A/B.
     process.env.KNOWHIVE_RERANK_STYLE === "relevance" ? "relevance" : "coverage",
   );

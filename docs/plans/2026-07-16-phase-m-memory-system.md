@@ -87,7 +87,7 @@ memory_compression_service.py（watermark = MAX(last_message_id)，超阈值摘�
 - 真 Ollama 手动：多轮对话重启后续聊;第 21+ 轮触发压缩（threshold=20）;
   在 A 会话说过的事实在新会话 B 被召回——完整闭环演示
 - config 默认值激活：`chat_memory_turns` 默认 0→6（0 仍=只带当前问题）
-- HANDOFF/README 更新;learnings/Memory-System-Design.md（分层设计 + 蒸馏搭压缩时机的
+- HANDOFF/README 更新;learnings/design/Memory-System-Design.md（分层设计 + 蒸馏搭压缩时机的
   成本设计 + 与 CC compact 的对照）
 - Commit: `docs: Phase M complete — layered memory shipped`
 

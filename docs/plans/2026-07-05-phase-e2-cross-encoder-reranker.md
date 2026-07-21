@@ -378,7 +378,7 @@ git commit -m "feat(server): wire /reranker status+download to transformers.js m
 
 **Files:**
 - Produce: `backend/eval_results/ts_mixed_cross_encoder_int8.json`
-- Update: `learnings/Stack-Migration-and-RAGAS-Validation.md` (add a Phase E2 section)
+- Update: `learnings/decisions/Stack-Migration-and-RAGAS-Validation.md` (add a Phase E2 section)
 
 **Step 1: Run the sidecar with cross-encoder config**
 
@@ -410,12 +410,12 @@ Note cold-load and warm per-query rerank latency (from Task 3 smoke test) alongs
 
 **Step 5: Write up the result**
 
-Append a "Phase E2 复评" section to `learnings/Stack-Migration-and-RAGAS-Validation.md`: model + dtype chosen, RAGAS deltas vs LLM reranker + Python fp32, measured latency, and the default decision.
+Append a "Phase E2 复评" section to `learnings/decisions/Stack-Migration-and-RAGAS-Validation.md`: model + dtype chosen, RAGAS deltas vs LLM reranker + Python fp32, measured latency, and the default decision.
 
 **Step 6: Commit**
 
 ```bash
-git add backend/eval_results/ts_mixed_cross_encoder_*.json learnings/Stack-Migration-and-RAGAS-Validation.md
+git add backend/eval_results/ts_mixed_cross_encoder_*.json learnings/decisions/Stack-Migration-and-RAGAS-Validation.md
 git commit -m "docs: RAGAS Phase E2 re-eval — cross-encoder (int8/fp16) vs LLM reranker baseline"
 ```
 

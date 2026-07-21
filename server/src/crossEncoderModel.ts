@@ -11,7 +11,7 @@ const MODEL = "onnx-community/bge-reranker-v2-m3-ONNX";
 const DTYPE = "int8";
 
 // transformers.js defaults its cache to a relative path — read-only inside a packaged
-// .app (and inside bunfs, see learnings/Bun-Compile-Native-Deps-Spike.md). index.ts
+// .app (and inside bunfs, see learnings/decisions/Bun-Compile-Native-Deps-Spike.md). index.ts
 // points this at <dataDir>/models on startup, before the first load().
 let modelCacheDir: string | null = null;
 

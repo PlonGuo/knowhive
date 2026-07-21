@@ -47,12 +47,12 @@ TypeScript,四项指标全面超过原版。
 
 ## 证据链(面试深挖时对应文档)
 
-- 1 → agentTools.ts / chatRoutes.ts + [HARNESS_DEEP_DIVE](HARNESS_DEEP_DIVE.md)
-- 2 → [Agentic-vs-SingleShot](Agentic-vs-SingleShot.md)
-- 3 → [Memory-Eval](Memory-Eval.md) + [Memory-System-Design](Memory-System-Design.md)
-- 4 → [Prompt-Injection-Redteam](Prompt-Injection-Redteam.md)
-- 5 → [Prompt-Cache](Prompt-Cache.md) + [Latency-Waterfall](Latency-Waterfall.md)
-- 6 → [Stack-Migration-and-RAGAS-Validation](Stack-Migration-and-RAGAS-Validation.md) + [Reranker-K-Sweep](Reranker-K-Sweep.md)
+- 1 → agentTools.ts / chatRoutes.ts + [HARNESS_DEEP_DIVE](../design/HARNESS_DEEP_DIVE.md)
+- 2 → [Agentic-vs-SingleShot](../evals/Agentic-vs-SingleShot.md)
+- 3 → [Memory-Eval](../evals/Memory-Eval.md) + [Memory-System-Design](../design/Memory-System-Design.md)
+- 4 → [Prompt-Injection-Redteam](../evals/Prompt-Injection-Redteam.md)
+- 5 → [Prompt-Cache](../evals/Prompt-Cache.md) + [Latency-Waterfall](../evals/Latency-Waterfall.md)
+- 6 → [Stack-Migration-and-RAGAS-Validation](../decisions/Stack-Migration-and-RAGAS-Validation.md) + [Reranker-K-Sweep](../evals/Reranker-K-Sweep.md)
 
 > 面试准备提醒:这些 bullet 值钱是因为背后有证据链,但前提是你把每份 learnings 读透——
 > 面试会往里钻(例:"为什么多跳 relevancy 换强模型还崩?")。这正是"边优化边学会整个项目"的下一步。

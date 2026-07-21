@@ -54,7 +54,7 @@ export interface ChatRoutesDeps {
   chatModel: () => LanguageModel;
   /** Optional precomputed query vector skips retrieve's internal embed — lets /chat
    * embed the question once and share it with recall (latency: kills a redundant
-   * ~156ms Ollama round-trip, see learnings/Latency-Waterfall.md). */
+   * ~156ms Ollama round-trip, see learnings/evals/Latency-Waterfall.md). */
   retrieve: (query: string, k: number, queryVector?: number[]) => Promise<ChunkRow[]>;
   /** Embed one query string (for the embed-once/reuse dedup). */
   embedQuery?: (text: string) => Promise<number[]>;

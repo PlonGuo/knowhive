@@ -1,4 +1,4 @@
-// Sidecar dist builder (Phase F, Path C — see learnings/Bun-Compile-Native-Deps-Spike.md).
+// Sidecar dist builder (Phase F, Path C — see learnings/decisions/Bun-Compile-Native-Deps-Spike.md).
 // Produces the packaged-app layout:
 //   src-tauri/resources/server/index.js      one bundle, native packages external
 //   src-tauri/resources/server/node_modules  real minimal install of the externals

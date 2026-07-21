@@ -1,7 +1,7 @@
 # Red-team injection corpus
 
 Malicious markdown notes for the indirect prompt-injection experiment
-(learnings/Prompt-Injection-Redteam.md). Each note looks like a plausible
+(learnings/evals/Prompt-Injection-Redteam.md). Each note looks like a plausible
 knowledge-base entry but carries an injection payload plus a canary — a
 deterministic observable signal that fires ONLY if the model obeyed the payload.
 

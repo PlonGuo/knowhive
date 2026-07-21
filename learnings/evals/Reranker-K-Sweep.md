@@ -1,6 +1,6 @@
 # 实验记录:Reranker × top-k 检索扫描(k-sweep)
 
-> 2026-07-05。Phase E1(LLM-as-reranker)的后续实验:回答「rerank 后 recall 下降是不是 k 太低造成的」。配套:[Stack-Migration-and-RAGAS-Validation.md](./Stack-Migration-and-RAGAS-Validation.md) §6。
+> 2026-07-05。Phase E1(LLM-as-reranker)的后续实验:回答「rerank 后 recall 下降是不是 k 太低造成的」。配套:[Stack-Migration-and-RAGAS-Validation.md](../decisions/Stack-Migration-and-RAGAS-Validation.md) §6。
 
 ## 1. 目的(为什么做)
 

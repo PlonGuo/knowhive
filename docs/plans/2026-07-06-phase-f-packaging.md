@@ -4,7 +4,7 @@
 
 **Goal:** Turn the dev-mode app into a distributable macOS .app: bundled sidecar + bundled bun runtime (no user-installed bun), Tauri-bundled, Electron and Python runtime remnants removed, root toolchain switched from pnpm to bun.
 
-**Architecture (Path C, decided after the Task 0 spike):** `bun build --target=bun` produces one `index.js` bundle with the two native packages (`onnxruntime-node`, `sharp`) left external; the app ships the bun runtime as a Tauri `externalBin` plus a minimal real `node_modules` (just the externals + their transitive deps, installed by the build script) in resources. `sidecar.rs` spawns `bun index.js` in release (dev keeps `bun run src/index.ts`). This is the Electron/VS Code distribution shape — native modules load from disk exactly as designed, zero runtime tricks. The single-binary route (D) was spiked, proven viable, and deliberately not shipped — see `learnings/Bun-Compile-Native-Deps-Spike.md` for the four traps, the fixes, and the trade-off decision + revert triggers.
+**Architecture (Path C, decided after the Task 0 spike):** `bun build --target=bun` produces one `index.js` bundle with the two native packages (`onnxruntime-node`, `sharp`) left external; the app ships the bun runtime as a Tauri `externalBin` plus a minimal real `node_modules` (just the externals + their transitive deps, installed by the build script) in resources. `sidecar.rs` spawns `bun index.js` in release (dev keeps `bun run src/index.ts`). This is the Electron/VS Code distribution shape — native modules load from disk exactly as designed, zero runtime tricks. The single-binary route (D) was spiked, proven viable, and deliberately not shipped — see `learnings/decisions/Bun-Compile-Native-Deps-Spike.md` for the four traps, the fixes, and the trade-off decision + revert triggers.
 
 **Tech Stack:** bun (`build --target=bun`, runtime as externalBin), Tauri v2 (`externalBin` + resources), Rust (`sidecar.rs`), vitest (stays as the frontend test runner).
 
@@ -155,7 +155,7 @@ git commit -m "feat(tauri): sidecar dist bundle + bundled bun runtime spawn — 
 **Files:**
 - Modify: `HANDOFF.md` (Phase F 完成 entry, new run commands, packaged-app notes)
 - Modify: `README.md` (install/run for the packaged app)
-- Modify: `learnings/Stack-Migration-and-RAGAS-Validation.md` §8 (onnxruntime-in-compile verdict — close the risk item)
+- Modify: `learnings/decisions/Stack-Migration-and-RAGAS-Validation.md` §8 (onnxruntime-in-compile verdict — close the risk item)
 
 **Step 1:** Write the updates (include Task 0's verdict + Task 2's measured sizes/latencies).
 **Step 2:** Full suites one last time: `cd server && bun test`, `bun run test`, `cd src-tauri && cargo test`.

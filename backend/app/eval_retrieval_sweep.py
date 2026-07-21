@@ -2,7 +2,7 @@
 across multiple k values and reranker configurations, skipping answer generation
 (context metrics only need question + contexts + ground truth, not the answer).
 
-Used by the reranker k-sweep experiment (learnings/Reranker-K-Sweep.md): the LLM
+Used by the reranker k-sweep experiment (learnings/evals/Reranker-K-Sweep.md): the LLM
 reranker's answer_relevancy win came with a recall dip at k=5; this measures whether
 the dip is a fixed-k crowding artifact and how precision dilutes as k grows.
 
