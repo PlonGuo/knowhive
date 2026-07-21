@@ -2,6 +2,8 @@
 
 A **local-first AI knowledge base** desktop app. Import your Markdown notes, chat with them using any LLM (Ollama, OpenAI-compatible, or Anthropic Claude), and build a spaced-repetition review practice — all without your data leaving your machine.
 
+![KnowHive — chat with your knowledge base](app_cover.png)
+
 ## Highlights
 
 - **Hybrid retrieval + in-process reranking** — vector KNN ⊕ SQLite FTS5 fused with Reciprocal Rank Fusion, then reranked by a cross-encoder (`bge-reranker-v2-m3`, int8 ONNX) running **inside the bun sidecar** via transformers.js — no Python, no external reranker service. An LLM-as-reranker backend is kept as a zero-dependency fallback.
@@ -16,7 +18,7 @@ A **local-first AI knowledge base** desktop app. Import your Markdown notes, cha
 | Feature | Description |
 |---------|-------------|
 | **RAG Chat** | Ask questions about your knowledge base with source citations and token streaming (Vercel AI SDK v7) |
-| **Agent Mode (opt-in)** | A self-built tool-use loop: the model can search and read notes on its own for multi-hop questions, with live tool activity in the chat UI |
+| **Agent Mode (opt-in)** | A self-built tool-use loop: the model can search and read notes on its own for multi-hop questions — and create/edit/delete notes behind a fail-closed approval gate — with live tool activity in the chat UI |
 | **Cross-Session Memory** | Multi-session chat (Claude-style history) with a distillation-based long-term memory — semantic facts, standing preferences, and episodic traces that carry across separate conversations, with LRU/TTL eviction and a management UI |
 | **File Management** | Import `.md` files; rename, delete, and edit Markdown in-app with automatic re-indexing |
 | **File Watcher** | Files edited outside the app (e.g. in Obsidian) are re-indexed automatically |
@@ -77,7 +79,7 @@ Reranking fails open: any scorer error falls back to hybrid order. Retrieval des
 
 ### Agent Mode (tool-use loop)
 
-`chat_mode: agentic` upgrades the pipeline to a self-built agent loop (no framework — AI SDK v7 primitives): the same pre-retrieval runs first (so a model that never calls tools degrades to single-pass, not zero context), then the model can call `search_knowledge` / `read_note` / `list_notes` for follow-up hops, capped at 6 steps with a tools-stripped final step that structurally guarantees a text answer. Tool failures return error values instead of throwing, sources aggregate across steps, and the chat UI streams tool activity live.
+`chat_mode: agentic` upgrades the pipeline to a self-built agent loop (no framework — AI SDK v7 primitives): the same pre-retrieval runs first (so a model that never calls tools degrades to single-pass, not zero context), then the model can call `search_knowledge` / `read_note` / `list_notes` for follow-up hops — plus `search_history` over past conversations in session mode, and `create_note` / `update_note` / `delete_note` write tools gated by `chat_permission_mode` (`ask` by default; deletes ask even in `accept-edits`; `readonly` doesn't mount write tools at all) — capped at 6 steps with a tools-stripped final step that structurally guarantees a text answer. Tool failures return error values instead of throwing, sources aggregate across steps, and the chat UI streams tool activity live.
 
 It ships **off by default** — a pre-registered eval gate (single vs agentic, 4 arms, RAGAS + a deterministic `source_recall` metric) showed that with a local 3B model the loop's retrieval gains don't survive answer synthesis. The write-up, including why that negative result is the interesting part, is in [learnings/evals/Agentic-vs-SingleShot.md](learnings/evals/Agentic-vs-SingleShot.md).
 
@@ -189,7 +191,7 @@ knowhive/
 │   └── build-dist.ts         # packaged-app dist builder
 ├── shared/schema.ts          # Zod config contract shared by frontend + sidecar
 ├── backend/                  # Python — RAGAS eval harness only (not shipped)
-├── learnings/                # decision records: RAGAS runs, k-sweep, packaging spike
+├── learnings/                # categorized records — evals/ decisions/ design/ career/ (index: learnings/README.md)
 └── tests/                    # vitest (frontend)
 ```
 
@@ -200,11 +202,16 @@ All settings are managed through the in-app Settings page or `config.yaml` in th
 ```yaml
 llm_provider: ollama              # ollama | openai-compatible | anthropic
 model_name: llama3.2
-base_url: http://localhost:11434
+base_url: http://localhost:11434  # chat provider URL (local or cloud)
+api_key: null                     # required for cloud providers
+ollama_base_url: http://localhost:11434  # embeddings always use local Ollama, even with a cloud chat provider
 embedding_language: english       # english | chinese | mixed
 use_reranker: false
 reranker_backend: cross-encoder   # cross-encoder | llm
 chat_mode: single                 # single | agentic (tool-use loop)
+chat_permission_mode: ask         # ask | accept-edits | readonly — write-tool gate for agentic chat
+chat_memory_turns: 6              # recent turns sent verbatim in session mode
+memory_compression_threshold: 20  # unsummarized messages before watermark compression kicks in
 custom_system_prompt: ''
 ```
 
