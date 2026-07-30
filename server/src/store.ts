@@ -2,7 +2,7 @@
 // (source of truth); FTS5 mirror is kept in sync by triggers (see db.ts). Retrieval fuses
 // brute-force vector KNN with FTS5 keyword hits via RRF.
 import type { Database } from "bun:sqlite";
-import type { Chunk } from "./chunker.ts";
+import type { ChunkedDocument } from "./chunker.ts";
 import type { FrontmatterData } from "./frontmatter.ts";
 import { BruteForceIndex, decodeVector, encodeVector, type Candidate } from "./retrieval.ts";
 import { rrfFuse } from "./hybrid.ts";
@@ -13,6 +13,8 @@ export interface ChunkRow {
   chunk_index: number;
   content: string;
   section_heading: string | null;
+  /** Row in parent_chunks this child was split from; NULL for pre-parent-child data. */
+  parent_id: number | null;
   title: string | null;
   category: string | null;
   tags: string | null;
@@ -22,35 +24,55 @@ export interface ChunkRow {
 
 export function deleteChunksForFile(db: Database, filePath: string): void {
   db.run("DELETE FROM chunks WHERE file_path = ?", [filePath]);
+  db.run("DELETE FROM parent_chunks WHERE file_path = ?", [filePath]);
 }
 
 /** Point a file's chunks at its new path after a rename (embeddings stay valid). */
 export function renameChunksFilePath(db: Database, oldPath: string, newPath: string): void {
   db.run("UPDATE chunks SET file_path = ? WHERE file_path = ?", [newPath, oldPath]);
+  db.run("UPDATE parent_chunks SET file_path = ? WHERE file_path = ?", [newPath, oldPath]);
 }
 
-/** Insert chunks + their embeddings for a file, in one transaction. */
+/**
+ * Insert a file's parent + child chunks in one transaction. `embeddings` are the child
+ * vectors, in `doc.children` order — parents are never embedded.
+ */
 export function storeChunks(
   db: Database,
   filePath: string,
-  chunks: readonly Chunk[],
+  doc: ChunkedDocument,
   embeddings: readonly number[][],
   meta: FrontmatterData,
 ): void {
-  const insert = db.prepare(
+  const insertParent = db.prepare(
+    `INSERT INTO parent_chunks (file_path, parent_index, content, section_heading)
+     VALUES (?, ?, ?, ?)`,
+  );
+  const insertChild = db.prepare(
     `INSERT INTO chunks
-       (file_path, chunk_index, content, section_heading, embedding, title, category, tags, difficulty, pack_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (file_path, chunk_index, content, section_heading, parent_id, embedding, title, category, tags, difficulty, pack_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const tags = meta.tags.length > 0 ? meta.tags.join(",") : null;
+
   const tx = db.transaction(() => {
-    for (let i = 0; i < chunks.length; i++) {
-      const c = chunks[i]!;
-      insert.run(
+    // parent_index → the rowid it landed on, so children can point at it.
+    const parentRowIds = new Map<number, number>();
+    for (const p of doc.parents) {
+      insertParent.run(filePath, p.parent_index, p.content, p.section_heading || null);
+      parentRowIds.set(
+        p.parent_index,
+        Number((db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id),
+      );
+    }
+    for (let i = 0; i < doc.children.length; i++) {
+      const c = doc.children[i]!;
+      insertChild.run(
         filePath,
         c.chunk_index,
         c.content,
         c.section_heading || null,
+        parentRowIds.get(c.parent_index) ?? null,
         encodeVector(embeddings[i]!),
         meta.title,
         meta.category,
@@ -89,7 +111,40 @@ export function ftsSearch(db: Database, query: string, limit: number): number[] 
 }
 
 const CHUNK_COLUMNS =
-  "id, file_path, chunk_index, content, section_heading, title, category, tags, difficulty, pack_id";
+  "id, file_path, chunk_index, content, section_heading, parent_id, title, category, tags, difficulty, pack_id";
+
+/**
+ * Swap each matched child for the parent passage it came from ("small-to-big").
+ *
+ * Ranking already happened on the child text, which is the precise thing the question
+ * matched; this only changes what the model gets to read. Children sharing a parent
+ * collapse into one row — the highest-ranked one keeps the slot — so expansion never
+ * feeds the same passage twice. Rows with no parent (pre-migration chunks) pass through.
+ */
+export function expandToParents(db: Database, rows: readonly ChunkRow[]): ChunkRow[] {
+  const parentIds = [...new Set(rows.map((r) => r.parent_id).filter((id): id is number => id !== null))];
+  if (parentIds.length === 0) return [...rows];
+
+  const placeholders = parentIds.map(() => "?").join(",");
+  const parents = db
+    .query(`SELECT id, content FROM parent_chunks WHERE id IN (${placeholders})`)
+    .all(...parentIds) as { id: number; content: string }[];
+  const contentById = new Map(parents.map((p) => [p.id, p.content]));
+
+  const seen = new Set<number>();
+  const out: ChunkRow[] = [];
+  for (const row of rows) {
+    if (row.parent_id === null) {
+      out.push(row);
+      continue;
+    }
+    if (seen.has(row.parent_id)) continue;
+    seen.add(row.parent_id);
+    const content = contentById.get(row.parent_id);
+    out.push(content ? { ...row, content } : row);
+  }
+  return out;
+}
 
 function getChunksByIds(db: Database, ids: readonly number[]): ChunkRow[] {
   if (ids.length === 0) return [];

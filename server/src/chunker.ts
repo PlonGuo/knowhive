@@ -1,92 +1,140 @@
-// Heading-aware Markdown chunker. Ported from backend/app/services/heading_chunker.py:
-// split by headings, merge short sections, sub-split long ones. The sub-splitter is a
-// hand-rolled recursive character splitter (equivalent in spirit to LangChain's
-// RecursiveCharacterTextSplitter) — no LangChain dependency.
+// Chunking, driven by DocumentIR. Produces a two-level (parent/child) split:
+//
+//   section → parent window (≤ PARENT_MAX_LENGTH) → child chunks (≤ CHILD_SIZE)
+//
+// Only children are embedded and indexed — small chunks match a question's phrasing far
+// more precisely than a whole section does. At answer time the hit is swapped for its
+// parent, so the model reads the surrounding paragraph instead of the fragment that
+// happened to match. That's the point of the split: retrieve small, read big.
+//
+// Children never straddle a parent boundary, which is what makes the swap sound.
+//
+// The sub-splitter is a hand-rolled recursive character splitter (equivalent in spirit to
+// LangChain's RecursiveCharacterTextSplitter) — no LangChain dependency.
+import { sectionText, toSections, type DocumentIR, type Section } from "./documentIr.ts";
 
 export interface Chunk {
   content: string;
   section_heading: string;
   chunk_index: number;
+  /** Index into ChunkedDocument.parents of the parent this child was split from. */
+  parent_index: number;
+}
+
+export interface ParentChunk {
+  content: string;
+  section_heading: string;
+  parent_index: number;
+}
+
+export interface ChunkedDocument {
+  parents: ParentChunk[];
+  /** The embedded, indexed units. */
+  children: Chunk[];
 }
 
 const MIN_SECTION_LENGTH = 100;
+/** Above this, a parent is split into children rather than stored as a single chunk. */
 const MAX_SECTION_LENGTH = 1500;
+/** Cap on a parent's text, so expansion can't drop a whole chapter into the prompt. */
+const PARENT_MAX_LENGTH = 4000;
+// Child sizing is the knob that decides whether parent-child does anything at all: if
+// children are as big as their sections, parent == child and expansion is a no-op. On a
+// heading-dense notes corpus that is the default outcome (measured: only 4% of children
+// widen at 1000/1500). Env-overridable so the retrieval-only RAGAS sweep can vary it
+// the same way KNOWHIVE_RERANK_STYLE varies the reranker.
+const CHILD_SIZE = envInt("KNOWHIVE_CHILD_SIZE", 1000);
+const CHILD_OVERLAP = envInt("KNOWHIVE_CHILD_OVERLAP", 200);
 
-export function splitByHeadings(text: string): Chunk[] {
-  if (!text || !text.trim()) return [];
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
-  const sections = mergeShortSections(parseSections(text));
+export function chunkDocument(ir: DocumentIR): ChunkedDocument {
+  const sections = mergeShortSections(toSections(ir));
 
-  const chunks: Chunk[] = [];
-  let index = 0;
-  for (const [heading, rawBody] of sections) {
-    const body = rawBody.trim();
+  const parents: ParentChunk[] = [];
+  const children: Chunk[] = [];
+
+  for (const section of sections) {
+    const body = sectionText(section).trim();
     if (!body) continue;
-    if (body.length > MAX_SECTION_LENGTH) {
-      for (const piece of recursiveSplit(body, 1000, 200)) {
-        chunks.push({ content: piece, section_heading: heading, chunk_index: index++ });
+
+    // A long section becomes several parents; children are cut inside each one.
+    const windows =
+      body.length > PARENT_MAX_LENGTH
+        ? recursiveSplit(body, PARENT_MAX_LENGTH, 0)
+        : [body];
+
+    for (const window of windows) {
+      const parentIndex = parents.length;
+      parents.push({
+        content: window,
+        section_heading: section.heading,
+        parent_index: parentIndex,
+      });
+
+      // Split whenever the window exceeds the child budget. Tying this to CHILD_SIZE
+      // rather than MAX_SECTION_LENGTH keeps children actually bounded by CHILD_SIZE —
+      // otherwise a 1400-char section became one 1400-char "child".
+      const splitAbove = Math.min(CHILD_SIZE, MAX_SECTION_LENGTH);
+      const pieces =
+        window.length > splitAbove ? recursiveSplit(window, CHILD_SIZE, CHILD_OVERLAP) : [window];
+
+      for (const piece of pieces) {
+        children.push({
+          content: piece,
+          section_heading: section.heading,
+          chunk_index: children.length,
+          parent_index: parentIndex,
+        });
       }
-    } else {
-      chunks.push({ content: body, section_heading: heading, chunk_index: index++ });
     }
   }
-  return chunks;
+
+  return { parents, children };
 }
 
-/** Parse into [heading, body] pairs. Text before the first heading gets heading "". */
-function parseSections(text: string): [string, string][] {
-  const re = /^(#{1,6})\s+(.+)$/gm;
-  const matches = [...text.matchAll(re)];
-  if (matches.length === 0) return [["", text]];
+/**
+ * Merge sections whose body is shorter than MIN_SECTION_LENGTH into the next one, so a
+ * run of stub headings doesn't become a run of near-empty chunks. The merged section
+ * keeps the FIRST heading — that's the one a reader would name the passage by.
+ */
+function mergeShortSections(sections: readonly Section[]): Section[] {
+  const merged: Section[] = [];
+  let pending: Section | null = null;
 
-  const sections: [string, string][] = [];
-  const firstStart = matches[0]!.index!;
-  if (firstStart > 0) {
-    const preamble = text.slice(0, firstStart);
-    if (preamble.trim()) sections.push(["", preamble]);
-  }
-  for (let i = 0; i < matches.length; i++) {
-    const m = matches[i]!;
-    const heading = m[2]!.trim();
-    const start = m.index! + m[0].length;
-    const end = i + 1 < matches.length ? matches[i + 1]!.index! : text.length;
-    sections.push([heading, text.slice(start, end)]);
-  }
-  return sections;
-}
-
-/** Merge sections whose trimmed body is shorter than MIN_SECTION_LENGTH into the next. */
-function mergeShortSections(sections: [string, string][]): [string, string][] {
-  if (sections.length === 0) return [];
-  const merged: [string, string][] = [];
-  let pendingBody = "";
-  let pendingHeading = "";
-
-  for (const [heading, body] of sections) {
-    const stripped = body.trim();
-    if (pendingBody) {
-      const combined = pendingBody.replace(/\s+$/, "") + "\n\n" + stripped;
-      if (combined.trim().length < MIN_SECTION_LENGTH) {
-        pendingBody = combined;
+  for (const section of sections) {
+    if (pending) {
+      const combined: Section = {
+        heading: pending.heading,
+        level: pending.level,
+        blocks: [...pending.blocks, ...section.blocks],
+      };
+      if (sectionText(combined).trim().length < MIN_SECTION_LENGTH) {
+        pending = combined;
       } else {
-        merged.push([pendingHeading, combined]);
-        pendingBody = "";
-        pendingHeading = "";
+        merged.push(combined);
+        pending = null;
       }
-    } else if (stripped.length < MIN_SECTION_LENGTH) {
-      pendingBody = stripped;
-      pendingHeading = heading;
+      continue;
+    }
+    if (sectionText(section).trim().length < MIN_SECTION_LENGTH) {
+      pending = section;
     } else {
-      merged.push([heading, body]);
+      merged.push(section);
     }
   }
 
-  if (pendingBody) {
-    if (merged.length > 0) {
-      const [lh, lb] = merged[merged.length - 1]!;
-      merged[merged.length - 1] = [lh, lb.replace(/\s+$/, "") + "\n\n" + pendingBody];
+  if (pending) {
+    const last = merged[merged.length - 1];
+    if (last) {
+      last.blocks = [...last.blocks, ...pending.blocks];
     } else {
-      merged.push([pendingHeading, pendingBody]);
+      merged.push(pending);
     }
   }
   return merged;
@@ -98,8 +146,8 @@ function mergeShortSections(sections: [string, string][]): [string, string][] {
  */
 export function recursiveSplit(
   text: string,
-  chunkSize = 1000,
-  overlap = 200,
+  chunkSize = CHILD_SIZE,
+  overlap = CHILD_OVERLAP,
   separators: readonly string[] = ["\n\n", "\n", " ", ""],
 ): string[] {
   const sep = separators.find((s) => s === "" || text.includes(s)) ?? "";

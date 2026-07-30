@@ -113,6 +113,19 @@ CREATE TABLE IF NOT EXISTS review_items (
   updated_at      TEXT DEFAULT (datetime('now'))
 );
 
+-- Parent chunks: the larger passage a child was split out of. Never embedded and never
+-- in FTS — they exist only to be swapped in for a matched child at answer time.
+CREATE TABLE IF NOT EXISTS parent_chunks (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_path       TEXT NOT NULL,
+  parent_index    INTEGER NOT NULL,
+  content         TEXT NOT NULL,
+  section_heading TEXT,
+  created_at      TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS parent_chunks_file ON parent_chunks(file_path);
+
 -- Chunk store + FTS5 mirror for hybrid retrieval (replaces ChromaDB's doc store).
 CREATE TABLE IF NOT EXISTS chunks (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,6 +133,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   chunk_index     INTEGER NOT NULL,
   content         TEXT NOT NULL,
   section_heading TEXT,
+  parent_id       INTEGER,
   embedding       BLOB,
   title           TEXT,
   category        TEXT,
@@ -177,6 +191,9 @@ function migrate(db: Database): void {
   addColumnIfMissing("chat_messages", "session_id", "session_id TEXT");
   addColumnIfMissing("chat_summaries", "session_id", "session_id TEXT");
   addColumnIfMissing("memories", "last_recalled_at", "last_recalled_at TEXT");
+  // Parent-child chunking: pre-existing chunks keep parent_id NULL and simply don't
+  // expand at retrieval time, so an un-migrated DB degrades to the old behaviour.
+  addColumnIfMissing("chunks", "parent_id", "parent_id INTEGER");
 }
 
 export function openDb(dataDir: string): Database {

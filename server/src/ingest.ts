@@ -5,7 +5,8 @@ import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
-import { splitByHeadings } from "./chunker.ts";
+import { chunkDocument } from "./chunker.ts";
+import { parseMarkdown } from "./markdownIr.ts";
 import { deleteChunksForFile, storeChunks } from "./store.ts";
 
 export type Embedder = (texts: string[]) => Promise<number[][]>;
@@ -23,23 +24,26 @@ export async function ingestText(
   embed: Embedder,
 ): Promise<IngestResult> {
   const { data, body } = parseFrontmatter(rawText);
-  const chunks = splitByHeadings(body);
+  // Markdown → DocumentIR → parent/child chunks. Other formats will add their own
+  // producer here; everything downstream of the IR is format-agnostic.
+  const doc = chunkDocument(parseMarkdown(body));
   // Content hash + size let the sync service detect modified files (sync.ts).
   const fileHash = new Bun.CryptoHasher("sha256").update(rawText).digest("hex");
   const fileSize = Buffer.byteLength(rawText);
 
-  if (chunks.length === 0) {
+  if (doc.children.length === 0) {
     deleteChunksForFile(db, filePath);
     upsertDocument(db, filePath, data.title, 0, "empty", fileHash, fileSize);
     return { filePath, chunkCount: 0 };
   }
 
-  const embeddings = await embed(chunks.map((c) => c.content));
+  // Only children are embedded — parents exist to be read, not matched.
+  const embeddings = await embed(doc.children.map((c) => c.content));
   deleteChunksForFile(db, filePath);
-  storeChunks(db, filePath, chunks, embeddings, data);
-  upsertDocument(db, filePath, data.title, chunks.length, "indexed", fileHash, fileSize);
+  storeChunks(db, filePath, doc, embeddings, data);
+  upsertDocument(db, filePath, data.title, doc.children.length, "indexed", fileHash, fileSize);
 
-  return { filePath, chunkCount: chunks.length };
+  return { filePath, chunkCount: doc.children.length };
 }
 
 /** Recursively list .md files under `directory` (absolute paths, sorted).

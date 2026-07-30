@@ -43,6 +43,10 @@ export const AppConfigSchema = z.object({
   // "cross-encoder" = in-process ONNX (Phase E2, default: won the RAGAS gate on all
   // four metrics); "llm" = LLM-as-reranker (Phase E1, kept as fallback backend)
   reranker_backend: RerankerBackend.default("cross-encoder"),
+  // Parent-child retrieval: match on small child chunks, hand the model the larger
+  // parent passage. Off by default until the retrieval-only RAGAS A/B decides —
+  // expansion should lift context_recall but may dilute context_precision.
+  use_parent_expansion: z.boolean().default(false),
   // "single" = one-shot RAG; "agentic" = tool-use loop (Phase G). Default flips
   // only after the Task 7 eval gate passes.
   chat_mode: ChatMode.default("single"),

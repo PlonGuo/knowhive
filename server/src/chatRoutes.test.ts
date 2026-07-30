@@ -15,6 +15,7 @@ function chunk(file_path: string, content: string): ChunkRow {
     chunk_index: 0,
     content,
     section_heading: null,
+    parent_id: null,
     title: null,
     category: null,
     tags: null,

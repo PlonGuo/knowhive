@@ -23,7 +23,7 @@ import { memoryRoutes } from "./memoryRoutes.ts";
 import { recallSemanticMemories, runEviction } from "./sessions.ts";
 import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
-import { deleteChunksForFile, hybridSearch } from "./store.ts";
+import { deleteChunksForFile, expandToParents, hybridSearch } from "./store.ts";
 import { rerankCrossEncoder } from "./crossEncoder.ts";
 import {
   crossEncoderScore,
@@ -209,7 +209,16 @@ app.route(
 // Retrieve: hybrid (vector KNN ⊕ FTS5 via RRF), and when use_reranker is on,
 // over-fetch RERANK_CANDIDATES and rerank down to k with the configured backend:
 // "cross-encoder" = in-process ONNX (Phase E2), "llm" = LLM-as-reranker (Phase E1).
+//
+// Parent-child (config.use_parent_expansion) applies LAST, after reranking: ranking wants
+// the small, precise child text, while the model wants the surrounding passage. Expanding
+// before the rerank would hand the cross-encoder diluted passages and undo the point.
 const retrieve = async (query: string, k: number, precomputedVector?: number[]) => {
+  const ranked = await retrieveRanked(query, k, precomputedVector);
+  return config.use_parent_expansion ? expandToParents(db, ranked) : ranked;
+};
+
+const retrieveRanked = async (query: string, k: number, precomputedVector?: number[]) => {
   // Env-gated internal split (KNOWHIVE_TIMING=1) so the latency waterfall can drill
   // into retrieve when it dominates: embed vs hybrid-search vs rerank.
   const T = process.env.KNOWHIVE_TIMING ? () => performance.now() : null;
