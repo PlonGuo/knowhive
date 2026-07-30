@@ -29,10 +29,10 @@ backend/eval_dataset.json
 # Misc
 docs/leetcode/
 
-# Interview prep — resume, Q&A bank, whiteboard scripts. Local only.
-# The rest of learnings/ (evals, decisions, design) stays tracked: the README's
-# evidence links point into it, and that evidence chain is the point of the repo.
+# Interview prep — resume, Q&A bank, whiteboard scripts, README index. Local only.
+# The rest of learnings/ (evals, decisions, design) stays tracked.
 learnings/career/
+learnings/README.md
 
 # Build artifacts
 extraResources/
