@@ -2,14 +2,10 @@
 
 KnowHive 的决策记录、实验数据与面试材料。按用途分四类：
 
-## career/ — 简历与面试准备
+## career/ — 简历与面试准备（本地私有，不入库）
 
-| 文档 | 内容 |
-|---|---|
-| [Resume-Bullets-CN](career/Resume-Bullets-CN.md) | AI Agent 岗中文简历 bullets，每条对应仓库内的证据链 |
-| [Interview-QA-CN](career/Interview-QA-CN.md) | 面试深挖问答库：每条 bullet 可能被追问的问题 + 答案 |
-| [Interview-Deepdive-CN](career/Interview-Deepdive-CN.md) | 两个杀手锏点的白板级深度讲稿（缓存×安全回退、agentic 否定结果） |
-| [Learning](career/Learning.md) | RAG 系统完整学习指南：从底层原理到工程实现 |
+`learnings/career/` 在 `.gitignore` 里，只存在于本地工作副本。内容：简历成品与证据链、
+简历追问问答库、两大杀手锏白板讲稿、RAG 系统学习指南。
 
 ## evals/ — 评估与实验记录（有数据）
 
