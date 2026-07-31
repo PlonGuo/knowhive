@@ -2,6 +2,7 @@
 
 > 用途：为「自动化文档导入」功能（DocumentIR + 多格式解析 + OCR）准备评测语料。
 > 状态：**待采集**。整理于 2026-07-30。
+> 👉 **动手采集直接看第 10 节：第一轮实际清单（只采 md）**——PDF/docx/txt 的 producer 还没写，那三节的语料现在采了也进不了管线。
 
 ---
 
@@ -140,3 +141,37 @@ cd backend && uv run python -m app.eval_retrieval_sweep \
 - [ ] **Python 定位：仅开发期**。用 docling / PyMuPDF 产出结构化 ground truth 当 oracle，对照开发 TS 解析器；不进 `.app` 打包（`tauri.conf.json` 只打包 `binaries/bun` + `resources/server`）
 - [ ] **知识库路径改存相对路径**（`documents.file_path` / `chunks.file_path` 现在存绝对路径，见 [store.ts:42](../server/src/store.ts#L42)）
 - [ ] **向量索引扩展性基准** → `learnings/evals/Vector-Index-Scaling.md`
+
+---
+
+## 10. 第一轮实际采集清单（只采 md）— 2026-07-31
+
+**背景**：chunk 策略路由已落地（`chooseStrategy` → `documents.chunk_strategy`），阈值待 RAGAS 校准。ingest 目前只认 `.md`，所以本轮目标是**让五条路由分支每条都有真实语料**，md 一种格式就能做到——无标题文本存成 `.md` 一样能触发 sliding-window。
+
+**存放**：`eval-corpus/md/<桶名>/`，文件名带桶前缀（如 `pc-rust-book-ch04.md`）。
+**问答对**：新建 `backend/eval_dataset_corpus.json`，格式与 `backend/eval_dataset.json` 相同（`[{question, ground_truth}]`），每份新语料配 2–3 问。现有 eval_dataset.json（算法笔记问答）继续对应本仓库笔记桶，不动。
+
+### 按路由分支采集
+
+| 桶 | 触发策略 | 数量 | 去哪找 | 出题要点 |
+|---|---|---|---|---|
+| **A 小文档** | `whole-doc` | 2–3 份，每份 ≤1000 字符 | 本仓库短笔记；任意项目 README 的简介节 | 问文档主旨（验证整篇入库不丢信息） |
+| **B 标题密集笔记** | `section-as-chunk` | 3–4 份 | 🔴 本仓库 `learnings/`（零成本，中英混合+代码密集，已有问答对） | 复用现有 eval_dataset.json |
+| **C 长章节 prose** | `parent-child` | 3–4 份，单节要 >1000 字符 | 英文：rust-lang/book 的 `src/*.md` 挑长章节；中文：ruanyf/es6tutorial 的 `docs/*.md`（长章节+代码块，一份覆盖中文+代码两个变量） | **问跨段落的问题**（答案散在相邻几段——逼出 parent 展开的价值） |
+| **D 无标题纯文本** | `sliding-window` | 2 份（中英各一） | Project Gutenberg 小说取 1–2 章、**删掉标题行**存成 `.md`（英文任选；中文如红楼梦） | 问情节/事实细节（无标题可依赖，纯靠正文匹配） |
+| **E 表格密集** | 修饰路径（表头重复） | 2 份，表格要 >30 行 | mdn/content 的兼容性/参考表页面；K8s API 字段参考；任何带大配置表的 OSS 文档 | **问表格中后段某一行的值**（没有表头重复这类问题必挂——直接验证今天的改动） |
+| **F 超大代码块** | 修饰路径（按行断） | 1–2 份，单个代码块 >1000 字符 | rust-lang/book 代码密集章节可与 C 桶复用；或任意长示例代码的教程 md | 问某段代码的行为（验证代码没被拦腰切碎） |
+
+### 验收标准（采完导入后跑）
+
+```sql
+SELECT chunk_strategy, COUNT(*) FROM documents GROUP BY chunk_strategy;
+```
+
+**除 `empty` 外四种策略计数都非零**才算覆盖齐。哪个桶是 0 就是哪类语料没采到位——`chunk_strategy` 落库就是为这个服务的。
+
+### 本轮明确不做
+
+- PDF / docx / txt 语料（等对应 producer / docling 插件）；
+- open-rag-bench（PDF 为主，用不上）；
+- RFC 那种伪结构 txt（缩进会被 markdown parser 误判成代码块，必须等真正的 txt producer）。

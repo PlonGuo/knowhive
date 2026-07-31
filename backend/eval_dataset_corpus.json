@@ -1,0 +1,114 @@
+[
+  {
+    "question": "Climbing Stairs 爬楼梯这道题用什么方法解？时间和空间复杂度分别是多少？",
+    "ground_truth": "用动态规划（斐波那契数列）解。到达第 n 阶的方法数等于到达第 n-1 阶与第 n-2 阶的方法数之和。时间复杂度 O(n)（单次循环），空间复杂度 O(1)（只用两个变量）。"
+  },
+  {
+    "question": "爬楼梯问题为什么和斐波那契数列有关？",
+    "ground_truth": "因为每次可以爬 1 或 2 阶，所以到达第 n 阶的最后一步要么来自第 n-1 阶要么来自第 n-2 阶，方法数满足 ways(n) = ways(n-1) + ways(n-2)，正是斐波那契递推关系。"
+  },
+  {
+    "question": "Maximum Subarray 最大子数组和用的 Kadane 算法核心思想是什么？",
+    "ground_truth": "跟踪以每个位置结尾的最大子数组和：current_sum = max(num, current_sum + num)，即如果之前的累计和变为负数就从当前元素重新开始，同时维护全局最大值。时间 O(n) 单次遍历，空间 O(1)。"
+  },
+  {
+    "question": "对于数组 [-2,1,-3,4,-1,2,1,-5,4]，最大子数组和是多少？对应哪个子数组？",
+    "ground_truth": "最大子数组和是 6，对应子数组 [4,-1,2,1]。"
+  },
+  {
+    "question": "反转单链表的迭代解法用了哪几个指针？各自的作用是什么？",
+    "ground_truth": "用三个指针：prev（已反转部分的头，初始为 None）、current（当前处理的节点，初始为 head）、next_node（暂存 current 的下一个节点防止断链）。遍历时把 current.next 指向 prev，然后三个指针依次前移，最后返回 prev。时间 O(n)，空间 O(1)。"
+  },
+  {
+    "question": "反转链表迭代解法的时间和空间复杂度是多少？",
+    "ground_truth": "时间复杂度 O(n)，每个节点访问一次；空间复杂度 O(1)，只使用指针变量。"
+  },
+  {
+    "question": "What are the three ownership rules in Rust?",
+    "ground_truth": "Each value in Rust has an owner; there can only be one owner at a time; and when the owner goes out of scope, the value will be dropped."
+  },
+  {
+    "question": "Why does Rust invalidate s1 after `let s2 = s1;` when s1 is a String, and what is this operation called?",
+    "ground_truth": "Assigning s1 to s2 copies only the pointer, length, and capacity on the stack — both variables would point to the same heap data. If both went out of scope they would both try to free the same memory, causing a double free error. To ensure memory safety Rust considers s1 no longer valid after the assignment. Because the first variable is invalidated, the operation is called a move rather than a shallow copy."
+  },
+  {
+    "question": "What design choice does Rust make about automatic copying of data?",
+    "ground_truth": "Rust will never automatically create deep copies of data, so any automatic copying can be assumed to be inexpensive in terms of runtime performance. To deeply copy heap data you must explicitly call clone."
+  },
+  {
+    "question": "What does thread::spawn return in Rust, and what does calling join on it do?",
+    "ground_truth": "thread::spawn returns a JoinHandle<T>, an owned value. Calling join on the handle blocks the currently running thread until the thread represented by the handle terminates, guaranteeing the spawned thread finishes before the caller proceeds."
+  },
+  {
+    "question": "In Rust, what can happen to a spawned thread if the main thread ends without calling join?",
+    "ground_truth": "The spawned thread may be stopped prematurely when main ends, and because there is no guarantee on the order in which threads run, it may not even get to run at all."
+  },
+  {
+    "question": "Why do you need a move closure when passing data from the main thread to a spawned thread in Rust?",
+    "ground_truth": "Without move, the closure only borrows the captured value, but Rust can't tell how long the spawned thread will run, so it doesn't know whether the reference will always be valid. Adding move forces the closure to take ownership of the values it uses, transferring ownership from one thread to the other."
+  },
+  {
+    "question": "async 函数是什么的语法糖？它对 Generator 函数的改进体现在哪四点？",
+    "ground_truth": "async 函数是 Generator 函数的语法糖（把星号换成 async、yield 换成 await）。四点改进：(1) 内置执行器，不需要 co 模块或手动调 next，像普通函数一样调用即可；(2) 更好的语义，async 和 await 比星号和 yield 语义更清楚；(3) 更广的适用性，await 后面可以是 Promise 对象或原始类型的值；(4) 返回值是 Promise 对象而不是 Iterator，可以直接用 then 指定下一步操作。"
+  },
+  {
+    "question": "await 命令后面的 Promise 有可能 rejected，推荐怎么处理这种错误？",
+    "ground_truth": "最好把 await 命令放在 try...catch 代码块中；另一种写法是在 await 后面的 Promise 上直接调用 .catch 方法处理错误。"
+  },
+  {
+    "question": "多个互不依赖的异步操作，为什么不应该连续写多个 await？应该怎么写？",
+    "ground_truth": "连续 await 会让本可并发的操作变成继发（串行）执行，比较耗时——只有前一个完成后才执行下一个。应该让它们同时触发：用 let [foo, bar] = await Promise.all([getFoo(), getBar()])，或者先把两个 Promise 都发起再分别 await。"
+  },
+  {
+    "question": "What is the famous opening line of Pride and Prejudice?",
+    "ground_truth": "It is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife."
+  },
+  {
+    "question": "In Pride and Prejudice, why does Mrs. Bennet send Jane to Netherfield on horseback instead of in the carriage?",
+    "ground_truth": "Because it seems likely to rain, so Jane would have to stay all night at Netherfield. Jane goes on horseback, it rains hard, and she is obliged to stay — which is exactly what her mother hoped for."
+  },
+  {
+    "question": "《红楼梦》开篇那块石头的来历是什么？",
+    "ground_truth": "是女娲炼石补天时在大荒山无稽崖炼成的顽石，共三万六千五百零一块，女娲只用了三万六千五百块，单单剩下这一块未用，弃在青埂峰下。此石经锻炼后灵性已通，因见众石俱得补天、独自己无材不堪入选，遂自怨自叹，日夜悲号惭愧。"
+  },
+  {
+    "question": "《红楼梦》第一回里甄士隐的女儿叫什么名字？当时几岁？",
+    "ground_truth": "女儿乳名叫英莲，年方三岁。"
+  },
+  {
+    "question": "《红楼梦》里甄士隐是个什么样性格的人？",
+    "ground_truth": "甄士隐禀性恬淡，不以功名为念，每日只以观花修竹、酌酒吟诗为乐，是神仙一流人品。"
+  },
+  {
+    "question": "Does the Gutendex API require authentication, and does it support HTTPS?",
+    "ground_truth": "Gutendex is a web API for fetching data from the Project Gutenberg Books Library. It requires no authentication (auth: No), supports HTTPS (Yes), and its CORS support is Unknown."
+  },
+  {
+    "question": "What does the Thirukkural API provide, and what authentication does it need?",
+    "ground_truth": "The Thirukkural API provides 1330 Thirukkural poems and explanation in Tamil and English. It needs no authentication, and supports both HTTPS and CORS."
+  },
+  {
+    "question": "According to the public APIs list, does the Open Library API support CORS?",
+    "ground_truth": "No — Open Library (books, book covers and related data) requires no auth and supports HTTPS, but its CORS entry is No."
+  },
+  {
+    "question": "What is the kubectl short name for storageclasses, and is that resource namespaced?",
+    "ground_truth": "The short name for storageclasses is sc. It is not namespaced (NAMESPACED = false), its API version is storage.k8s.io/v1, and its kind is StorageClass."
+  },
+  {
+    "question": "Which Kubernetes resource has the short name pdb, and what is its API version?",
+    "ground_truth": "poddisruptionbudgets has the short name pdb. Its API version is policy/v1, it is namespaced (true), and its kind is PodDisruptionBudget."
+  },
+  {
+    "question": "In the HTTP server example at the top of the Node.js stream documentation, how does the server read the request body and what does it respond with?",
+    "ground_truth": "req is a readable stream: the server calls req.setEncoding('utf8'), accumulates chunks into a body string via 'data' events, and on the 'end' event parses the body with JSON.parse. On success it writes back the typeof the parsed data via res.write and res.end; if the JSON is invalid it sets res.statusCode to 400 and responds with the error message."
+  },
+  {
+    "question": "In the parseHeader example for readable.unshift in the Node.js stream docs, what happens once the header boundary is found?",
+    "ground_truth": "The accumulated string is split at the \\n\\n boundary: the part before it completes the header, and the remaining data is converted to a Buffer and pushed back onto the stream with stream.unshift(buf). The 'error' and 'readable' listeners are removed before unshifting, and the callback is invoked with (null, header, stream) so the message body can then be read from the stream."
+  },
+  {
+    "question": "What caveat do the Node.js stream docs give about calling readable.unshift() during a read, and what is the remedy?",
+    "ground_truth": "Unlike stream.push(chunk), unshift does not reset the internal reading state, so calling readable.unshift() during a read (e.g. from within a _read() implementation) can cause unexpected results. Following the unshift call with an immediate stream.push('') resets the reading state appropriately, but it is best to simply avoid calling unshift while performing a read."
+  }
+]

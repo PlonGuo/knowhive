@@ -21,7 +21,7 @@ test("loadConfig returns defaults when config.yaml is missing", () => {
     pre_retrieval_strategy: "none",
     use_reranker: false,
     reranker_backend: "cross-encoder",
-    use_parent_expansion: false,
+    use_parent_expansion: true,
     chat_mode: "single",
     chat_permission_mode: "ask",
     ollama_base_url: "http://localhost:11434",

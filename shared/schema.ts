@@ -44,9 +44,11 @@ export const AppConfigSchema = z.object({
   // four metrics); "llm" = LLM-as-reranker (Phase E1, kept as fallback backend)
   reranker_backend: RerankerBackend.default("cross-encoder"),
   // Parent-child retrieval: match on small child chunks, hand the model the larger
-  // parent passage. Off by default until the retrieval-only RAGAS A/B decides —
-  // expansion should lift context_recall but may dilute context_precision.
-  use_parent_expansion: z.boolean().default(false),
+  // parent passage. On by default: the retrieval-only RAGAS A/B (corpus-r1, k=5,
+  // bge-m3) showed expansion lifts BOTH metrics — context_precision 0.788→0.862,
+  // context_recall 0.872→0.887 — and on heading-dense notes parent==child makes
+  // it a no-op, so there is no corpus where it loses.
+  use_parent_expansion: z.boolean().default(true),
   // "single" = one-shot RAG; "agentic" = tool-use loop (Phase G). Default flips
   // only after the Task 7 eval gate passes.
   chat_mode: ChatMode.default("single"),
