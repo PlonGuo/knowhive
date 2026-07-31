@@ -121,6 +121,13 @@ describe("single-pass mode (default)", () => {
     expect(sse).not.toContain("tool-input");
   });
 
+  test("finish metadata carries token usage for the client-side usage meter", async () => {
+    const sse = await postChat(makeDeps(), userMessage("what is RRF?"));
+    expect(sse).toContain('"usage"');
+    expect(sse).toContain('"totalTokens"');
+    expect(sse).toContain('"inputTokens"');
+  });
+
   test("injects retrieved context into the user message, not the system prompt (cache-friendly)", async () => {
     const model = textOnlyModel("ok");
     await postChat(makeDeps({ chatModel: () => model as never }), userMessage("q"));

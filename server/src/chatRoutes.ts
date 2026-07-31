@@ -285,7 +285,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       });
 
       return result.toUIMessageStreamResponse({
-        messageMetadata: () => ({ sources: sources.list(), ...(timings ? { timings } : {}) }),
+        messageMetadata: withUsage(() => ({ sources: sources.list(), ...(timings ? { timings } : {}) })),
       });
     }
 
@@ -297,9 +297,30 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     });
 
     return result.toUIMessageStreamResponse({
-      messageMetadata: () => ({ sources: extractSources(chunks), ...(timings ? { timings } : {}) }),
+      messageMetadata: withUsage(() => ({ sources: extractSources(chunks), ...(timings ? { timings } : {}) })),
     });
   });
 
   return app;
+}
+
+/**
+ * Wrap a messageMetadata factory so the finish part also carries token usage —
+ * the client-side usage meter reads it off assistant-message metadata. inputTokens
+ * is the whole prompt the model just saw, which doubles as "current context size"
+ * for the local-model context gauge.
+ */
+function withUsage(base: () => Record<string, unknown>) {
+  return ({ part }: { part: { type: string; totalUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } } }) => ({
+    ...base(),
+    ...(part.type === "finish" && part.totalUsage
+      ? {
+          usage: {
+            inputTokens: part.totalUsage.inputTokens ?? null,
+            outputTokens: part.totalUsage.outputTokens ?? null,
+            totalTokens: part.totalUsage.totalTokens ?? null,
+          },
+        }
+      : {}),
+  });
 }

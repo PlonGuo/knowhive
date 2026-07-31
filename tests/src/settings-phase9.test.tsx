@@ -1,334 +1,148 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+// Settings slimming: research knobs (pre-retrieval strategy, chat memory turns,
+// reranker on/off, agent mode) are no longer user-facing. Their config fields
+// survive as pass-through so config.yaml power users keep working; the reranker
+// becomes a single "download → auto-enable" affordance.
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react'
+import '@testing-library/jest-dom/vitest'
 import SettingsPage from '../../src/components/settings/SettingsPage'
 
 const BACKEND = 'http://localhost:18234'
 
 const fullConfig = {
   llm_provider: 'ollama',
-  model_name: 'llama3',
+  model_name: 'llama3.2',
   base_url: 'http://localhost:11434',
   api_key: null,
   embedding_language: 'english',
-  pre_retrieval_strategy: 'none',
+  pre_retrieval_strategy: 'multi_query',
   use_reranker: false,
-  chat_memory_turns: 0,
+  chat_mode: 'single',
+  chat_permission_mode: 'ask',
+  chat_memory_turns: 6,
   custom_system_prompt: '',
 }
 
 const rerankerStatus = {
-  model: 'cross-encoder/ms-marco-MiniLM-L-6-v2',
-  size_mb: 80,
+  available: true,
+  model: 'bge-reranker-v2-m3',
+  size_mb: 568,
   downloaded: false,
   loaded: false,
 }
 
-function mockFetch(configOverride?: object, rerankerOverride?: object) {
-  return vi.fn((url: string) => {
-    if (url.includes('/config')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(configOverride ?? fullConfig) })
+function mockFetch(opts?: { config?: object; reranker?: object; downloadStatus?: object }) {
+  const state = { puts: [] as any[], downloadPosted: false }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = typeof input === 'string' ? input : (input as Request).url
+    if (url.includes('/reranker/download-status')) {
+      return {
+        ok: true,
+        json: () => Promise.resolve(opts?.downloadStatus ?? { status: null }),
+      } as Response
     }
-    if (url.includes('/embedding/models')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+    if (url.includes('/reranker/download')) {
+      state.downloadPosted = true
+      return { ok: true, json: () => Promise.resolve({}) } as Response
     }
     if (url.includes('/reranker/status')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(rerankerOverride ?? rerankerStatus) })
+      return { ok: true, json: () => Promise.resolve(opts?.reranker ?? rerankerStatus) } as Response
     }
-    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    if (url.includes('/config')) {
+      if (init?.method === 'PUT') state.puts.push(JSON.parse(init.body as string))
+      return { ok: true, json: () => Promise.resolve(opts?.config ?? fullConfig) } as Response
+    }
+    return { ok: true, json: () => Promise.resolve({}) } as Response
   })
+  return state
 }
-
-beforeEach(() => {
-  vi.stubGlobal('fetch', mockFetch())
-})
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
 })
 
-describe('Phase 9 Settings', () => {
-  it('renders pre-retrieval strategy dropdown', async () => {
+describe('Settings slimming — auto-routed knobs are hidden', () => {
+  it('no longer renders the pre-retrieval strategy dropdown', async () => {
+    mockFetch()
+    render(<SettingsPage backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('settings-page'))
+    expect(screen.queryByTestId('pre-retrieval-strategy-select')).toBeNull()
+  })
+
+  it('no longer renders the chat memory turns input', async () => {
+    mockFetch()
+    render(<SettingsPage backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('settings-page'))
+    expect(screen.queryByTestId('chat-memory-turns-input')).toBeNull()
+  })
+
+  it('no longer renders the reranker on/off toggle', async () => {
+    mockFetch()
+    render(<SettingsPage backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('settings-page'))
+    expect(screen.queryByTestId('reranker-toggle')).toBeNull()
+  })
+
+  it('no longer renders the agent mode toggle (lives in the chat composer now)', async () => {
+    mockFetch()
+    render(<SettingsPage backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('settings-page'))
+    expect(screen.queryByTestId('chat-mode-toggle')).toBeNull()
+  })
+
+  it('still renders custom instructions', async () => {
+    mockFetch()
     render(<SettingsPage backendUrl={BACKEND} />)
     await waitFor(() => {
-      const elems = screen.getAllByTestId('pre-retrieval-strategy-select')
-      expect(elems.length).toBeGreaterThan(0)
+      expect(screen.getAllByTestId('custom-system-prompt-input').length).toBeGreaterThan(0)
     })
   })
 
-  it('shows all five strategy options including Auto variants', async () => {
+  it('save passes hidden fields through unchanged', async () => {
+    const state = mockFetch()
+    render(<SettingsPage backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('save-button'))
+    fireEvent.click(screen.getByTestId('save-button'))
+    await waitFor(() => {
+      const put = state.puts.at(-1)
+      expect(put.pre_retrieval_strategy).toBe('multi_query')
+      expect(put.chat_memory_turns).toBe(6)
+      expect(put.chat_mode).toBe('single')
+    })
+  })
+})
+
+describe('Settings slimming — reranker is download-to-enable', () => {
+  it('shows the reranker model section without any toggle', async () => {
+    mockFetch()
     render(<SettingsPage backendUrl={BACKEND} />)
     await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      const options = Array.from(select.options).map(o => o.value)
-      expect(options).toContain('none')
-      expect(options).toContain('hyde')
-      expect(options).toContain('multi_query')
-      expect(options).toContain('auto')
-      expect(options).toContain('auto_llm')
+      expect(screen.getByTestId('reranker-model-section')).toBeInTheDocument()
+      expect(screen.getByTestId('download-reranker-button')).toBeInTheDocument()
     })
   })
 
-  it('loads pre_retrieval_strategy from config', async () => {
-    vi.stubGlobal('fetch', mockFetch({ ...fullConfig, pre_retrieval_strategy: 'hyde' }))
+  it('shows ready indicator when the model is downloaded', async () => {
+    mockFetch({
+      config: { ...fullConfig, use_reranker: true },
+      reranker: { ...rerankerStatus, downloaded: true },
+    })
     render(<SettingsPage backendUrl={BACKEND} />)
     await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      expect(select.value).toBe('hyde')
+      expect(screen.getByTestId('reranker-ready-indicator')).toBeInTheDocument()
     })
   })
 
-  it('changes pre-retrieval strategy on select', async () => {
+  it('auto-enables use_reranker once the download completes', async () => {
+    const state = mockFetch({ downloadStatus: { status: 'complete' } })
     render(<SettingsPage backendUrl={BACKEND} />)
+    const btn = await waitFor(() => screen.getByTestId('download-reranker-button'))
+    fireEvent.click(btn)
     await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      fireEvent.change(select, { target: { value: 'multi_query' } })
-      expect(select.value).toBe('multi_query')
+      expect(state.puts.some((p) => p.use_reranker === true)).toBe(true)
     })
-  })
-
-  it('renders reranker toggle', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const elems = screen.getAllByTestId('reranker-toggle')
-      expect(elems.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('reranker toggle switches on/off', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const toggle = screen.getAllByTestId('reranker-toggle')[0]
-      expect(toggle.getAttribute('aria-checked')).toBe('false')
-      fireEvent.click(toggle)
-      expect(toggle.getAttribute('aria-checked')).toBe('true')
-      fireEvent.click(toggle)
-      expect(toggle.getAttribute('aria-checked')).toBe('false')
-    })
-  })
-
-  it('shows reranker model section when toggle is on', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      expect(screen.queryByTestId('reranker-model-section')).toBeNull()
-    })
-    const toggle = screen.getAllByTestId('reranker-toggle')[0]
-    fireEvent.click(toggle)
-    await waitFor(() => {
-      expect(screen.queryAllByTestId('reranker-model-section').length).toBeGreaterThan(0)
-    })
-  })
-
-  it('shows download button when reranker not downloaded', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    const toggle = await waitFor(() => screen.getAllByTestId('reranker-toggle')[0])
-    fireEvent.click(toggle)
-    await waitFor(() => {
-      expect(screen.queryAllByTestId('download-reranker-button').length).toBeGreaterThan(0)
-    })
-  })
-
-  it('shows ready indicator when reranker downloaded', async () => {
-    vi.stubGlobal('fetch', mockFetch(
-      { ...fullConfig, use_reranker: true },
-      { ...rerankerStatus, downloaded: true },
-    ))
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      expect(screen.queryAllByTestId('reranker-ready-indicator').length).toBeGreaterThan(0)
-    })
-  })
-
-  it('renders chat memory turns input', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const elems = screen.getAllByTestId('chat-memory-turns-input')
-      expect(elems.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('loads chat_memory_turns from config', async () => {
-    vi.stubGlobal('fetch', mockFetch({ ...fullConfig, chat_memory_turns: 5 }))
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const input = screen.getAllByTestId('chat-memory-turns-input')[0] as HTMLInputElement
-      expect(input.value).toBe('5')
-    })
-  })
-
-  it('changes chat memory turns on input', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const input = screen.getAllByTestId('chat-memory-turns-input')[0] as HTMLInputElement
-      fireEvent.change(input, { target: { value: '10' } })
-      expect(input.value).toBe('10')
-    })
-  })
-
-  it('loads auto strategy from config', async () => {
-    vi.stubGlobal('fetch', mockFetch({ ...fullConfig, pre_retrieval_strategy: 'auto' }))
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      expect(select.value).toBe('auto')
-    })
-  })
-
-  it('loads auto_llm strategy from config', async () => {
-    vi.stubGlobal('fetch', mockFetch({ ...fullConfig, pre_retrieval_strategy: 'auto_llm' }))
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      expect(select.value).toBe('auto_llm')
-    })
-  })
-
-  it('can switch to auto strategy', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      fireEvent.change(select, { target: { value: 'auto' } })
-      expect(select.value).toBe('auto')
-    })
-  })
-
-  it('auto options include trade-off descriptions', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      const autoOption = Array.from(select.options).find(o => o.value === 'auto')
-      const autoLlmOption = Array.from(select.options).find(o => o.value === 'auto_llm')
-      expect(autoOption?.text).toContain('rule-based')
-      expect(autoOption?.text).toContain('fast')
-      expect(autoLlmOption?.text).toContain('LLM')
-      expect(autoLlmOption?.text).toContain('slower')
-    })
-  })
-
-  it('saves auto_llm strategy to config', async () => {
-    const fetchSpy = vi.fn((url: string, options?: any) => {
-      if (url.includes('/config') && options?.method === 'PUT') {
-        const body = JSON.parse(options.body)
-        expect(body.pre_retrieval_strategy).toBe('auto_llm')
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-      }
-      if (url.includes('/config')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(fullConfig) })
-      }
-      if (url.includes('/embedding/models')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
-      }
-      if (url.includes('/reranker/status')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(rerankerStatus) })
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-    })
-    vi.stubGlobal('fetch', fetchSpy)
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const select = screen.getAllByTestId('pre-retrieval-strategy-select')[0] as HTMLSelectElement
-      fireEvent.change(select, { target: { value: 'auto_llm' } })
-    })
-    const saveBtn = await waitFor(() => screen.getAllByTestId('save-button')[0])
-    fireEvent.click(saveBtn)
-    await waitFor(() => {
-      const putCalls = fetchSpy.mock.calls.filter(
-        ([url, opts]: any[]) => url.includes('/config') && opts?.method === 'PUT'
-      )
-      expect(putCalls.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('renders custom instructions textarea', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const elems = screen.getAllByTestId('custom-system-prompt-input')
-      expect(elems.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('loads custom_system_prompt from config', async () => {
-    vi.stubGlobal('fetch', mockFetch({ ...fullConfig, custom_system_prompt: 'Be concise.' }))
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const textarea = screen.getAllByTestId('custom-system-prompt-input')[0] as HTMLTextAreaElement
-      expect(textarea.value).toBe('Be concise.')
-    })
-  })
-
-  it('changes custom instructions on input', async () => {
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const textarea = screen.getAllByTestId('custom-system-prompt-input')[0] as HTMLTextAreaElement
-      fireEvent.change(textarea, { target: { value: 'Respond in Spanish.' } })
-      expect(textarea.value).toBe('Respond in Spanish.')
-    })
-  })
-
-  it('saves custom_system_prompt in config', async () => {
-    const fetchSpy = vi.fn((url: string, options?: any) => {
-      if (url.includes('/config') && options?.method === 'PUT') {
-        const body = JSON.parse(options.body)
-        expect(body.custom_system_prompt).toBe('My custom prompt')
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-      }
-      if (url.includes('/config')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(fullConfig) })
-      }
-      if (url.includes('/embedding/models')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
-      }
-      if (url.includes('/reranker/status')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(rerankerStatus) })
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-    })
-    vi.stubGlobal('fetch', fetchSpy)
-    render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => {
-      const textarea = screen.getAllByTestId('custom-system-prompt-input')[0] as HTMLTextAreaElement
-      fireEvent.change(textarea, { target: { value: 'My custom prompt' } })
-    })
-    const saveBtn = await waitFor(() => screen.getAllByTestId('save-button')[0])
-    fireEvent.click(saveBtn)
-    await waitFor(() => {
-      const putCalls = fetchSpy.mock.calls.filter(
-        ([url, opts]: any[]) => url.includes('/config') && opts?.method === 'PUT'
-      )
-      expect(putCalls.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('saves phase 9 config fields', async () => {
-    const fetchSpy = vi.fn((url: string, options?: any) => {
-      if (url.includes('/config') && options?.method === 'PUT') {
-        const body = JSON.parse(options.body)
-        expect(body.pre_retrieval_strategy).toBeDefined()
-        expect(body.use_reranker).toBeDefined()
-        expect(body.chat_memory_turns).toBeDefined()
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-      }
-      if (url.includes('/config')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(fullConfig) })
-      }
-      if (url.includes('/embedding/models')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
-      }
-      if (url.includes('/reranker/status')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(rerankerStatus) })
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-    })
-    vi.stubGlobal('fetch', fetchSpy)
-    render(<SettingsPage backendUrl={BACKEND} />)
-    const saveBtn = await waitFor(() => screen.getAllByTestId('save-button')[0])
-    fireEvent.click(saveBtn)
-    await waitFor(() => {
-      const putCalls = fetchSpy.mock.calls.filter(
-        ([url, opts]: any[]) => url.includes('/config') && opts?.method === 'PUT'
-      )
-      expect(putCalls.length).toBeGreaterThan(0)
-    })
+    expect(state.downloadPosted).toBe(true)
   })
 })

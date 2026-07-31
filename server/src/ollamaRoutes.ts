@@ -42,6 +42,29 @@ export function ollamaRoutes(deps: OllamaRoutesDeps): Hono {
     }
   });
 
+  // Context window of the configured chat model, for the client usage gauge.
+  // Reads `*.context_length` from /api/show's model_info (key is arch-prefixed,
+  // e.g. "llama.context_length"). Degrades to null when Ollama is unreachable.
+  app.get("/ollama/context", async (c) => {
+    const model = deps.getConfig().model_name;
+    try {
+      const res = await fetchFn(`${baseUrl()}/api/show`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model }),
+        signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = (await res.json()) as { model_info?: Record<string, unknown> };
+      const key = Object.keys(data.model_info ?? {}).find((k) => k.endsWith(".context_length"));
+      const raw = key ? data.model_info?.[key] : undefined;
+      const contextLength = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+      return c.json({ model, context_length: contextLength });
+    } catch {
+      return c.json({ model, context_length: null });
+    }
+  });
+
   app.post("/ollama/pull", async (c) => {
     const { model } = (await c.req.json()) as { model?: string };
     if (!model || typeof model !== "string") {

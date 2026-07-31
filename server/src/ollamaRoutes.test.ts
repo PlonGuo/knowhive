@@ -41,6 +41,33 @@ test("GET /ollama/status reports running:false when Ollama is unreachable", asyn
   expect(body.required.every((r: { installed: boolean }) => !r.installed)).toBe(true);
 });
 
+test("GET /ollama/context reports the chat model's context window", async () => {
+  const { app } = setup(async (url, init) => {
+    expect(url).toBe("http://localhost:11434/api/show");
+    expect(JSON.parse(init!.body as string).model).toBe("llama3.2");
+    return new Response(
+      JSON.stringify({
+        model_info: { "llama.context_length": 131072, "llama.block_count": 28 },
+      }),
+      { status: 200 },
+    );
+  });
+  const res = await app.request("/ollama/context");
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body.model).toBe("llama3.2");
+  expect(body.context_length).toBe(131072);
+});
+
+test("GET /ollama/context degrades to null when Ollama is unreachable", async () => {
+  const { app } = setup(async () => {
+    throw new TypeError("Unable to connect");
+  });
+  const res = await app.request("/ollama/context");
+  expect(res.status).toBe(200);
+  expect((await res.json()).context_length).toBeNull();
+});
+
 test("POST /ollama/pull streams the upstream NDJSON progress through", async () => {
   const upstream = new ReadableStream({
     start(controller) {

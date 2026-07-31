@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import FileTree from '../knowledge/FileTree'
+import UsageBadge, { type UsageStats } from './UsageBadge'
 import { selectFiles } from '../../lib/platform'
 import { getInitialTheme, setTheme, type Theme } from '../../lib/theme'
 
@@ -29,6 +30,8 @@ interface SidebarProps {
   onSessionSelect?: (id: string | null) => void
   /** Bumped by the layout when sessions change (new chat, finished exchange). */
   sessionsVersion?: number
+  /** Session token usage for the bottom-left meter (null until the first exchange). */
+  usage?: UsageStats | null
 }
 
 export default function Sidebar({
@@ -43,6 +46,7 @@ export default function Sidebar({
   activeSessionId,
   onSessionSelect,
   sessionsVersion,
+  usage,
 }: SidebarProps) {
   const [importState, setImportState] = useState<ImportState>({
     status: 'idle',
@@ -300,17 +304,18 @@ export default function Sidebar({
           Settings
         </button>
         <div className="flex items-center justify-between px-1 pt-1">
-          {dueCount > 0 ? (
-            <button
-              data-testid="review-badge"
-              onClick={onReviewClick}
-              className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              {dueCount} due
-            </button>
-          ) : (
-            <span />
-          )}
+          <span className="flex items-center gap-1.5">
+            {dueCount > 0 && (
+              <button
+                data-testid="review-badge"
+                onClick={onReviewClick}
+                className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                {dueCount} due
+              </button>
+            )}
+            {backendUrl && <UsageBadge backendUrl={backendUrl} usage={usage ?? null} />}
+          </span>
           <button
             data-testid="theme-toggle"
             onClick={toggleTheme}

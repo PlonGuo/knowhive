@@ -100,11 +100,9 @@ describe('Settings — Ollama-backed embedding model', () => {
 })
 
 describe('Settings — reranker stub (Phase E pending)', () => {
-  it('shows the unavailable note instead of a download section when toggled on', async () => {
+  it('shows the unavailable note instead of a download section', async () => {
     mockBackend({ embeddingInstalled: true, rerankerAvailable: false })
     render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => screen.getByTestId('reranker-toggle'))
-    fireEvent.click(screen.getByTestId('reranker-toggle'))
     await waitFor(() => {
       expect(screen.getByTestId('reranker-unavailable-note')).toBeInTheDocument()
     })
@@ -112,22 +110,12 @@ describe('Settings — reranker stub (Phase E pending)', () => {
   })
 })
 
-describe('Settings — agent mode toggle (Phase G)', () => {
-  it('toggles chat_mode and saves it via PUT /config', async () => {
-    const state = mockBackend({ embeddingInstalled: true })
+describe('Settings — agent mode moved out of settings', () => {
+  it('does not render the chat-mode toggle here (it lives in the chat composer)', async () => {
+    mockBackend({ embeddingInstalled: true })
     render(<SettingsPage backendUrl={BACKEND} />)
-    await waitFor(() => screen.getByTestId('chat-mode-toggle'))
-
-    const toggle = screen.getByTestId('chat-mode-toggle')
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
-
-    fireEvent.click(screen.getByText('Save'))
-    await waitFor(() => {
-      const put = state.puts.at(-1) as { chat_mode?: string } | undefined
-      expect(put?.chat_mode).toBe('agentic')
-    })
+    await waitFor(() => screen.getByTestId('permission-mode-select'))
+    expect(screen.queryByTestId('chat-mode-toggle')).toBeNull()
   })
 })
 

@@ -15,9 +15,10 @@ const BACKEND = 'http://127.0.0.1:18200'
 interface StreamOpts {
   deltas?: string[]
   sources?: string[]
+  usage?: { inputTokens: number; outputTokens: number; totalTokens: number }
 }
 
-function uiMessageStream({ deltas = ['hi'], sources = [] }: StreamOpts = {}): string {
+function uiMessageStream({ deltas = ['hi'], sources = [], usage }: StreamOpts = {}): string {
   const meta = { sources }
   const chunks = [
     { type: 'start', messageMetadata: meta },
@@ -26,7 +27,7 @@ function uiMessageStream({ deltas = ['hi'], sources = [] }: StreamOpts = {}): st
     ...deltas.map((delta) => ({ type: 'text-delta', id: 'txt-0', delta })),
     { type: 'text-end', id: 'txt-0' },
     { type: 'finish-step' },
-    { type: 'finish', finishReason: 'stop', messageMetadata: meta },
+    { type: 'finish', finishReason: 'stop', messageMetadata: usage ? { ...meta, usage } : meta },
   ]
   return chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n'
 }
@@ -90,14 +91,25 @@ describe('ChatArea (useChat)', () => {
     render(<ChatArea backendUrl={BACKEND} />)
     await typeAndSend('what is RRF?')
 
-    expect(calls.length).toBe(1)
-    expect(calls[0]!.url).toBe(`${BACKEND}/chat`)
-    const body = calls[0]!.body as {
+    const chatCalls = calls.filter((c) => c.url.endsWith('/chat'))
+    expect(chatCalls.length).toBe(1)
+    expect(chatCalls[0]!.url).toBe(`${BACKEND}/chat`)
+    const body = chatCalls[0]!.body as {
       messages: { role: string; parts: { type: string; text: string }[] }[]
     }
     expect(body.messages.at(-1)?.role).toBe('user')
     expect(body.messages.at(-1)?.parts[0]?.text).toBe('what is RRF?')
     expect(screen.getByTestId('message-user-0')).toHaveTextContent('what is RRF?')
+  })
+
+  it('reports finish-metadata usage through onUsage (feeds the sidebar meter)', async () => {
+    mockChat(uiMessageStream({ usage: { inputTokens: 1200, outputTokens: 300, totalTokens: 1500 } }))
+    const onUsage = vi.fn()
+    render(<ChatArea backendUrl={BACKEND} onUsage={onUsage} />)
+    await typeAndSend('hello')
+    await waitFor(() => {
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 1200, outputTokens: 300, totalTokens: 1500 })
+    })
   })
 
   it('renders streamed text deltas as the assistant message', async () => {

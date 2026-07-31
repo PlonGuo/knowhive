@@ -9,6 +9,12 @@ import FadeContent from '../reactbits/FadeContent'
 import ShinyText from '../reactbits/ShinyText'
 import { isToolPart, toolPartLabel, toolPartStatus, type ToolPartLike } from '../../lib/toolPart'
 
+export interface ExchangeUsage {
+  inputTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
+}
+
 interface ChatAreaProps {
   backendUrl?: string
   /** Active conversation (Phase M). Absent = legacy stateless chat. */
@@ -17,6 +23,8 @@ interface ChatAreaProps {
   ensureSession?: () => Promise<string>
   /** Fired when an exchange finishes streaming (lets the sidebar refresh titles). */
   onExchangeComplete?: () => void
+  /** Fired once per exchange with the token usage the server put on finish metadata. */
+  onUsage?: (usage: ExchangeUsage) => void
 }
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:18200'
@@ -103,9 +111,38 @@ export default function ChatArea({
   sessionId,
   ensureSession,
   onExchangeComplete,
+  onUsage,
 }: ChatAreaProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Agent mode is a per-conversation choice, so its toggle lives here in the
+  // composer rather than in Settings. Toggling persists immediately — the next
+  // /chat request reads the saved config.
+  const [agentMode, setAgentMode] = useState(false)
+  const configRef = useRef<Record<string, unknown> | null>(null)
+  useEffect(() => {
+    fetch(`${backendUrl ?? DEFAULT_BACKEND_URL}/config`)
+      .then((r) => r.json())
+      .then((cfg: { chat_mode?: string }) => {
+        configRef.current = cfg as Record<string, unknown>
+        setAgentMode(cfg.chat_mode === 'agentic')
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendUrl])
+
+  const toggleAgentMode = async () => {
+    const next = !agentMode
+    setAgentMode(next)
+    const cfg = { ...(configRef.current ?? {}), chat_mode: next ? 'agentic' : 'single' }
+    configRef.current = cfg
+    await fetch(`${backendUrl ?? DEFAULT_BACKEND_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    }).catch(() => {})
+  }
 
   // Recreate the transport if the (dynamically-resolved) backend URL changes.
   const transport = useMemo(
@@ -128,6 +165,20 @@ export default function ChatArea({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, error])
+
+  // Surface finish-metadata token usage exactly once per assistant message.
+  const reportedUsageIds = useRef(new Set<string>())
+  useEffect(() => {
+    if (!onUsage) return
+    for (const m of messages) {
+      if (m.role !== 'assistant' || !m.id || reportedUsageIds.current.has(m.id)) continue
+      const usage = (m.metadata as { usage?: ExchangeUsage } | undefined)?.usage
+      if (!usage) continue
+      reportedUsageIds.current.add(m.id)
+      onUsage(usage)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages])
 
   // Session switch: load persisted history into the chat view.
   useEffect(() => {
@@ -274,6 +325,23 @@ export default function ChatArea({
       {/* Floating composer card, Claude-style: textarea and send share one frame. */}
       <div className="px-6 pb-5 pt-2">
         <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl border bg-background/85 p-2 shadow-sm backdrop-blur-md focus-within:ring-1 focus-within:ring-ring">
+          <button
+            data-testid="chat-agent-toggle"
+            onClick={toggleAgentMode}
+            aria-pressed={agentMode}
+            title={
+              agentMode
+                ? 'Agent mode on: the AI searches and reads notes on its own'
+                : 'Agent mode off: single-shot answers from retrieved context'
+            }
+            className={`mb-0.5 shrink-0 rounded-xl border px-2.5 py-1 text-xs font-medium transition-colors ${
+              agentMode
+                ? 'border-primary/50 bg-primary/15 text-primary'
+                : 'bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            }`}
+          >
+            ⚡ Agent
+          </button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

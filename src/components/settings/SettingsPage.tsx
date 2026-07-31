@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchOllamaStatus, pullModel, type OllamaStatus } from '../../lib/ollama'
 import { saveFile } from '../../lib/platform'
 
+// Settings deliberately exposes only decisions a USER can actually make (which
+// model to talk to, security boundaries, personalization). Retrieval knobs that
+// have a measured best answer — pre-retrieval strategy, reranker on/off, memory
+// window size, parent expansion — are auto-routed in code; their config fields
+// still exist for config.yaml power users and pass through Save untouched.
 interface AppConfig {
   llm_provider: 'ollama' | 'openai-compatible' | 'anthropic'
   model_name: string
@@ -72,6 +77,8 @@ const defaultConfig: AppConfig = {
 
 export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: SettingsPageProps) {
   const [config, setConfig] = useState<AppConfig>(defaultConfig)
+  const configRef = useRef(config)
+  configRef.current = config
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -102,7 +109,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
 
   useEffect(() => {
     fetch(`${backendUrl}/reranker/status`)
-      .then((r) => r.ok ? r.json() : Promise.resolve(null))
+      .then((r) => (r.ok ? r.json() : Promise.resolve(null)))
       .then((data: RerankerStatus | null) => {
         if (data) setRerankerStatus(data)
       })
@@ -161,25 +168,47 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
     fetchOllamaStatus(backendUrl).then(setOllama).catch(() => {})
   }
 
-  const startRerankerPolling = () => {
-    if (rerankerPollRef.current) clearInterval(rerankerPollRef.current)
-    rerankerPollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${backendUrl}/reranker/download-status`)
-        const data: RerankerDownloadStatus = await res.json()
-        setRerankerDownloadStatus(data)
-        if (data.status === 'complete' || data.status === 'error') {
-          clearInterval(rerankerPollRef.current!)
-          rerankerPollRef.current = null
-          setRerankerDownloading(false)
-          const statusRes = await fetch(`${backendUrl}/reranker/status`)
-          const status: RerankerStatus = await statusRes.json()
-          setRerankerStatus(status)
-        }
-      } catch {
-        clearInterval(rerankerPollRef.current!)
-        rerankerPollRef.current = null
+  // Downloaded == enabled: once the model is on disk there is no reason to leave
+  // better ranking off, so completion flips use_reranker on and persists it.
+  const enableRerankerAfterDownload = async () => {
+    const next = { ...configRef.current, use_reranker: true }
+    setConfig(next)
+    await fetch(`${backendUrl}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    }).catch(() => {})
+  }
+
+  const checkRerankerDownload = async (): Promise<boolean> => {
+    // Returns true when polling should stop.
+    try {
+      const res = await fetch(`${backendUrl}/reranker/download-status`)
+      const data: RerankerDownloadStatus = await res.json()
+      setRerankerDownloadStatus(data)
+      if (data.status === 'complete' || data.status === 'error') {
         setRerankerDownloading(false)
+        const statusRes = await fetch(`${backendUrl}/reranker/status`)
+        const status: RerankerStatus = await statusRes.json()
+        setRerankerStatus(status)
+        if (data.status === 'complete') await enableRerankerAfterDownload()
+        return true
+      }
+      return false
+    } catch {
+      setRerankerDownloading(false)
+      return true
+    }
+  }
+
+  const startRerankerPolling = async () => {
+    if (rerankerPollRef.current) clearInterval(rerankerPollRef.current)
+    // Immediate check first (fast completions and tests), then poll.
+    if (await checkRerankerDownload()) return
+    rerankerPollRef.current = setInterval(async () => {
+      if (await checkRerankerDownload()) {
+        if (rerankerPollRef.current) clearInterval(rerankerPollRef.current)
+        rerankerPollRef.current = null
       }
     }, 1000)
   }
@@ -189,7 +218,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
     setRerankerDownloadStatus({ status: 'downloading', progress: 0 })
     try {
       await fetch(`${backendUrl}/reranker/download`, { method: 'POST' })
-      startRerankerPolling()
+      await startRerankerPolling()
     } catch {
       setRerankerDownloading(false)
     }
@@ -291,215 +320,211 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
     }
   }
 
+  // Chat-composer vocabulary: soft frames on the translucent background.
   const inputClass =
-    'w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring'
+    'w-full rounded-xl border bg-background/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring'
   const labelClass = 'block text-sm font-medium text-foreground mb-1'
-  const selectClass =
-    'w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring'
+  const selectClass = inputClass
+  const cardClass =
+    'rounded-2xl border bg-background/85 p-5 shadow-sm backdrop-blur-md space-y-4'
+  const sectionTitleClass = 'font-serif text-lg font-semibold text-foreground'
 
   const isPullingEmbedding = embeddingPull !== null && !embeddingPull.error
 
   return (
-    <div data-testid="settings-page" className="flex-1 overflow-y-auto p-6">
-      <div className="mx-auto max-w-lg">
+    <div data-testid="settings-page" className="flex-1 overflow-y-auto bg-transparent px-6 py-4">
+      <div className="mx-auto max-w-2xl">
         <div className="mb-6 flex items-center gap-3">
           <button
             data-testid="settings-back-button"
             onClick={onBack}
-            className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            className="rounded-xl border bg-background/70 px-2.5 py-1 text-sm text-muted-foreground backdrop-blur-sm hover:bg-accent hover:text-accent-foreground"
           >
             &larr; Back
           </button>
           <h1 className="font-serif text-2xl font-semibold text-foreground">Settings</h1>
         </div>
 
-        <div className="space-y-5">
-          <div className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-3">
-          <h3 className="text-sm font-medium text-foreground">Model</h3>
-          {/* LLM Provider */}
-          <div>
-            <label className={labelClass}>LLM Provider</label>
-            <select
-              data-testid="llm-provider-select"
-              value={config.llm_provider}
-              onChange={(e) =>
-                setConfig({ ...config, llm_provider: e.target.value as AppConfig['llm_provider'] })
-              }
-              className={selectClass}
-            >
-              <option value="ollama">Ollama</option>
-              <option value="openai-compatible">OpenAI Compatible</option>
-              <option value="anthropic">Anthropic Claude</option>
-            </select>
-          </div>
-
-          {/* Model Name */}
-          <div>
-            <label className={labelClass}>Model Name</label>
-            <input
-              data-testid="model-name-input"
-              type="text"
-              value={config.model_name}
-              onChange={(e) => setConfig({ ...config, model_name: e.target.value })}
-              className={inputClass}
-            />
-          </div>
-
-          {/* Base URL */}
-          <div>
-            <label className={labelClass}>Base URL</label>
-            <input
-              data-testid="base-url-input"
-              type="text"
-              value={config.base_url}
-              onChange={(e) => setConfig({ ...config, base_url: e.target.value })}
-              className={inputClass}
-            />
-          </div>
-
-          {/* API Key (conditional) */}
-          {(config.llm_provider === 'openai-compatible' || config.llm_provider === 'anthropic') && (
+        <div className="space-y-4">
+          {/* Model: which LLM to talk to. */}
+          <div className={cardClass}>
+            <h3 className={sectionTitleClass}>Model</h3>
             <div>
-              <label className={labelClass}>API Key</label>
-              <input
-                data-testid="api-key-input"
-                type="password"
-                value={config.api_key ?? ''}
+              <label className={labelClass}>LLM Provider</label>
+              <select
+                data-testid="llm-provider-select"
+                value={config.llm_provider}
                 onChange={(e) =>
-                  setConfig({ ...config, api_key: e.target.value || null })
+                  setConfig({ ...config, llm_provider: e.target.value as AppConfig['llm_provider'] })
                 }
+                className={selectClass}
+              >
+                <option value="ollama">Ollama</option>
+                <option value="openai-compatible">OpenAI Compatible</option>
+                <option value="anthropic">Anthropic Claude</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Model Name</label>
+              <input
+                data-testid="model-name-input"
+                type="text"
+                value={config.model_name}
+                onChange={(e) => setConfig({ ...config, model_name: e.target.value })}
                 className={inputClass}
-                placeholder="sk-..."
               />
             </div>
-          )}
 
-          {/* Embedding Language */}
-          <div>
-            <label className={labelClass}>Embedding Language</label>
-            <select
-              data-testid="embedding-language-select"
-              value={config.embedding_language}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  embedding_language: e.target.value as AppConfig['embedding_language'],
-                })
-              }
-              className={selectClass}
-            >
-              <option value="english">English</option>
-              <option value="chinese">Chinese</option>
-              <option value="mixed">Mixed</option>
-            </select>
-          </div>
-
-          {/* Embedding Model Info (served by local Ollama) */}
-          {embeddingModel && (
-            <div
-              data-testid="embedding-model-section"
-              className="rounded-md border bg-muted/40 p-3 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {embeddingModel.name} <span className="text-xs">(via Ollama)</span>
-                </span>
-                {embeddingModel.installed ? (
-                  <span
-                    data-testid="embedding-ready-indicator"
-                    className="text-xs font-medium text-green-600"
-                  >
-                    ✓ Ready
-                  </span>
-                ) : (
-                  <button
-                    data-testid="download-embedding-button"
-                    onClick={handleDownloadEmbedding}
-                    disabled={isPullingEmbedding}
-                    className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPullingEmbedding ? 'Downloading...' : 'Download'}
-                  </button>
-                )}
-              </div>
-              {ollama && !ollama.running && (
-                <p className="text-xs text-red-600">Ollama is not running — embeddings unavailable.</p>
-              )}
-              {embeddingPull && (
-                <div data-testid="embedding-progress-bar" className="w-full">
-                  <div className="h-1.5 w-full rounded-full bg-muted">
-                    <div
-                      className="h-1.5 rounded-full bg-primary transition-all"
-                      style={{ width: `${embeddingPull.percent}%` }}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {embeddingPull.error ?? `${embeddingPull.percent}% — ${embeddingPull.status}`}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          </div>
-
-          {/* RAG Settings */}
-          <div className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-3">
-            <h3 className="text-sm font-medium text-foreground">RAG Settings</h3>
-
-            {/* Pre-retrieval Strategy */}
             <div>
-              <label className={labelClass}>Pre-retrieval Strategy</label>
+              <label className={labelClass}>Base URL</label>
+              <input
+                data-testid="base-url-input"
+                type="text"
+                value={config.base_url}
+                onChange={(e) => setConfig({ ...config, base_url: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+
+            {(config.llm_provider === 'openai-compatible' || config.llm_provider === 'anthropic') && (
+              <div>
+                <label className={labelClass}>API Key</label>
+                <input
+                  data-testid="api-key-input"
+                  type="password"
+                  value={config.api_key ?? ''}
+                  onChange={(e) => setConfig({ ...config, api_key: e.target.value || null })}
+                  className={inputClass}
+                  placeholder="sk-..."
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Retrieval: language drives the embedding model; the ranking model is a
+              one-time download that enables itself. Everything else routes in code. */}
+          <div className={cardClass}>
+            <h3 className={sectionTitleClass}>Retrieval</h3>
+            <div>
+              <label className={labelClass}>Embedding Language</label>
               <select
-                data-testid="pre-retrieval-strategy-select"
-                value={config.pre_retrieval_strategy}
+                data-testid="embedding-language-select"
+                value={config.embedding_language}
                 onChange={(e) =>
                   setConfig({
                     ...config,
-                    pre_retrieval_strategy: e.target.value as AppConfig['pre_retrieval_strategy'],
+                    embedding_language: e.target.value as AppConfig['embedding_language'],
                   })
                 }
                 className={selectClass}
               >
-                <option value="none">None — direct retrieval, no preprocessing</option>
-                <option value="hyde">HyDE — generates hypothetical doc for better matching</option>
-                <option value="multi_query">Multi-Query — expands into multiple search variants</option>
-                <option value="auto">Auto — rule-based strategy selection (fast, no LLM call)</option>
-                <option value="auto_llm">Auto (LLM) — LLM picks the best strategy (slower, more accurate)</option>
+                <option value="english">English</option>
+                <option value="chinese">Chinese</option>
+                <option value="mixed">Mixed</option>
               </select>
             </div>
 
-            {/* Agent Mode Toggle (Phase G: /chat tool-use loop) */}
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-sm font-medium text-foreground">Agent Mode</label>
-                <p className="text-xs text-muted-foreground">
-                  Let the AI search and read notes on its own for multi-hop questions
-                </p>
-              </div>
-              <button
-                data-testid="chat-mode-toggle"
-                onClick={() =>
-                  setConfig({
-                    ...config,
-                    chat_mode: config.chat_mode === 'agentic' ? 'single' : 'agentic',
-                  })
-                }
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  config.chat_mode === 'agentic' ? 'bg-primary' : 'bg-muted'
-                }`}
-                role="switch"
-                aria-checked={config.chat_mode === 'agentic'}
+            {embeddingModel && (
+              <div
+                data-testid="embedding-model-section"
+                className="rounded-xl border bg-muted/40 p-3 space-y-2"
               >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.chat_mode === 'agentic' ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {embeddingModel.name} <span className="text-xs">(via Ollama)</span>
+                  </span>
+                  {embeddingModel.installed ? (
+                    <span
+                      data-testid="embedding-ready-indicator"
+                      className="text-xs font-medium text-green-600"
+                    >
+                      ✓ Ready
+                    </span>
+                  ) : (
+                    <button
+                      data-testid="download-embedding-button"
+                      onClick={handleDownloadEmbedding}
+                      disabled={isPullingEmbedding}
+                      className="rounded-xl bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {isPullingEmbedding ? 'Downloading...' : 'Download'}
+                    </button>
+                  )}
+                </div>
+                {ollama && !ollama.running && (
+                  <p className="text-xs text-red-600">Ollama is not running — embeddings unavailable.</p>
+                )}
+                {embeddingPull && (
+                  <div data-testid="embedding-progress-bar" className="w-full">
+                    <div className="h-1.5 w-full rounded-full bg-muted">
+                      <div
+                        className="h-1.5 rounded-full bg-primary transition-all"
+                        style={{ width: `${embeddingPull.percent}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {embeddingPull.error ?? `${embeddingPull.percent}% — ${embeddingPull.status}`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* Agent write permissions (Phase H) */}
+            {rerankerStatus?.available === false && (
+              <p data-testid="reranker-unavailable-note" className="text-xs text-muted-foreground">
+                Better ranking is not available in this build yet. Hybrid retrieval
+                (vector + keyword) already covers most of the gap.
+              </p>
+            )}
+            {rerankerStatus && rerankerStatus.available !== false && (
+              <div
+                data-testid="reranker-model-section"
+                className="rounded-xl border bg-muted/40 p-3 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-foreground">Better ranking</p>
+                    <p className="text-xs text-muted-foreground">
+                      {rerankerStatus.model} — {rerankerStatus.size_mb} MB, runs locally.
+                      Enabled automatically once downloaded.
+                    </p>
+                  </div>
+                  {rerankerStatus.downloaded ? (
+                    <span
+                      data-testid="reranker-ready-indicator"
+                      className="text-xs font-medium text-green-600"
+                    >
+                      ✓ Ready · enabled
+                    </span>
+                  ) : (
+                    <button
+                      data-testid="download-reranker-button"
+                      onClick={handleRerankerDownload}
+                      disabled={rerankerDownloading}
+                      className="rounded-xl bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {rerankerDownloading ? 'Downloading...' : 'Download'}
+                    </button>
+                  )}
+                </div>
+                {rerankerDownloading && (
+                  <div data-testid="reranker-progress-bar" className="w-full">
+                    <div className="h-1.5 w-full rounded-full bg-muted">
+                      <div
+                        className="h-1.5 rounded-full bg-primary transition-all"
+                        style={{ width: `${Math.round((rerankerDownloadStatus?.progress ?? 0) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Assistant: security boundary + personalization. */}
+          <div className={cardClass}>
+            <h3 className={sectionTitleClass}>Assistant</h3>
             <div>
               <label className={labelClass}>Agent Write Permissions</label>
               <select
@@ -519,101 +544,12 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
               </select>
             </div>
 
-            {/* Reranker Toggle */}
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-foreground">Use Reranker</label>
-              <button
-                data-testid="reranker-toggle"
-                onClick={() => setConfig({ ...config, use_reranker: !config.use_reranker })}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  config.use_reranker ? 'bg-primary' : 'bg-muted'
-                }`}
-                role="switch"
-                aria-checked={config.use_reranker}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.use_reranker ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Reranker Model Download */}
-            {config.use_reranker && rerankerStatus?.available === false && (
-              <p data-testid="reranker-unavailable-note" className="text-xs text-muted-foreground">
-                Reranking is not available in this build yet (planned: Phase E). Hybrid retrieval
-                (vector + keyword) already covers most of the gap.
-              </p>
-            )}
-            {config.use_reranker && rerankerStatus && rerankerStatus.available !== false && (
-              <div
-                data-testid="reranker-model-section"
-                className="rounded-md border bg-muted/40 p-3 space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    {rerankerStatus.model} — {rerankerStatus.size_mb} MB
-                  </span>
-                  {rerankerStatus.downloaded ? (
-                    <span
-                      data-testid="reranker-ready-indicator"
-                      className="text-xs font-medium text-green-600"
-                    >
-                      ✓ Ready
-                    </span>
-                  ) : (
-                    <button
-                      data-testid="download-reranker-button"
-                      onClick={handleRerankerDownload}
-                      disabled={rerankerDownloading}
-                      className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      {rerankerDownloading ? 'Downloading...' : 'Download'}
-                    </button>
-                  )}
-                </div>
-                {rerankerDownloading && (
-                  <div data-testid="reranker-progress-bar" className="w-full">
-                    <div className="h-1.5 w-full rounded-full bg-muted">
-                      <div
-                        className="h-1.5 rounded-full bg-primary transition-all"
-                        style={{ width: `${Math.round((rerankerDownloadStatus?.progress ?? 0) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Chat Memory Turns */}
-            <div>
-              <label className={labelClass}>Chat Memory Turns</label>
-              <input
-                data-testid="chat-memory-turns-input"
-                type="number"
-                min={0}
-                max={50}
-                value={config.chat_memory_turns}
-                onChange={(e) =>
-                  setConfig({ ...config, chat_memory_turns: Math.max(0, parseInt(e.target.value) || 0) })
-                }
-                className={inputClass}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Number of recent messages to include for context (0 = disabled)
-              </p>
-            </div>
-
-            {/* Custom Instructions */}
             <div>
               <label className={labelClass}>Custom Instructions</label>
               <textarea
                 data-testid="custom-system-prompt-input"
                 value={config.custom_system_prompt}
-                onChange={(e) =>
-                  setConfig({ ...config, custom_system_prompt: e.target.value })
-                }
+                onChange={(e) => setConfig({ ...config, custom_system_prompt: e.target.value })}
                 placeholder="Add custom instructions for the AI assistant (e.g., response style, domain expertise, language preferences)..."
                 rows={4}
                 className={inputClass + ' resize-y'}
@@ -624,19 +560,15 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
             </div>
           </div>
 
-          {/* Embedding warning */}
           {showEmbeddingWarning && (
-            <p
-              data-testid="embedding-warning"
-              className="text-sm text-amber-600"
-            >
+            <p data-testid="embedding-warning" className="text-sm text-amber-600">
               Warning: The selected embedding model is not downloaded. Ingestion may fail.
             </p>
           )}
 
           {/* Memory (Phase M3): what the assistant has learned about you */}
-          <div data-testid="memory-section" className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-2">
-            <h3 className="text-sm font-medium text-foreground">Memory</h3>
+          <div data-testid="memory-section" className={cardClass}>
+            <h3 className={sectionTitleClass}>Memory</h3>
             <p className="text-xs text-muted-foreground">
               Facts and standing instructions the assistant has learned from your conversations.
             </p>
@@ -691,14 +623,14 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
           </div>
 
           {/* Data Management */}
-          <div data-testid="data-management-section" className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm space-y-2">
-            <h3 className="text-sm font-medium text-foreground">Data Management</h3>
+          <div data-testid="data-management-section" className={cardClass}>
+            <h3 className={sectionTitleClass}>Data</h3>
             <div className="flex gap-2">
               <button
                 data-testid="export-all-button"
                 onClick={handleExportAll}
                 disabled={exporting}
-                className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                className="rounded-xl border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
               >
                 {exporting ? 'Exporting...' : 'Export All'}
               </button>
@@ -706,7 +638,7 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
                 data-testid="export-chat-button"
                 onClick={handleExportChat}
                 disabled={exporting}
-                className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                className="rounded-xl border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
               >
                 Export Chat
               </button>
@@ -719,11 +651,11 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-1">
             <button
               data-testid="save-button"
               onClick={handleSave}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               Save
             </button>
@@ -731,20 +663,16 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
               data-testid="test-connection-button"
               onClick={handleTestConnection}
               disabled={testing}
-              className="rounded-md border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+              className="rounded-xl border bg-background/70 px-4 py-2 text-sm font-medium text-foreground backdrop-blur-sm hover:bg-accent disabled:opacity-50"
             >
               {testing ? 'Testing...' : 'Test Connection'}
             </button>
           </div>
 
           {/* Feedback */}
-          {saveMessage && (
-            <p className="text-sm text-green-600">{saveMessage}</p>
-          )}
+          {saveMessage && <p className="text-sm text-green-600">{saveMessage}</p>}
           {testResult && (
-            <p
-              className={`text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}
-            >
+            <p className={`text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
               {testResult.success ? testResult.message : testResult.error}
             </p>
           )}

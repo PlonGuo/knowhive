@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar'
-import ChatArea from './ChatArea'
+import ChatArea, { type ExchangeUsage } from './ChatArea'
 import SettingsPage from '../settings/SettingsPage'
 import MarkdownEditor from '../knowledge/MarkdownEditor'
 import CommunityBrowser from '../community/CommunityBrowser'
@@ -16,6 +16,18 @@ export default function AppLayout({ backendUrl }: AppLayoutProps) {
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessionsVersion, setSessionsVersion] = useState(0)
+
+  // Session usage meter: cumulative spend + last prompt size, reset per session.
+  const [usage, setUsage] = useState<{ sessionTokens: number; lastInputTokens: number | null } | null>(null)
+  useEffect(() => {
+    setUsage(null)
+  }, [activeSessionId])
+  const handleUsage = (u: ExchangeUsage) => {
+    setUsage((prev) => ({
+      sessionTokens: (prev?.sessionTokens ?? 0) + (u.totalTokens ?? 0),
+      lastInputTokens: u.inputTokens,
+    }))
+  }
 
   // Lazily create the conversation on first send — "+ New" just clears the active id.
   const ensureSession = async (): Promise<string> => {
@@ -63,12 +75,14 @@ export default function AppLayout({ backendUrl }: AppLayoutProps) {
             setView('chat')
           }}
           sessionsVersion={sessionsVersion}
+          usage={usage}
         />
-        {/* Chat floats fully transparent over the dot grid; other views keep a card
-            for readability until their own redesign pass. */}
+        {/* Chat and settings float fully transparent over the dot grid (settings
+            brings its own frosted cards); other views keep a wrapper card for
+            readability until their own redesign pass. */}
         <div
           className={
-            view === 'chat'
+            view === 'chat' || view === 'settings'
               ? 'flex flex-1 overflow-hidden'
               : 'flex flex-1 overflow-hidden rounded-xl border bg-background/75 shadow-sm backdrop-blur-md'
           }
@@ -93,6 +107,7 @@ export default function AppLayout({ backendUrl }: AppLayoutProps) {
             sessionId={activeSessionId}
             ensureSession={ensureSession}
             onExchangeComplete={() => setSessionsVersion((v) => v + 1)}
+            onUsage={handleUsage}
           />
         )}
         </div>
