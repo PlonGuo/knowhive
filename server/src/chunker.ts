@@ -11,7 +11,30 @@
 //
 // The sub-splitter is a hand-rolled recursive character splitter (equivalent in spirit to
 // LangChain's RecursiveCharacterTextSplitter) — no LangChain dependency.
-import { sectionText, toSections, type DocumentIR, type Section } from "./documentIr.ts";
+import {
+  blocksToText,
+  blockToText,
+  profileDocument,
+  sectionText,
+  toSections,
+  type Block,
+  type BlockType,
+  type DocumentIR,
+  type DocumentProfile,
+  type Section,
+} from "./documentIr.ts";
+
+/**
+ * How a document gets chunked, chosen from its DocumentProfile. Most strategies map onto
+ * the same section pipeline — the label exists so the decision is explicit, stored per
+ * document, and RAGAS runs can compare retrieval quality per strategy bucket.
+ */
+export type ChunkStrategy =
+  | "empty"
+  | "whole-doc"
+  | "sliding-window"
+  | "section-as-chunk"
+  | "parent-child";
 
 export interface Chunk {
   content: string;
@@ -31,6 +54,8 @@ export interface ChunkedDocument {
   parents: ParentChunk[];
   /** The embedded, indexed units. */
   children: Chunk[];
+  /** Which route this document took — stored on the documents row for per-strategy evals. */
+  strategy: ChunkStrategy;
 }
 
 const MIN_SECTION_LENGTH = 100;
@@ -53,40 +78,66 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/**
+ * Pick the chunking strategy for a document. Ordered short-circuit: size beats structure
+ * (a tiny doc is one chunk no matter its headings). Thresholds reuse CHILD_SIZE — the
+ * knob RAGAS sweeps already vary — rather than introducing new numbers to guess at.
+ */
+export function chooseStrategy(profile: DocumentProfile): ChunkStrategy {
+  if (profile.chars === 0) return "empty";
+  if (profile.chars <= CHILD_SIZE) return "whole-doc";
+  if (profile.headingless) return "sliding-window";
+  if (profile.medianSectionLength <= CHILD_SIZE) return "section-as-chunk";
+  return "parent-child";
+}
+
 export function chunkDocument(ir: DocumentIR): ChunkedDocument {
+  const strategy = chooseStrategy(profileDocument(ir));
+  if (strategy === "empty") return { parents: [], children: [], strategy };
+
+  // Whole-doc: the document is at most one child's worth of text, so slicing it up only
+  // costs context. Headings stay inline — for a doc this small they ARE the content.
+  if (strategy === "whole-doc") {
+    const content = blocksToText(ir.blocks);
+    const heading = ir.blocks.find((b) => b.type === "heading")?.text ?? "";
+    return {
+      parents: [{ content, section_heading: heading, parent_index: 0 }],
+      children: [{ content, section_heading: heading, chunk_index: 0, parent_index: 0 }],
+      strategy,
+    };
+  }
+
+  // sliding-window / section-as-chunk / parent-child all run the same section pipeline:
+  // a headingless doc is one "" section (so windows ARE the sliding window), and
+  // chunk-sized sections come out as parent == child. The label records which shape
+  // this document actually had.
+  //
+  // Both levels pack whole BLOCKS, not raw text: a cut only ever lands inside a block
+  // when that single block exceeds the budget by itself — and then it's split on the
+  // block's own terms (code on line boundaries, tables on rows with the header repeated).
   const sections = mergeShortSections(toSections(ir));
 
   const parents: ParentChunk[] = [];
   const children: Chunk[] = [];
+  // Tying this to CHILD_SIZE rather than MAX_SECTION_LENGTH keeps children actually
+  // bounded by CHILD_SIZE — otherwise a 1400-char section became one 1400-char "child".
+  const childBudget = Math.min(CHILD_SIZE, MAX_SECTION_LENGTH);
 
   for (const section of sections) {
-    const body = sectionText(section).trim();
-    if (!body) continue;
+    const pieces = toPieces(section.blocks);
 
     // A long section becomes several parents; children are cut inside each one.
-    const windows =
-      body.length > PARENT_MAX_LENGTH
-        ? recursiveSplit(body, PARENT_MAX_LENGTH, 0)
-        : [body];
-
-    for (const window of windows) {
+    for (const group of packPieces(pieces, PARENT_MAX_LENGTH)) {
       const parentIndex = parents.length;
       parents.push({
-        content: window,
+        content: joinPieces(group),
         section_heading: section.heading,
         parent_index: parentIndex,
       });
 
-      // Split whenever the window exceeds the child budget. Tying this to CHILD_SIZE
-      // rather than MAX_SECTION_LENGTH keeps children actually bounded by CHILD_SIZE —
-      // otherwise a 1400-char section became one 1400-char "child".
-      const splitAbove = Math.min(CHILD_SIZE, MAX_SECTION_LENGTH);
-      const pieces =
-        window.length > splitAbove ? recursiveSplit(window, CHILD_SIZE, CHILD_OVERLAP) : [window];
-
-      for (const piece of pieces) {
+      for (const content of childContents(group, childBudget)) {
         children.push({
-          content: piece,
+          content,
           section_heading: section.heading,
           chunk_index: children.length,
           parent_index: parentIndex,
@@ -95,7 +146,125 @@ export function chunkDocument(ir: DocumentIR): ChunkedDocument {
     }
   }
 
-  return { parents, children };
+  return { parents, children, strategy };
+}
+
+/** How blocks are joined inside a chunk — must match blocksToText's separator. */
+const PIECE_SEP = "\n\n";
+
+interface Piece {
+  text: string;
+  type: BlockType;
+}
+
+/** Render blocks to pieces sized for parent packing; only an oversized block is split. */
+function toPieces(blocks: readonly Block[]): Piece[] {
+  const pieces: Piece[] = [];
+  for (const block of blocks) {
+    const text = blockToText(block).trim();
+    if (!text) continue;
+    if (text.length > PARENT_MAX_LENGTH) {
+      for (const frag of splitBlockText(text, block.type, PARENT_MAX_LENGTH, 0)) {
+        pieces.push({ text: frag, type: block.type });
+      }
+    } else {
+      pieces.push({ text, type: block.type });
+    }
+  }
+  return pieces;
+}
+
+function joinPieces(pieces: readonly Piece[]): string {
+  return pieces.map((p) => p.text).join(PIECE_SEP);
+}
+
+/** Greedy-pack pieces into groups whose joined text stays ≤ budget. */
+function packPieces(pieces: readonly Piece[], budget: number): Piece[][] {
+  const groups: Piece[][] = [];
+  let current: Piece[] = [];
+  let length = 0;
+  for (const piece of pieces) {
+    const addLen = piece.text.length + (current.length > 0 ? PIECE_SEP.length : 0);
+    if (length + addLen > budget && current.length > 0) {
+      groups.push(current);
+      current = [];
+      length = 0;
+    }
+    current.push(piece);
+    length += piece.text.length + (current.length > 1 ? PIECE_SEP.length : 0);
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
+}
+
+/**
+ * Cut one parent's pieces into child contents. Pieces pack greedily; an oversized piece
+ * is split on its own and each fragment stands alone, so a code or table fragment never
+ * gets glued to a neighbouring block.
+ */
+function childContents(group: readonly Piece[], budget: number): string[] {
+  const out: string[] = [];
+  let buffer: Piece[] = [];
+  let length = 0;
+  const flush = () => {
+    if (buffer.length > 0) out.push(joinPieces(buffer));
+    buffer = [];
+    length = 0;
+  };
+
+  for (const piece of group) {
+    if (piece.text.length > budget) {
+      flush();
+      out.push(...splitBlockText(piece.text, piece.type, CHILD_SIZE, CHILD_OVERLAP));
+      continue;
+    }
+    const addLen = piece.text.length + (buffer.length > 0 ? PIECE_SEP.length : 0);
+    if (length + addLen > budget) flush();
+    buffer.push(piece);
+    length += piece.text.length + (buffer.length > 1 ? PIECE_SEP.length : 0);
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Split a single block's text within `budget`, on the block's own terms: code breaks on
+ * line boundaries (no overlap — duplicated code lines mislead retrieval), tables break
+ * on rows with the header repeated, prose falls back to the recursive splitter.
+ */
+function splitBlockText(text: string, type: BlockType, budget: number, overlap: number): string[] {
+  if (type === "code") return recursiveSplit(text, budget, 0, ["\n", " ", ""]);
+  if (type === "table") return splitTable(text, budget);
+  return recursiveSplit(text, budget, overlap);
+}
+
+/**
+ * Split a row-per-line table, repeating the header (and its separator row) at the top of
+ * every fragment so no fragment loses its column meaning. The repeated header means a
+ * table child is not a verbatim substring of its parent — a deliberate exception to the
+ * containment invariant.
+ */
+function splitTable(text: string, budget: number): string[] {
+  const lines = text.split("\n");
+  const headerLines = [lines[0]!];
+  if (lines[1] !== undefined && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[1])) headerLines.push(lines[1]);
+  const header = headerLines.join("\n");
+  const rows = lines.slice(headerLines.length);
+
+  const out: string[] = [];
+  let current: string[] = [];
+  let length = header.length;
+  for (const row of rows) {
+    if (length + row.length + 1 > budget && current.length > 0) {
+      out.push([header, ...current].join("\n"));
+      current = [];
+      length = header.length;
+    }
+    current.push(row);
+    length += row.length + 1;
+  }
+  if (current.length > 0) out.push([header, ...current].join("\n"));
+  return out;
 }
 
 /**

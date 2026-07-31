@@ -17,14 +17,16 @@ const fakeEmbed = (texts: string[]): Promise<number[][]> =>
     }),
   );
 
-// Each section is >100 chars so the short-section merge doesn't collapse them.
+// Each section is >100 chars so the short-section merge doesn't collapse them, and the
+// document totals >1000 chars so routing keeps sections separate instead of whole-doc.
+const section = (s: string) => Array(3).fill(s).join(" ");
 const DOC = [
   "# Cats",
-  "Cats are small domesticated carnivorous mammals that are often kept as pets by humans in households all around the world today.",
+  section("Cats are small domesticated carnivorous mammals that are often kept as pets by humans in households all around the world today."),
   "# Dogs",
-  "Dogs are loyal domesticated animals that are commonly kept as companions and working partners by people across many cultures.",
+  section("Dogs are loyal domesticated animals that are commonly kept as companions and working partners by people across many cultures."),
   "# Transformers",
-  "Transformers use self attention mechanisms to process token sequences in modern deep learning architectures for language tasks.",
+  section("Transformers use self attention mechanisms to process token sequences in modern deep learning architectures for language tasks."),
 ].join("\n");
 
 test("ingestText stores one chunk per section and reports the count", async () => {
@@ -77,6 +79,23 @@ test("ingestDirectory on a missing directory returns empty results", async () =>
   const db = openDbAt(":memory:");
   const results = await ingestDirectory(db, "/nonexistent/knowledge", fakeEmbed);
   expect(results).toEqual([]);
+  db.close();
+});
+
+test("ingestText records the chunk strategy on the documents row", async () => {
+  const db = openDbAt(":memory:");
+  await ingestText(db, "animals.md", DOC, fakeEmbed);
+  const row = db
+    .query("SELECT chunk_strategy FROM documents WHERE file_path = 'animals.md'")
+    .get() as { chunk_strategy: string };
+  expect(row.chunk_strategy).toBe("section-as-chunk");
+
+  await ingestText(db, "empty.md", "", fakeEmbed);
+  const empty = db
+    .query("SELECT chunk_strategy, status FROM documents WHERE file_path = 'empty.md'")
+    .get() as { chunk_strategy: string; status: string };
+  expect(empty.chunk_strategy).toBe("empty");
+  expect(empty.status).toBe("empty");
   db.close();
 });
 

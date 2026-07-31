@@ -194,6 +194,8 @@ function migrate(db: Database): void {
   // Parent-child chunking: pre-existing chunks keep parent_id NULL and simply don't
   // expand at retrieval time, so an un-migrated DB degrades to the old behaviour.
   addColumnIfMissing("chunks", "parent_id", "parent_id INTEGER");
+  // Chunk-strategy routing: documents ingested before the router keep NULL until re-ingest.
+  addColumnIfMissing("documents", "chunk_strategy", "chunk_strategy TEXT");
 }
 
 export function openDb(dataDir: string): Database {

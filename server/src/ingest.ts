@@ -33,7 +33,7 @@ export async function ingestText(
 
   if (doc.children.length === 0) {
     deleteChunksForFile(db, filePath);
-    upsertDocument(db, filePath, data.title, 0, "empty", fileHash, fileSize);
+    upsertDocument(db, filePath, data.title, 0, "empty", fileHash, fileSize, doc.strategy);
     return { filePath, chunkCount: 0 };
   }
 
@@ -41,7 +41,7 @@ export async function ingestText(
   const embeddings = await embed(doc.children.map((c) => c.content));
   deleteChunksForFile(db, filePath);
   storeChunks(db, filePath, doc, embeddings, data);
-  upsertDocument(db, filePath, data.title, doc.children.length, "indexed", fileHash, fileSize);
+  upsertDocument(db, filePath, data.title, doc.children.length, "indexed", fileHash, fileSize, doc.strategy);
 
   return { filePath, chunkCount: doc.children.length };
 }
@@ -77,18 +77,20 @@ function upsertDocument(
   status: string,
   fileHash: string,
   fileSize: number,
+  chunkStrategy: string,
 ): void {
   db.run(
-    `INSERT INTO documents (file_path, file_name, file_hash, file_size, modified_at, indexed_at, chunk_count, status, title)
-       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?, ?)
+    `INSERT INTO documents (file_path, file_name, file_hash, file_size, modified_at, indexed_at, chunk_count, status, title, chunk_strategy)
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?, ?, ?)
      ON CONFLICT(file_path) DO UPDATE SET
-       file_hash   = excluded.file_hash,
-       file_size   = excluded.file_size,
-       indexed_at  = datetime('now'),
-       chunk_count = excluded.chunk_count,
-       status      = excluded.status,
-       title       = excluded.title,
-       updated_at  = datetime('now')`,
-    [filePath, basename(filePath), fileHash, fileSize, chunkCount, status, title],
+       file_hash      = excluded.file_hash,
+       file_size      = excluded.file_size,
+       indexed_at     = datetime('now'),
+       chunk_count    = excluded.chunk_count,
+       status         = excluded.status,
+       title          = excluded.title,
+       chunk_strategy = excluded.chunk_strategy,
+       updated_at     = datetime('now')`,
+    [filePath, basename(filePath), fileHash, fileSize, chunkCount, status, title, chunkStrategy],
   );
 }
