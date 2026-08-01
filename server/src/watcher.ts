@@ -21,8 +21,10 @@ export interface WatcherStatus {
 }
 
 const DEFAULT_DEBOUNCE_MS = 1000;
-// Python watched {.md, .pdf}; the TS ingest pipeline has no PDF support yet.
-const DEFAULT_EXTENSIONS = [".md"];
+// Local formats parse in-process. PDF stays out of the watcher on purpose:
+// a dropped-in PDF triggering a surprise docling model load belongs to an
+// explicit import/resync, not a background file event.
+const DEFAULT_EXTENSIONS = [".md", ".txt", ".docx"];
 
 export class FileWatcher {
   private readonly knowledgeDir: string;

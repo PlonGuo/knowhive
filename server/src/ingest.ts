@@ -7,6 +7,8 @@ import { basename, join } from "node:path";
 import { parseFrontmatter, type FrontmatterData } from "./frontmatter.ts";
 import { chunkDocument } from "./chunker.ts";
 import { parseMarkdown } from "./markdownIr.ts";
+import { parseTxt } from "./txtIr.ts";
+import { parseDocx } from "./docxIr.ts";
 import type { DocumentIR } from "./documentIr.ts";
 import { deleteChunksForFile, storeChunks } from "./store.ts";
 
@@ -77,23 +79,48 @@ async function ingestParsed(
   return { filePath, chunkCount: doc.children.length };
 }
 
-/** Recursively list .md files under `directory` (absolute paths, sorted). */
+/** Recursively list locally-parseable files under `directory` (absolute paths, sorted). */
 export async function findMarkdownFiles(directory: string): Promise<string[]> {
   return findIngestableFiles(directory, { includePdf: false });
 }
 
 /**
- * List ingestable files: markdown always, PDFs only when the knowhive-pdf
- * plugin is available (a PDF without the plugin would just fail per-file).
+ * List ingestable files: local formats (md/txt/docx — parsed in-process) always,
+ * PDFs only when the knowhive-pdf plugin is available (a PDF without the plugin
+ * would just fail per-file).
  */
 export async function findIngestableFiles(
   directory: string,
   opts: { includePdf: boolean },
 ): Promise<string[]> {
   if (!existsSync(directory)) return [];
-  const glob = new Bun.Glob(opts.includePdf ? "**/*.{md,pdf}" : "**/*.md");
+  const glob = new Bun.Glob(opts.includePdf ? "**/*.{md,txt,docx,pdf}" : "**/*.{md,txt,docx}");
   const relPaths = (await Array.fromAsync(glob.scan({ cwd: directory }))).sort();
   return relPaths.map((rel) => join(directory, rel));
+}
+
+/**
+ * Ingest any locally-parseable file by extension: md keeps its frontmatter
+ * path, txt/docx go through their producers into ingestIR. PDF is NOT handled
+ * here — it needs the external plugin (see index.ts's ingestOne).
+ */
+export async function ingestLocalFile(
+  db: Database,
+  absPath: string,
+  embed: Embedder,
+): Promise<IngestResult> {
+  const lower = absPath.toLowerCase();
+  if (lower.endsWith(".txt")) {
+    const raw = readFileSync(absPath, "utf8");
+    const fileHash = new Bun.CryptoHasher("sha256").update(raw).digest("hex");
+    return ingestIR(db, absPath, parseTxt(raw), fileHash, Buffer.byteLength(raw), embed);
+  }
+  if (lower.endsWith(".docx")) {
+    const bytes = readFileSync(absPath);
+    const fileHash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+    return ingestIR(db, absPath, await parseDocx(bytes), fileHash, bytes.byteLength, embed);
+  }
+  return ingestText(db, absPath, readFileSync(absPath, "utf8"), embed);
 }
 
 /**
@@ -113,8 +140,9 @@ export function markDocumentError(db: Database, filePath: string, message: strin
   );
 }
 
-/** Recursively ingest all .md files under `directory` (used by re-embed and resync).
- * Mirrors ingest_service.ingest_directory. */
+/** Recursively ingest all locally-parseable files under `directory` (used by
+ * re-embed and resync). PDF re-embedding requires the plugin and goes through
+ * index.ts's ingestOne instead. */
 export async function ingestDirectory(
   db: Database,
   directory: string,
@@ -122,7 +150,7 @@ export async function ingestDirectory(
 ): Promise<IngestResult[]> {
   const results: IngestResult[] = [];
   for (const path of await findMarkdownFiles(directory)) {
-    results.push(await ingestText(db, path, readFileSync(path, "utf8"), embed));
+    results.push(await ingestLocalFile(db, path, embed));
   }
   return results;
 }

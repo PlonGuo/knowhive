@@ -95,7 +95,7 @@ test("POST /ingest/resync re-ingests all .md files under the knowledge dir", asy
   writeFileSync(join(knowledgeDir, "a.md"), "# a");
   mkdirSync(join(knowledgeDir, "sub"));
   writeFileSync(join(knowledgeDir, "sub", "b.md"), "# b");
-  writeFileSync(join(knowledgeDir, "skip.txt"), "no");
+  writeFileSync(join(knowledgeDir, "skip.png"), "no");
 
   const res = await app.request("/ingest/resync", { method: "POST" });
   expect(res.status).toBe(200);

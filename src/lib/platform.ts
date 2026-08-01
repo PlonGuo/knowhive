@@ -27,7 +27,7 @@ export async function selectFiles(): Promise<string[]> {
     const { open } = await import('@tauri-apps/plugin-dialog')
     const result = await open({
       multiple: true,
-      filters: [{ name: 'Documents', extensions: ['md', 'pdf'] }],
+      filters: [{ name: 'Documents', extensions: ['md', 'txt', 'docx', 'pdf'] }],
     })
     if (!result) return []
     return Array.isArray(result) ? result : [result]

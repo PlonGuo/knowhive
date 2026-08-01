@@ -18,6 +18,7 @@ import {
   findIngestableFiles,
   ingestDirectory,
   ingestIR,
+  ingestLocalFile,
   ingestText,
   markDocumentError,
   type Embedder,
@@ -103,12 +104,13 @@ const ingestPdf = async (absPath: string) => {
 };
 
 // Read + index a single file; shared by ingest tasks, watcher sync and startup sync.
+// md/txt/docx parse in-process; PDF goes through the external plugin session.
 const ingestOne = async (absPath: string) => {
   if (absPath.toLowerCase().endsWith(".pdf")) {
     await ingestPdf(absPath);
     return;
   }
-  await ingestText(db, absPath, readFileSync(absPath, "utf8"), embedder);
+  await ingestLocalFile(db, absPath, embedder);
 };
 
 // Chat model for the configured provider, consumed by the AI SDK. Recreated per call

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { openDbAt } from "./db.ts";
-import { findIngestableFiles, ingestDirectory, ingestIR, ingestText, markDocumentError } from "./ingest.ts";
+import { findIngestableFiles, ingestDirectory, ingestIR, ingestLocalFile, ingestText, markDocumentError } from "./ingest.ts";
 import { hybridSearch } from "./store.ts";
 
 // Deterministic fake embedder: a 3-dim topic vector [cat, dog, transformer].
@@ -57,7 +57,7 @@ test("re-ingest of the same file is idempotent (no duplicate chunks)", async () 
   db.close();
 });
 
-test("ingestDirectory recursively ingests .md files and skips other extensions", async () => {
+test("ingestDirectory recursively ingests local formats (md/txt) and skips unknown extensions", async () => {
   const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -65,13 +65,18 @@ test("ingestDirectory recursively ingests .md files and skips other extensions",
   writeFileSync(join(dir, "a.md"), DOC);
   mkdirSync(join(dir, "nested"), { recursive: true });
   writeFileSync(join(dir, "nested", "b.md"), DOC);
-  writeFileSync(join(dir, "ignore.txt"), "not markdown");
+  writeFileSync(join(dir, "notes.txt"), "plain text about cats and their habits");
+  writeFileSync(join(dir, "ignore.png"), "not text");
 
   const db = openDbAt(":memory:");
   const results = await ingestDirectory(db, dir, fakeEmbed);
-  expect(results.map((r) => r.filePath).sort()).toEqual([join(dir, "a.md"), join(dir, "nested", "b.md")]);
+  expect(results.map((r) => r.filePath).sort()).toEqual([
+    join(dir, "a.md"),
+    join(dir, "nested", "b.md"),
+    join(dir, "notes.txt"),
+  ]);
   const row = db.query("SELECT COUNT(*) AS c FROM documents").get() as { c: number };
-  expect(row.c).toBe(2);
+  expect(row.c).toBe(3);
   db.close();
 });
 
@@ -130,19 +135,49 @@ test("ingestIR ingests a plugin-produced DocumentIR (PDF path)", async () => {
   db.close();
 });
 
-test("findIngestableFiles lists md always and pdf only when asked", async () => {
+test("findIngestableFiles lists local formats always and pdf only when asked", async () => {
   const { mkdtempSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const dir = mkdtempSync(join(tmpdir(), "knowhive-findpdf-"));
   writeFileSync(join(dir, "a.md"), "# a");
   writeFileSync(join(dir, "b.pdf"), "%PDF-fake");
-  writeFileSync(join(dir, "c.txt"), "nope");
+  writeFileSync(join(dir, "c.txt"), "plain text");
+  writeFileSync(join(dir, "d.docx"), "fake");
+  writeFileSync(join(dir, "e.png"), "nope");
 
-  const mdOnly = await findIngestableFiles(dir, { includePdf: false });
-  expect(mdOnly.map((p) => p.split("/").pop())).toEqual(["a.md"]);
+  const local = await findIngestableFiles(dir, { includePdf: false });
+  expect(local.map((p) => p.split("/").pop())).toEqual(["a.md", "c.txt", "d.docx"]);
   const withPdf = await findIngestableFiles(dir, { includePdf: true });
-  expect(withPdf.map((p) => p.split("/").pop())).toEqual(["a.md", "b.pdf"]);
+  expect(withPdf.map((p) => p.split("/").pop())).toEqual(["a.md", "b.pdf", "c.txt", "d.docx"]);
+});
+
+test("ingestLocalFile dispatches txt and docx to their producers", async () => {
+  const { mkdtempSync, writeFileSync, copyFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "knowhive-local-"));
+  writeFileSync(
+    join(dir, "novel.txt"),
+    "The cat sat quietly.\n\n" + "Dogs are loyal companions to people everywhere. ".repeat(30),
+  );
+  copyFileSync(join(import.meta.dir, "..", "test-fixtures", "sample.docx"), join(dir, "doc.docx"));
+
+  const db = openDbAt(":memory:");
+  const txtRes = await ingestLocalFile(db, join(dir, "novel.txt"), fakeEmbed);
+  expect(txtRes.chunkCount).toBeGreaterThan(0);
+  const docxRes = await ingestLocalFile(db, join(dir, "doc.docx"), fakeEmbed);
+  expect(docxRes.chunkCount).toBeGreaterThan(0);
+
+  const rows = db
+    .query("SELECT file_name, status, chunk_strategy FROM documents ORDER BY file_name")
+    .all() as { file_name: string; status: string; chunk_strategy: string }[];
+  expect(rows).toHaveLength(2);
+  expect(rows.every((r) => r.status === "indexed")).toBe(true);
+  // txt has no headings → sliding-window (or whole-doc if tiny); docx has real structure.
+  const txtRow = rows.find((r) => r.file_name === "novel.txt")!;
+  expect(["sliding-window", "whole-doc"]).toContain(txtRow.chunk_strategy);
+  db.close();
 });
 
 test("markDocumentError records a failed file on the documents table", () => {
