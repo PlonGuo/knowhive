@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { openDbAt } from "./db.ts";
-import { ingestDirectory, ingestText } from "./ingest.ts";
+import { ingestDirectory, ingestIR, ingestText } from "./ingest.ts";
 import { hybridSearch } from "./store.ts";
 
 // Deterministic fake embedder: a 3-dim topic vector [cat, dog, transformer].
@@ -96,6 +96,37 @@ test("ingestText records the chunk strategy on the documents row", async () => {
     .get() as { chunk_strategy: string; status: string };
   expect(empty.chunk_strategy).toBe("empty");
   expect(empty.status).toBe("empty");
+  db.close();
+});
+
+test("ingestIR ingests a plugin-produced DocumentIR (PDF path)", async () => {
+  const db = openDbAt(":memory:");
+  const ir = {
+    format: "pdf" as const,
+    blocks: [
+      { type: "heading" as const, text: "深入理解检索", level: 1, order: 0, page: 1 },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        type: "paragraph" as const,
+        text: `第${i}段：向量检索与关键词检索的融合策略讨论。`.repeat(6),
+        order: i + 1,
+        page: 1,
+      })),
+    ],
+  };
+  const res = await ingestIR(db, "docs/retrieval.pdf", ir, "rawbytes-hash", 12345, fakeEmbed);
+  expect(res.chunkCount).toBeGreaterThan(0);
+  const doc = db
+    .query("SELECT chunk_count, chunk_strategy, file_hash, file_size, status FROM documents WHERE file_path = 'docs/retrieval.pdf'")
+    .get() as { chunk_count: number; chunk_strategy: string; file_hash: string; file_size: number; status: string };
+  expect(doc.status).toBe("indexed");
+  expect(doc.chunk_count).toBe(res.chunkCount);
+  expect(doc.chunk_strategy).toBeTruthy();
+  expect(doc.file_hash).toBe("rawbytes-hash");
+  expect(doc.file_size).toBe(12345);
+  // Re-ingest is idempotent like the text path.
+  await ingestIR(db, "docs/retrieval.pdf", ir, "rawbytes-hash", 12345, fakeEmbed);
+  const n = db.query("SELECT COUNT(*) AS c FROM chunks WHERE file_path = 'docs/retrieval.pdf'").get() as { c: number };
+  expect(n.c).toBe(res.chunkCount);
   db.close();
 });
 

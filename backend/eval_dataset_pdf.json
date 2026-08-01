@@ -1,0 +1,50 @@
+[
+  {
+    "question": "In the GLUE test results table of the BERT paper, what average score did BERT LARGE achieve, and what was its RTE score?",
+    "ground_truth": "In the GLUE test results table, BERT LARGE achieved an Average of 82.1, with an RTE score of 70.1."
+  },
+  {
+    "question": "What percentage of input tokens does BERT's masked LM pre-training procedure mask?",
+    "ground_truth": "BERT masks 15% of the input tokens — the masked LM only makes predictions on 15% of tokens in each batch."
+  },
+  {
+    "question": "According to the complexity comparison table in the Attention Is All You Need paper, how many sequential operations does a self-attention layer require, and what is its complexity per layer?",
+    "ground_truth": "Self-attention requires O(1) sequential operations, with complexity per layer O(n²·d)."
+  },
+  {
+    "question": "How many parallel attention heads does the Transformer use, and what are the dimensions d_k and d_v?",
+    "ground_truth": "The Transformer employs h = 8 parallel attention heads, with d_k = d_v = d_model/h = 64."
+  },
+  {
+    "question": "What does the min-dist hyperparameter control in UMAP?",
+    "ground_truth": "min-dist is the desired separation between close points in the embedding space. It is a hyperparameter that directly affects the output, controlling the fuzzy simplicial set construction from the low dimensional representation."
+  },
+  {
+    "question": "What are the inputs to the UMAP algorithm (Algorithm 1)?",
+    "ground_truth": "The inputs are: X, the dataset to have its dimension reduced; n, the neighborhood size to use for local metric approximation; d, the target dimension; min-dist, the desired separation between close points in the embedding; and n-epochs."
+  },
+  {
+    "question": "信通院《人工智能白皮书》认为下一步人工智能的发展方向将由哪三个维度的坐标来定义和牵引？",
+    "ground_truth": "由技术创新、工程实践、可信安全'三维'坐标来定义和牵引。第一个维度突出创新，围绕算法和算力的创新不断涌现；第二个维度突出工程，工程化能力成为人工智能大规模赋能千行百业的关键要素；第三个维度突出可信，发展负责任和可信的人工智能成为共识。"
+  },
+  {
+    "question": "白皮书中人工智能工程化维度强调的核心能力是什么？",
+    "ground_truth": "工程化能力——人工智能工具链成为工程实践能力的核心，工程化能力逐渐成为人工智能大规模赋能千行百业的关键要素。"
+  },
+  {
+    "question": "git log --pretty=format 里 %H 和 %h 两个占位符分别代表什么？",
+    "ground_truth": "%H 代表提交的完整哈希值，%h 代表提交的简写哈希值。"
+  },
+  {
+    "question": "分布式版本控制系统（DVCS）相比集中式版本控制系统的主要优势是什么？",
+    "ground_truth": "在分布式版本控制系统中，客户端不只提取最新版本的文件快照，而是把代码仓库完整地镜像下来，包括完整的历史记录。因此任何一处协同工作用的服务器发生故障，事后都可以用任何一个镜像出来的本地仓库恢复。"
+  },
+  {
+    "question": "Git 在记录数据方式上与其他版本控制系统的根本差异是什么？",
+    "ground_truth": "Git 直接记录快照，而非差异比较——其他系统以文件变更列表（差异）的方式存储信息，Git 则把数据看作对小型文件系统的一系列快照。"
+  },
+  {
+    "question": "git log 命令默认展示什么内容？",
+    "ground_truth": "git log 用来展示一个项目的可达历史记录，从最近的提交快照起。默认情况下只显示当前所在分支的历史记录，但可以显示不同的甚至多个头记录或分支以供遍历，也常用来在提交记录级别显示两个或多个分支之间的差异。"
+  }
+]

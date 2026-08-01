@@ -4,9 +4,10 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { parseFrontmatter } from "./frontmatter.ts";
+import { parseFrontmatter, type FrontmatterData } from "./frontmatter.ts";
 import { chunkDocument } from "./chunker.ts";
 import { parseMarkdown } from "./markdownIr.ts";
+import type { DocumentIR } from "./documentIr.ts";
 import { deleteChunksForFile, storeChunks } from "./store.ts";
 
 export type Embedder = (texts: string[]) => Promise<number[][]>;
@@ -24,12 +25,42 @@ export async function ingestText(
   embed: Embedder,
 ): Promise<IngestResult> {
   const { data, body } = parseFrontmatter(rawText);
-  // Markdown → DocumentIR → parent/child chunks. Other formats will add their own
-  // producer here; everything downstream of the IR is format-agnostic.
-  const doc = chunkDocument(parseMarkdown(body));
   // Content hash + size let the sync service detect modified files (sync.ts).
   const fileHash = new Bun.CryptoHasher("sha256").update(rawText).digest("hex");
   const fileSize = Buffer.byteLength(rawText);
+  // Markdown → DocumentIR; everything downstream of the IR is format-agnostic.
+  return ingestParsed(db, filePath, parseMarkdown(body), data, fileHash, fileSize, embed);
+}
+
+/**
+ * Ingest an already-parsed DocumentIR — the entry point for non-markdown formats
+ * whose producer lives outside this process (the knowhive-pdf plugin emits IR
+ * JSON over stdio). Hash/size describe the ORIGINAL file bytes so sync can
+ * detect modifications the same way it does for markdown.
+ */
+export async function ingestIR(
+  db: Database,
+  filePath: string,
+  ir: DocumentIR,
+  fileHash: string,
+  fileSize: number,
+  embed: Embedder,
+): Promise<IngestResult> {
+  const noMeta: FrontmatterData = { title: null, category: null, tags: [], difficulty: null, pack_id: null };
+  return ingestParsed(db, filePath, ir, noMeta, fileHash, fileSize, embed);
+}
+
+/** Shared tail of every ingest path: chunk → embed children → store → record. */
+async function ingestParsed(
+  db: Database,
+  filePath: string,
+  ir: DocumentIR,
+  data: FrontmatterData,
+  fileHash: string,
+  fileSize: number,
+  embed: Embedder,
+): Promise<IngestResult> {
+  const doc = chunkDocument(ir);
 
   if (doc.children.length === 0) {
     deleteChunksForFile(db, filePath);
