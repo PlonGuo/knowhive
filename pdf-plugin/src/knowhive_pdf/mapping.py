@@ -43,6 +43,17 @@ def normalize_text(text: str) -> str:
     return unicodedata.normalize("NFKC", text).strip()
 
 
+import re
+
+_CN_NUMERAL = "一二三四五六七八九十百"
+# 一、概述  /  十二、总结
+_CN_CHAPTER = re.compile(rf"^[{_CN_NUMERAL}]+[、.．]")
+# （一）  /  (一)
+_CN_SECTION = re.compile(rf"^[（(][{_CN_NUMERAL}]+[）)]")
+# 1.  /  1、  (single arabic — third level, but only inside a Chinese-numbered doc)
+_ARABIC_ITEM = re.compile(r"^\d+[.、]\s")
+
+
 def heading_level_from_numbering(text: str) -> int:
     """"3 BERT"→2, "3.1 Pre-training"→3; unnumbered→2 (doc title holds 1)."""
     lead = text.split(" ", 1)[0].rstrip(".")
@@ -50,6 +61,25 @@ def heading_level_from_numbering(text: str) -> int:
     if parts and parts[0] and all(p.isdigit() for p in parts):
         return min(6, 1 + len(parts))
     return 2
+
+
+def refine_chinese_heading_levels(blocks: list[dict[str, Any]]) -> None:
+    """Second pass: Chinese official-document numbering (一、 → （一） → 1.).
+
+    "1." is ambiguous — chapter-level in English papers, third-level in Chinese
+    whitepapers — so the Chinese scheme only applies when the document actually
+    uses 一、-style chapter headings. Mutates heading levels in place.
+    """
+    headings = [b for b in blocks if b.get("type") == "heading"]
+    if not any(_CN_CHAPTER.match(h["text"]) for h in headings):
+        return
+    for h in headings:
+        if _CN_CHAPTER.match(h["text"]):
+            h["level"] = 2
+        elif _CN_SECTION.match(h["text"]):
+            h["level"] = 3
+        elif _ARABIC_ITEM.match(h["text"]):
+            h["level"] = 4
 
 
 def split_table_markdown(md: str) -> tuple[str, str]:
@@ -111,4 +141,5 @@ def convert_pdf(pdf_path: str) -> list[dict[str, Any]]:
                 )
             push(block, item)
 
+    refine_chinese_heading_levels(blocks)
     return blocks
