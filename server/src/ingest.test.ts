@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { openDbAt } from "./db.ts";
-import { ingestDirectory, ingestIR, ingestText } from "./ingest.ts";
+import { findIngestableFiles, ingestDirectory, ingestIR, ingestText, markDocumentError } from "./ingest.ts";
 import { hybridSearch } from "./store.ts";
 
 // Deterministic fake embedder: a 3-dim topic vector [cat, dog, transformer].
@@ -127,6 +127,33 @@ test("ingestIR ingests a plugin-produced DocumentIR (PDF path)", async () => {
   await ingestIR(db, "docs/retrieval.pdf", ir, "rawbytes-hash", 12345, fakeEmbed);
   const n = db.query("SELECT COUNT(*) AS c FROM chunks WHERE file_path = 'docs/retrieval.pdf'").get() as { c: number };
   expect(n.c).toBe(res.chunkCount);
+  db.close();
+});
+
+test("findIngestableFiles lists md always and pdf only when asked", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "knowhive-findpdf-"));
+  writeFileSync(join(dir, "a.md"), "# a");
+  writeFileSync(join(dir, "b.pdf"), "%PDF-fake");
+  writeFileSync(join(dir, "c.txt"), "nope");
+
+  const mdOnly = await findIngestableFiles(dir, { includePdf: false });
+  expect(mdOnly.map((p) => p.split("/").pop())).toEqual(["a.md"]);
+  const withPdf = await findIngestableFiles(dir, { includePdf: true });
+  expect(withPdf.map((p) => p.split("/").pop())).toEqual(["a.md", "b.pdf"]);
+});
+
+test("markDocumentError records a failed file on the documents table", () => {
+  const db = openDbAt(":memory:");
+  markDocumentError(db, "notes/scan.pdf", "needs_ocr: scanned document");
+  const row = db
+    .query("SELECT status, error_message, chunk_count FROM documents WHERE file_path = 'notes/scan.pdf'")
+    .get() as { status: string; error_message: string; chunk_count: number };
+  expect(row.status).toBe("error");
+  expect(row.error_message).toContain("needs_ocr");
+  expect(row.chunk_count).toBe(0);
   db.close();
 });
 

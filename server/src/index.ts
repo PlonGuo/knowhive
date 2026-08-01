@@ -14,8 +14,17 @@ import { configRoutes } from "./configRoutes.ts";
 import { exportRoutes } from "./exportRoutes.ts";
 import { openDb, vecVersion } from "./db.ts";
 import { embed as ollamaEmbed, embeddingModelFor } from "./embed.ts";
-import { ingestDirectory, ingestText, type Embedder } from "./ingest.ts";
+import {
+  findIngestableFiles,
+  ingestDirectory,
+  ingestIR,
+  ingestText,
+  markDocumentError,
+  type Embedder,
+} from "./ingest.ts";
 import { ingestRoutes } from "./ingestRoutes.ts";
+import { PdfPluginSession, findPluginBin, isParseError } from "./pdfPlugin.ts";
+import { pdfRoutes } from "./pdfRoutes.ts";
 import { buildTree, createNoteFile, flattenTree, relativizeIfInside, resolveSafePath, updateNoteFile } from "./knowledge.ts";
 import { knowledgeRoutes } from "./knowledgeRoutes.ts";
 import { ollamaRoutes } from "./ollamaRoutes.ts";
@@ -66,8 +75,39 @@ const embedder: Embedder = (texts) =>
     model: embeddingModelFor(config.embedding_language),
   });
 
+// PDF support is an optional external tool (knowhive-pdf via `uv tool install`).
+// One session per ingest batch: docling's models are too heavy to keep idling,
+// so ingestRoutes' afterTask closes it when the batch finishes.
+let pdfSession: PdfPluginSession | null = null;
+const closePdfSession = () => {
+  pdfSession?.close();
+  pdfSession = null;
+};
+
+const ingestPdf = async (absPath: string) => {
+  pdfSession ??= new PdfPluginSession();
+  const outcome = await pdfSession.parseOne(absPath);
+  if (isParseError(outcome)) {
+    const friendly =
+      outcome.code === "needs_ocr"
+        ? "Scanned PDF — OCR is not supported yet"
+        : outcome.code === "bad_text_layer"
+          ? "The PDF's text layer is broken or empty"
+          : outcome.message || "PDF parsing failed";
+    markDocumentError(db, absPath, `${outcome.code}: ${friendly}`);
+    throw new Error(friendly);
+  }
+  const bytes = readFileSync(absPath);
+  const fileHash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+  await ingestIR(db, absPath, outcome.ir, fileHash, bytes.byteLength, embedder);
+};
+
 // Read + index a single file; shared by ingest tasks, watcher sync and startup sync.
 const ingestOne = async (absPath: string) => {
+  if (absPath.toLowerCase().endsWith(".pdf")) {
+    await ingestPdf(absPath);
+    return;
+  }
   await ingestText(db, absPath, readFileSync(absPath, "utf8"), embedder);
 };
 
@@ -203,8 +243,19 @@ app.route(
 // Ingest with task tracking: POST /ingest/files, GET /ingest/status/:id, POST /ingest/resync.
 app.route(
   "/",
-  ingestRoutes({ db, knowledgeDir, ingestFile: ingestOne }),
+  ingestRoutes({
+    db,
+    knowledgeDir,
+    ingestFile: ingestOne,
+    // Resync sweeps PDFs only when the plugin is installed; without it a stray
+    // PDF would just fail per-file with "plugin not installed".
+    listFiles: (dir) => findIngestableFiles(dir, { includePdf: findPluginBin() !== null }),
+    afterTask: closePdfSession,
+  }),
 );
+
+// PDF plugin management: GET /pdf/status, POST /pdf/install, GET /pdf/install-status.
+app.route("/", pdfRoutes());
 
 // Retrieve: hybrid (vector KNN ⊕ FTS5 via RRF), and when use_reranker is on,
 // over-fetch RERANK_CANDIDATES and rerank down to k with the configured backend:

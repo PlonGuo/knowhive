@@ -11,19 +11,28 @@ import { createIngestTask, getIngestTask, runIngestTask } from "./ingestTasks.ts
 export interface IngestRoutesDeps {
   db: Database;
   knowledgeDir: string;
-  /** Ingest a single file (wired to readFileSync + ingestText + live embedder). */
+  /** Ingest a single file (wired to readFileSync + ingestText/ingestIR + live embedder). */
   ingestFile: (absPath: string) => Promise<void>;
+  /** List ingestable files for resync. Defaults to markdown-only; the app wires
+   * in a PDF-aware lister when the knowhive-pdf plugin is installed. */
+  listFiles?: (directory: string) => Promise<string[]>;
+  /** Called once when a task finishes (success or not) — used to shut down the
+   * PDF plugin process, whose loaded models are too heavy to keep idling. */
+  afterTask?: () => void;
 }
 
 export function ingestRoutes(deps: IngestRoutesDeps): Hono {
   const app = new Hono();
+  const listFiles = deps.listFiles ?? findMarkdownFiles;
 
   const startTask = (paths: string[]) => {
     const taskId = crypto.randomUUID();
     createIngestTask(deps.db, taskId, paths.length);
-    runIngestTask(deps.db, taskId, paths, deps.ingestFile).catch((err) => {
-      console.error(`[ingest] task ${taskId} crashed:`, err);
-    });
+    runIngestTask(deps.db, taskId, paths, deps.ingestFile)
+      .catch((err) => {
+        console.error(`[ingest] task ${taskId} crashed:`, err);
+      })
+      .finally(() => deps.afterTask?.());
     return taskId;
   };
 
@@ -44,7 +53,7 @@ export function ingestRoutes(deps: IngestRoutesDeps): Hono {
 
   app.post("/ingest/resync", async (c) => {
     mkdirSync(deps.knowledgeDir, { recursive: true });
-    const files = await findMarkdownFiles(deps.knowledgeDir);
+    const files = await listFiles(deps.knowledgeDir);
     const taskId = startTask(files);
     return c.json({ task_id: taskId, status: "accepted", total_files: files.length });
   });

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { openDbAt } from "./db.ts";
 import { ingestRoutes } from "./ingestRoutes.ts";
 import { getIngestTask } from "./ingestTasks.ts";
+import { findIngestableFiles } from "./ingest.ts";
 
 // Parity tests against backend/app/routers/ingest.py endpoints. The ingest itself is
 // injected so these run without Ollama.
@@ -105,4 +106,35 @@ test("POST /ingest/resync re-ingests all .md files under the knowledge dir", asy
   const task = await waitForTask(db, body.task_id);
   expect(task.status).toBe("completed");
   expect(ingested.sort()).toEqual([join(knowledgeDir, "a.md"), join(knowledgeDir, "sub", "b.md")]);
+});
+
+test("resync includes PDFs when the injected lister provides them, and afterTask fires", async () => {
+  const knowledgeDir = mkdtempSync(join(tmpdir(), "knowhive-iroutes-pdf-"));
+  writeFileSync(join(knowledgeDir, "a.md"), "# a");
+  writeFileSync(join(knowledgeDir, "doc.pdf"), "%PDF-fake");
+  const db = openDbAt(":memory:");
+  const ingested: string[] = [];
+  let afterTaskCalls = 0;
+  const app = new Hono().route(
+    "/",
+    ingestRoutes({
+      db,
+      knowledgeDir,
+      ingestFile: async (p) => {
+        ingested.push(p);
+      },
+      listFiles: (dir) => findIngestableFiles(dir, { includePdf: true }),
+      afterTask: () => {
+        afterTaskCalls++;
+      },
+    }),
+  );
+
+  const res = await app.request("/ingest/resync", { method: "POST" });
+  const body = await res.json();
+  expect(body.total_files).toBe(2);
+  const task = await waitForTask(db, body.task_id);
+  expect(task.status).toBe("completed");
+  expect(ingested.some((p) => p.endsWith("doc.pdf"))).toBe(true);
+  expect(afterTaskCalls).toBe(1);
 });

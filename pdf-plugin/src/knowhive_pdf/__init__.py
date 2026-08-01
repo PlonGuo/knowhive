@@ -6,7 +6,7 @@ the TS side's DocumentIR (server/src/documentIr.ts); SCHEMA_VERSION gates
 compatibility across releases.
 """
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 # Bump when the emitted IR shape changes incompatibly. The host refuses to talk
 # to a plugin whose schema_version it doesn't know.

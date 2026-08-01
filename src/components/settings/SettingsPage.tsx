@@ -61,6 +61,13 @@ interface EmbeddingPull {
   error?: string
 }
 
+interface PdfStatus {
+  installed: boolean
+  plugin_version?: string
+}
+
+type PdfInstallPhase = 'idle' | 'installing' | 'prefetching' | 'complete' | 'error'
+
 const defaultConfig: AppConfig = {
   llm_provider: 'ollama',
   model_name: 'llama3',
@@ -93,6 +100,56 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
   const [rerankerDownloading, setRerankerDownloading] = useState(false)
   const [rerankerDownloadStatus, setRerankerDownloadStatus] = useState<RerankerDownloadStatus | null>(null)
   const rerankerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [pdfStatus, setPdfStatus] = useState<PdfStatus | null>(null)
+  const [pdfInstallPhase, setPdfInstallPhase] = useState<PdfInstallPhase>('idle')
+  const [pdfInstallError, setPdfInstallError] = useState<string | null>(null)
+  const pdfPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    fetch(`${backendUrl}/pdf/status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: PdfStatus | null) => {
+        if (data) setPdfStatus(data)
+      })
+      .catch(() => {})
+    return () => {
+      if (pdfPollRef.current) clearInterval(pdfPollRef.current)
+    }
+  }, [backendUrl])
+
+  const checkPdfInstall = async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`${backendUrl}/pdf/install-status`)
+      const data: { status: PdfInstallPhase; error?: string } = await res.json()
+      setPdfInstallPhase(data.status)
+      if (data.status === 'complete' || data.status === 'error') {
+        setPdfInstallError(data.error ?? null)
+        const status = await fetch(`${backendUrl}/pdf/status`).then((r) => r.json())
+        setPdfStatus(status)
+        return true
+      }
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  const handlePdfInstall = async () => {
+    setPdfInstallPhase('installing')
+    setPdfInstallError(null)
+    try {
+      await fetch(`${backendUrl}/pdf/install`, { method: 'POST' })
+      if (await checkPdfInstall()) return
+      pdfPollRef.current = setInterval(async () => {
+        if (await checkPdfInstall()) {
+          if (pdfPollRef.current) clearInterval(pdfPollRef.current)
+          pdfPollRef.current = null
+        }
+      }, 1500)
+    } catch {
+      setPdfInstallPhase('error')
+    }
+  }
 
   useEffect(() => {
     fetch(`${backendUrl}/config`)
@@ -517,6 +574,46 @@ export default function SettingsPage({ backendUrl, onBack, onConfigSaved }: Sett
                       />
                     </div>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* PDF support: install the knowhive-pdf plugin (uv tool install +
+                docling model prefetch). Absent plugin = the app has no PDF
+                support and nothing else changes. */}
+            {pdfStatus && (
+              <div data-testid="pdf-support-section" className="rounded-xl border bg-muted/40 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-foreground">PDF support</p>
+                    <p className="text-xs text-muted-foreground">
+                      Parse PDFs into your knowledge base. Installs the knowhive-pdf
+                      plugin and its layout models (~1GB total, runs locally).
+                    </p>
+                  </div>
+                  {pdfStatus.installed ? (
+                    <span data-testid="pdf-ready-indicator" className="text-xs font-medium text-green-600">
+                      ✓ Ready · v{pdfStatus.plugin_version}
+                    </span>
+                  ) : (
+                    <button
+                      data-testid="install-pdf-button"
+                      onClick={handlePdfInstall}
+                      disabled={pdfInstallPhase === 'installing' || pdfInstallPhase === 'prefetching'}
+                      className="rounded-xl bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {pdfInstallPhase === 'installing'
+                        ? 'Installing...'
+                        : pdfInstallPhase === 'prefetching'
+                          ? 'Downloading models...'
+                          : 'Install'}
+                    </button>
+                  )}
+                </div>
+                {pdfInstallPhase === 'error' && (
+                  <p data-testid="pdf-install-error" className="text-xs text-red-600">
+                    {pdfInstallError ?? 'Install failed'}
+                  </p>
                 )}
               </div>
             )}

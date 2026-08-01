@@ -60,12 +60,31 @@ def run_stdio() -> None:
         _emit(process_file(path))
 
 
+def prefetch_models() -> None:
+    """Download docling's layout/table models ahead of time.
+
+    The host runs this right after `uv tool install`, so the user's first real
+    parse doesn't stall on a multi-hundred-MB HuggingFace download. Honors
+    HF_ENDPOINT for mirror setups.
+    """
+    from docling.utils.model_downloader import download_models
+
+    download_models(with_easyocr=False)  # v1 has no OCR
+    _emit({"type": "models_ready"})
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="KnowHive PDF plugin: PDF → DocumentIR JSON")
     ap.add_argument("pdf", nargs="?", help="one-shot mode: parse a single PDF and print its IR")
     ap.add_argument("--stdio", action="store_true", help="batch mode: paths on stdin, JSONL on stdout")
+    ap.add_argument(
+        "--prefetch-models", action="store_true", help="download docling models now (install-time warmup)"
+    )
     args = ap.parse_args()
 
+    if args.prefetch_models:
+        prefetch_models()
+        return
     if args.stdio:
         run_stdio()
         return

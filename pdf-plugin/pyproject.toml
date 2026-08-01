@@ -1,6 +1,6 @@
 [project]
 name = "knowhive-pdf"
-version = "0.1.2"
+version = "0.2.0"
 description = "KnowHive PDF plugin: docling-powered PDF → DocumentIR JSON over a stdio protocol"
 readme = "README.md"
 license = "MIT"

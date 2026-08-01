@@ -77,13 +77,40 @@ async function ingestParsed(
   return { filePath, chunkCount: doc.children.length };
 }
 
-/** Recursively list .md files under `directory` (absolute paths, sorted).
- * Mirrors ingest_service.find_ingestable_files; PDF support is not ported to the TS stack yet. */
+/** Recursively list .md files under `directory` (absolute paths, sorted). */
 export async function findMarkdownFiles(directory: string): Promise<string[]> {
+  return findIngestableFiles(directory, { includePdf: false });
+}
+
+/**
+ * List ingestable files: markdown always, PDFs only when the knowhive-pdf
+ * plugin is available (a PDF without the plugin would just fail per-file).
+ */
+export async function findIngestableFiles(
+  directory: string,
+  opts: { includePdf: boolean },
+): Promise<string[]> {
   if (!existsSync(directory)) return [];
-  const glob = new Bun.Glob("**/*.md");
+  const glob = new Bun.Glob(opts.includePdf ? "**/*.{md,pdf}" : "**/*.md");
   const relPaths = (await Array.fromAsync(glob.scan({ cwd: directory }))).sort();
   return relPaths.map((rel) => join(directory, rel));
+}
+
+/**
+ * Record a file that could not be ingested (e.g. a scanned PDF with OCR off)
+ * so the document list can show WHY instead of silently omitting it.
+ */
+export function markDocumentError(db: Database, filePath: string, message: string): void {
+  db.run(
+    `INSERT INTO documents (file_path, file_name, modified_at, chunk_count, status, error_message)
+       VALUES (?, ?, datetime('now'), 0, 'error', ?)
+     ON CONFLICT(file_path) DO UPDATE SET
+       status        = 'error',
+       error_message = excluded.error_message,
+       chunk_count   = 0,
+       updated_at    = datetime('now')`,
+    [filePath, basename(filePath), message],
+  );
 }
 
 /** Recursively ingest all .md files under `directory` (used by re-embed and resync).
