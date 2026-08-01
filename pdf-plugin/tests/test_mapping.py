@@ -20,6 +20,15 @@ def test_nfkc_folds_kangxi_radicals():
     assert normalize_text("⼆、⽰例") == "二、示例"
 
 
+def test_cjk_intra_word_spaces_stripped():
+    # PDF extraction misreads kerning gaps as spaces inside Chinese words.
+    assert normalize_text("提交 的完 整 哈 希值") == "提交的完整哈希值"
+    assert normalize_text("下一步 的发展方向") == "下一步的发展方向"
+    # Latin↔CJK boundaries keep their space; Latin words are untouched.
+    assert normalize_text("Git 简史 与 branch 管理") == "Git 简史与 branch 管理"
+    assert normalize_text("scaled dot-product attention") == "scaled dot-product attention"
+
+
 def test_table_caption_splits_off():
     md = "Table 1: results overview.\n\n| a | b |\n|---|---|\n| 1 | 2 |"
     caption, table = split_table_markdown(md)

@@ -14,6 +14,7 @@ Three quirks this mapping exists to absorb (found in the 2026-08-01 spike):
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 from typing import Any
 
@@ -39,11 +40,16 @@ def get_converter():
     return _converter
 
 
+# PDF extraction sprinkles stray spaces INSIDE Chinese words ("提交 的完 整 哈 希值")
+# — kerning gaps misread as word breaks. Fatal for keyword search. Only strip
+# whitespace BETWEEN two CJK chars; Latin↔CJK boundaries keep their space.
+_CJK = r"㐀-鿿豈-﫿　-〿！-｠"
+_CJK_GAP = re.compile(rf"(?<=[{_CJK}])[ \t]+(?=[{_CJK}])")
+
+
 def normalize_text(text: str) -> str:
-    return unicodedata.normalize("NFKC", text).strip()
+    return _CJK_GAP.sub("", unicodedata.normalize("NFKC", text)).strip()
 
-
-import re
 
 _CN_NUMERAL = "一二三四五六七八九十百"
 # 一、概述  /  十二、总结
