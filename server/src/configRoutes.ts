@@ -4,7 +4,7 @@
 import { Hono } from "hono";
 import { ZodError } from "zod";
 import { AppConfigSchema, type AppConfig } from "../../shared/schema.ts";
-import { saveConfig } from "./config.ts";
+import { maskApiKey, saveConfig, unmaskApiKey } from "./config.ts";
 import type { TestLlmResult } from "./testLlm.ts";
 
 export interface ConfigRoutesDeps {
@@ -19,12 +19,25 @@ export interface ConfigRoutesDeps {
 export function configRoutes(deps: ConfigRoutesDeps): Hono {
   const app = new Hono();
 
-  app.get("/config", (c) => c.json(deps.getConfig()));
+  // The provider key never leaves the process in the clear — see localGuard.ts for
+  // why "it's only on loopback" was not enough. Server-side consumers (chatModel,
+  // test-llm) read deps.getConfig() directly and still see the real value.
+  const publicView = (config: AppConfig) => ({ ...config, api_key: maskApiKey(config.api_key) });
+
+  app.get("/config", (c) => c.json(publicView(deps.getConfig())));
 
   app.put("/config", async (c) => {
     let next: AppConfig;
     try {
-      next = AppConfigSchema.parse(await c.req.json());
+      const body = (await c.req.json()) as Record<string, unknown>;
+      // The Settings page round-trips the object GET handed it, so an untouched
+      // key arrives as its own mask. Restore it before validation rather than
+      // writing the mask over the real key.
+      const stored = deps.getConfig().api_key;
+      if ("api_key" in body) {
+        body.api_key = unmaskApiKey(body.api_key as string | null, stored);
+      }
+      next = AppConfigSchema.parse(body);
     } catch (err) {
       if (err instanceof ZodError) return c.json({ detail: err.issues }, 422);
       throw err;
@@ -40,7 +53,7 @@ export function configRoutes(deps: ConfigRoutesDeps): Hono {
         console.error("[config] re-embed after language change failed:", err);
       });
     }
-    return c.json({ ...next, reembedding: languageChanged });
+    return c.json({ ...publicView(next), reembedding: languageChanged });
   });
 
   app.post("/config/test-llm", async (c) => c.json(await deps.testLlm(deps.getConfig())));

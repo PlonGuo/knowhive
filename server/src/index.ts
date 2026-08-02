@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { isOriginAllowed, localGuard } from "./localGuard.ts";
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -134,8 +135,18 @@ const chatModel = () => {
 
 const app = new Hono();
 
-// The renderer (WKWebView / localhost dev server) fetches this sidecar cross-origin.
-app.use("*", cors());
+// The renderer (WKWebView / localhost dev server) fetches this sidecar cross-origin,
+// so CORS is required — but it must be an allowlist, not `cors()` with no options.
+// Bare cors() answers `Access-Control-Allow-Origin: *`, which tells the browser it
+// is fine to hand these responses to ANY site the user has open; combined with the
+// fact that no route is authenticated, that exposed the whole knowledge base and
+// the provider api_key to any page. localGuard additionally rejects non-loopback
+// Host headers, which is what catches DNS rebinding (CORS cannot — see localGuard.ts).
+app.use(
+  "*",
+  cors({ origin: (origin) => (isOriginAllowed(origin) ? origin : null) }),
+);
+app.use("*", localGuard());
 
 // Health probe the Rust shell polls before flipping the sidecar to "running".
 app.get("/health", (c) =>

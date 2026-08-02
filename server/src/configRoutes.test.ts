@@ -98,3 +98,57 @@ test("POST /config/test-llm returns the probe result", async () => {
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ success: false, error: "LLM returned status 500" });
 });
+
+// --- api_key must not leave the process in the clear -------------------------
+
+test("GET /config masks the api_key", async () => {
+  const { app, getCurrent, dataDir } = makeApp();
+  const withKey = AppConfigSchema.parse({ ...getCurrent(), api_key: "sk-abcdefghijklmnop" });
+  saveConfig(withKey, dataDir);
+  const app2 = makeApp({ getConfig: () => withKey });
+  const body = await (await app2.app.request("/config")).json();
+  expect(body.api_key).toBe("••••••••mnop");
+  expect(body.api_key).not.toContain("abcdefgh");
+  void app;
+});
+
+test("PUT /config echoing the mask back preserves the stored key", async () => {
+  const stored = AppConfigSchema.parse({ api_key: "sk-abcdefghijklmnop" });
+  let current = stored;
+  const { app } = makeApp({ getConfig: () => current, setConfig: (c) => { current = c; } });
+
+  const shown = await (await app.request("/config")).json();
+  const res = await app.request("/config", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    // Simulate the Settings page: round-trip the object it was given, edit something else.
+    body: JSON.stringify({ ...shown, model_name: "deepseek-chat" }),
+  });
+  expect(res.status).toBe(200);
+  expect(current.api_key).toBe("sk-abcdefghijklmnop");
+  expect(current.model_name).toBe("deepseek-chat");
+});
+
+test("PUT /config accepts a genuinely new key and never echoes it back in the clear", async () => {
+  let current = AppConfigSchema.parse({ api_key: "sk-old-value-here" });
+  const { app } = makeApp({ getConfig: () => current, setConfig: (c) => { current = c; } });
+  const res = await app.request("/config", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...current, api_key: "sk-brand-new-key-9999" }),
+  });
+  const body = await res.json();
+  expect(current.api_key).toBe("sk-brand-new-key-9999");
+  expect(body.api_key).toBe("••••••••9999");
+});
+
+test("PUT /config can clear the api_key", async () => {
+  let current = AppConfigSchema.parse({ api_key: "sk-old-value-here" });
+  const { app } = makeApp({ getConfig: () => current, setConfig: (c) => { current = c; } });
+  await app.request("/config", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...current, api_key: null }),
+  });
+  expect(current.api_key).toBeNull();
+});

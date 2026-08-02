@@ -27,3 +27,29 @@ export function saveConfig(config: AppConfig, dataDir: string): void {
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(configPath(dataDir), stringify(config));
 }
+
+const MASK_CHAR = "•";
+const MASK_LEN = 8;
+const KEY_TAIL = 4;
+
+/**
+ * Hide a provider key for GET /config. The last four characters survive so the
+ * user can still tell which key is configured, which is the only thing the
+ * Settings page needs it for.
+ */
+export function maskApiKey(key: string | null): string | null {
+  if (key === null || key === "") return key;
+  const mask = MASK_CHAR.repeat(MASK_LEN);
+  return key.length <= KEY_TAIL ? MASK_CHAR.repeat(KEY_TAIL) : `${mask}${key.slice(-KEY_TAIL)}`;
+}
+
+/**
+ * Inverse of maskApiKey for PUT /config. The Settings page round-trips the whole
+ * config object, so an untouched key comes back as its own mask — writing that
+ * through would destroy the real key. Anything else is taken at face value, so
+ * setting a new key and clearing the key both still work.
+ */
+export function unmaskApiKey(incoming: string | null, stored: string | null): string | null {
+  if (stored === null || stored === "") return incoming;
+  return incoming === maskApiKey(stored) ? stored : incoming;
+}

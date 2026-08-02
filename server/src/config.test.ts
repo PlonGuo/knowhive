@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configPath, loadConfig, saveConfig } from "./config.ts";
+import { configPath, loadConfig, saveConfig, maskApiKey, unmaskApiKey } from "./config.ts";
 import { AppConfigSchema } from "../../shared/schema.ts";
 
 // Parity tests against backend/app/config.py (load_config/save_config).
@@ -93,4 +93,37 @@ test("cloud provider keeps embeddings on ollama_base_url (regression: DeepSeek 4
     base_url: "https://api.deepseek.com/v1",
   });
   expect(cfg.ollama_base_url).toBe("http://localhost:11434");
+});
+
+// --- api_key masking ---------------------------------------------------------
+// GET /config returned the provider key in full, so any page that could reach the
+// sidecar could read it. Masking on read needs a matching restore on write,
+// because the Settings page round-trips the whole config object back on save.
+
+test("maskApiKey keeps only the last four characters", () => {
+  expect(maskApiKey("sk-abcdefghijklmnop")).toBe("••••••••mnop");
+});
+
+test("maskApiKey leaves null alone and fully hides very short keys", () => {
+  expect(maskApiKey(null)).toBeNull();
+  expect(maskApiKey("")).toBe("");
+  expect(maskApiKey("abcd")).toBe("••••");
+});
+
+test("unmaskApiKey restores the stored key when the client echoes the mask back", () => {
+  const stored = "sk-abcdefghijklmnop";
+  expect(unmaskApiKey(maskApiKey(stored), stored)).toBe(stored);
+});
+
+test("unmaskApiKey accepts a genuinely new key", () => {
+  expect(unmaskApiKey("sk-brand-new-value", "sk-old")).toBe("sk-brand-new-value");
+});
+
+test("unmaskApiKey lets the user clear the key", () => {
+  expect(unmaskApiKey(null, "sk-old")).toBeNull();
+  expect(unmaskApiKey("", "sk-old")).toBe("");
+});
+
+test("unmaskApiKey does not resurrect a key when nothing was stored", () => {
+  expect(unmaskApiKey("••••••••mnop", null)).toBe("••••••••mnop");
 });
