@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar'
 import ChatArea, { type ExchangeUsage } from './ChatArea'
+import type { UsageStats } from './UsageBadge'
 import SettingsPage from '../settings/SettingsPage'
 import MarkdownEditor from '../knowledge/MarkdownEditor'
 import CommunityBrowser from '../community/CommunityBrowser'
@@ -18,13 +19,15 @@ export default function AppLayout({ backendUrl }: AppLayoutProps) {
   const [sessionsVersion, setSessionsVersion] = useState(0)
 
   // Session usage meter: cumulative spend + last prompt size, reset per session.
-  const [usage, setUsage] = useState<{ sessionTokens: number; lastInputTokens: number | null } | null>(null)
+  const [usage, setUsage] = useState<UsageStats | null>(null)
   useEffect(() => {
     setUsage(null)
   }, [activeSessionId])
   const handleUsage = (u: ExchangeUsage) => {
     setUsage((prev) => ({
       sessionTokens: (prev?.sessionTokens ?? 0) + (u.totalTokens ?? 0),
+      sessionInputTokens: (prev?.sessionInputTokens ?? 0) + (u.inputTokens ?? 0),
+      sessionCachedTokens: (prev?.sessionCachedTokens ?? 0) + (u.cachedInputTokens ?? 0),
       lastInputTokens: u.inputTokens,
     }))
   }
