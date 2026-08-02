@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   AGENT_SEARCH_K,
+  MAX_TOOL_CALLS,
+  ToolBudget,
   LIST_NOTES_MAX,
   READ_NOTE_MAX_CHARS,
   SourceCollector,
@@ -223,5 +225,98 @@ describe("write tools (Phase H)", () => {
       error: string;
     };
     expect(err.error).toContain("already exists");
+  });
+});
+
+describe("ToolBudget (runaway guard)", () => {
+  // The agentic eval produced two 15-17 minute runs: stepCountIs() caps steps, not
+  // tool calls *within* a step, and a spike caught one step firing 40 calls.
+  // Each search costs an embed + hybrid + 20 cross-encoder passes, so an unbounded
+  // step is the expensive failure. See learnings/evals/Agentic-vs-SingleShot.md.
+
+  test("allows calls up to the cap, then refuses", () => {
+    const b = new ToolBudget(3);
+    expect(b.claim("search_knowledge", "a")).toBeNull();
+    expect(b.claim("search_knowledge", "b")).toBeNull();
+    expect(b.claim("search_knowledge", "c")).toBeNull();
+    expect(b.claim("search_knowledge", "d")).toContain("budget");
+  });
+
+  test("refuses a repeated call before it consumes budget", () => {
+    const b = new ToolBudget(3);
+    expect(b.claim("search_knowledge", "dijkstra")).toBeNull();
+    expect(b.claim("search_knowledge", "dijkstra")).toContain("already");
+    // The repeat must not have burned a slot — two fresh queries still fit.
+    expect(b.claim("search_knowledge", "heap")).toBeNull();
+    expect(b.claim("search_knowledge", "trie")).toBeNull();
+    expect(b.claim("search_knowledge", "graph")).toContain("budget");
+  });
+
+  test("normalises case and whitespace when detecting repeats", () => {
+    const b = new ToolBudget();
+    expect(b.claim("search_knowledge", "Dynamic  Programming")).toBeNull();
+    expect(b.claim("search_knowledge", " dynamic programming ")).toContain("already");
+  });
+
+  test("keys repeats per tool, so different tools may use the same argument", () => {
+    const b = new ToolBudget();
+    expect(b.claim("search_knowledge", "notes/a.md")).toBeNull();
+    expect(b.claim("read_note", "notes/a.md")).toBeNull();
+  });
+
+  test("default cap is one call per step per allowed hop", () => {
+    expect(MAX_TOOL_CALLS).toBe(12);
+  });
+});
+
+describe("search_knowledge under a budget", () => {
+  test("a repeated query returns a nudge without re-running retrieval", async () => {
+    let calls = 0;
+    const tools = buildAgentTools(
+      makeDeps({
+        retrieve: async () => {
+          calls++;
+          return [chunk({ content: "hit" })];
+        },
+      }),
+      new ToolBudget(),
+    );
+    const run = (query: string) => tools.search_knowledge!.execute!({ query }, opts) as Promise<
+      { results?: unknown[]; error?: string }
+    >;
+    expect((await run("dijkstra")).results).toHaveLength(1);
+    const second = await run("dijkstra");
+    expect(second.error).toContain("already");
+    expect(second.results).toBeUndefined();
+    expect(calls).toBe(1); // the expensive path (embed + hybrid + rerank) ran once
+  });
+
+  test("exhausting the budget stops further retrieval", async () => {
+    let calls = 0;
+    const tools = buildAgentTools(
+      makeDeps({
+        retrieve: async () => {
+          calls++;
+          return [];
+        },
+      }),
+      new ToolBudget(2),
+    );
+    const run = (query: string) =>
+      tools.search_knowledge!.execute!({ query }, opts) as Promise<{ error?: string }>;
+    await run("a");
+    await run("b");
+    expect((await run("c")).error).toContain("budget");
+    expect(calls).toBe(2);
+  });
+
+  test("tools work unchanged when no budget is supplied", async () => {
+    const tools = buildAgentTools(makeDeps({ retrieve: async () => [chunk({})] }));
+    for (const q of ["a", "a", "a"]) {
+      const out = (await tools.search_knowledge!.execute!({ query: q }, opts)) as {
+        results?: unknown[];
+      };
+      expect(out.results).toHaveLength(1);
+    }
   });
 });

@@ -13,6 +13,50 @@ export const AGENT_SEARCH_K = 5;
 export const READ_NOTE_MAX_CHARS = 6000;
 export const LIST_NOTES_MAX = 200;
 
+/**
+ * Total tool calls allowed in one /chat request.
+ *
+ * MAX_AGENT_STEPS (6) bounds how many times the model is re-invoked, but NOT how
+ * many tool calls it emits inside a single step — a spike caught one step firing
+ * 40 calls, and the agentic eval logged two 15-17 minute runs as a result
+ * (learnings/evals/Agentic-vs-SingleShot.md, Llama32-Tool-Call-Spike.md).
+ * Every search costs an embed + hybrid + 20 cross-encoder passes, so an unbounded
+ * step is the expensive failure mode.
+ *
+ * 12 = the 6 allowed steps x 2 calls per step. Measured legitimate usage is far
+ * below that: multi-hop questions used tools in 6/10 runs, 1-3 calls each.
+ */
+export const MAX_TOOL_CALLS = 12;
+
+/**
+ * Per-request tool-call governor: a hard call ceiling plus exact-repeat rejection.
+ *
+ * Repeats are rejected BEFORE they consume budget — a model looping on one query
+ * should not burn the allowance that a genuinely new hop needs. Both refusals come
+ * back through the normal {error} value contract rather than as throws, because a
+ * throw becomes a tool-output-error chunk and derails small models.
+ */
+export class ToolBudget {
+  private used = 0;
+  private seen = new Set<string>();
+
+  constructor(private readonly maxCalls: number = MAX_TOOL_CALLS) {}
+
+  /** Returns null to proceed, or a note to hand back to the model instead. */
+  claim(toolName: string, key: string): string | null {
+    const fingerprint = `${toolName}:${key.trim().toLowerCase().replace(/\s+/g, " ")}`;
+    if (this.seen.has(fingerprint)) {
+      return `You already called ${toolName} with this input. Use those earlier results instead of repeating the call.`;
+    }
+    if (this.used >= this.maxCalls) {
+      return `Tool budget exhausted (${this.maxCalls} calls). Answer now with the information you already have.`;
+    }
+    this.seen.add(fingerprint);
+    this.used++;
+    return null;
+  }
+}
+
 /** Per-request accumulator of source file paths (deduped, insertion-ordered).
  * Tools collect into it as they execute; /chat snapshots it into messageMetadata. */
 export class SourceCollector {
@@ -52,13 +96,17 @@ export interface AgentToolDeps {
 
 const errorValue = (err: unknown) => ({ error: (err as Error).message });
 
-export function buildAgentTools(deps: AgentToolDeps): ToolSet {
+export function buildAgentTools(deps: AgentToolDeps, budget?: ToolBudget): ToolSet {
   return {
     search_knowledge: tool({
       description:
         "Search the knowledge base for notes about a topic. Returns the most relevant excerpts with their file paths.",
       inputSchema: z.object({ query: z.string().describe("focused search query") }),
       execute: async ({ query }) => {
+        // Checked before retrieval so a refused call costs nothing — the whole point
+        // is to not pay embed + hybrid + rerank for a repeat or an over-budget hop.
+        const refusal = budget?.claim("search_knowledge", query);
+        if (refusal) return { error: refusal };
         try {
           const chunks = await deps.retrieve(query, AGENT_SEARCH_K);
           deps.sources.add(...chunks.map((c) => c.file_path));

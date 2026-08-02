@@ -530,3 +530,167 @@ describe("write tools + permissions (Phase H)", () => {
     expect(getMessages(deps.db, sid)).toEqual([]);
   });
 });
+
+describe("timeout + abort (runaway guard)", () => {
+  /** Streams a first delta after `delayMs`, so a short timeout fires mid-generation. */
+  function slowModel(delayMs: number) {
+    return new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream<LanguageModelV3StreamPart>({
+          initialDelayInMs: delayMs,
+          chunkDelayInMs: delayMs,
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "too" },
+            { type: "text-delta", id: "t1", delta: " slow" },
+            { type: "text-end", id: "t1" },
+            { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+          ],
+        }),
+      }),
+    });
+  }
+
+  test("passes an abort signal to the model in single mode", async () => {
+    let signal: AbortSignal | undefined;
+    const model = new MockLanguageModelV3({
+      doStream: async (opts) => {
+        signal = opts.abortSignal;
+        return {
+          stream: simulateReadableStream<LanguageModelV3StreamPart>({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "text-start", id: "t1" },
+              { type: "text-delta", id: "t1", delta: "ok" },
+              { type: "text-end", id: "t1" },
+              { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+            ],
+          }),
+        };
+      },
+    });
+    await postChat(makeDeps({ chatModel: () => model as never }), userMessage("hi"));
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test("passes an abort signal to the model in agentic mode", async () => {
+    let signal: AbortSignal | undefined;
+    const model = new MockLanguageModelV3({
+      doStream: async (opts) => {
+        signal = opts.abortSignal;
+        return {
+          stream: simulateReadableStream<LanguageModelV3StreamPart>({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "text-start", id: "t1" },
+              { type: "text-delta", id: "t1", delta: "ok" },
+              { type: "text-end", id: "t1" },
+              { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+            ],
+          }),
+        };
+      },
+    });
+    await postChat(
+      makeDeps({ chatModel: () => model as never, chatTimeoutMs: 5_000 }),
+      { ...userMessage("hi"), mode: "agentic" },
+    );
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test("a generation that outlives the timeout is cut off with a timeout message", async () => {
+    const body = await postChat(
+      makeDeps({ chatModel: () => slowModel(400) as never, chatTimeoutMs: 60 }),
+      userMessage("hang please"),
+    );
+    expect(body).toContain("timed out");
+    expect(body).not.toContain("too slow");
+  });
+
+  test("a timed-out exchange is not persisted as a truncated answer", async () => {
+    const db = openDbAt(":memory:");
+    const session_id = createSession(db);
+    await postChat(
+      makeDeps({ db, chatModel: () => slowModel(400) as never, chatTimeoutMs: 60 }),
+      { ...userMessage("hang please"), session_id },
+    );
+    await settle();
+    expect(getMessages(db, session_id).filter((m) => m.role === "assistant")).toHaveLength(0);
+  });
+
+  test("a normal exchange is unaffected by the timeout", async () => {
+    const db = openDbAt(":memory:");
+    const session_id = createSession(db);
+    const body = await postChat(
+      makeDeps({ db, chatTimeoutMs: 60_000 }),
+      { ...userMessage("hi"), session_id },
+    );
+    expect(body).toContain("hello");
+    expect(body).not.toContain("timed out");
+    await settle();
+    expect(getMessages(db, session_id).filter((m) => m.role === "assistant")).toHaveLength(1);
+  });
+});
+
+describe("tool budget is per request", () => {
+  test("a repeated query in one request is refused, but the next request starts fresh", async () => {
+    let retrieveCalls = 0;
+    // Two identical searches in one loop; the second must be refused without retrieving.
+    const model = new MockLanguageModelV3({
+      doStream: [
+        {
+          stream: simulateReadableStream<LanguageModelV3StreamPart>({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "tool-call", toolCallId: "c1", toolName: "search_knowledge", input: JSON.stringify({ query: "dp" }) },
+              { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
+            ],
+          }),
+        },
+        {
+          stream: simulateReadableStream<LanguageModelV3StreamPart>({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "tool-call", toolCallId: "c2", toolName: "search_knowledge", input: JSON.stringify({ query: "dp" }) },
+              { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
+            ],
+          }),
+        },
+        {
+          stream: simulateReadableStream<LanguageModelV3StreamPart>({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "text-start", id: "t1" },
+              { type: "text-delta", id: "t1", delta: "done" },
+              { type: "text-end", id: "t1" },
+              { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+            ],
+          }),
+        },
+      ],
+    });
+    const deps = makeDeps({
+      chatModel: () => model as never,
+      retrieve: async () => {
+        retrieveCalls++;
+        return [chunk("notes/dp.md", "dp content")];
+      },
+    });
+    const body = await postChat(deps, { ...userMessage("explain dp"), mode: "agentic" });
+    expect(body).toContain("already called");
+    expect(retrieveCalls).toBe(2); // 1 pre-retrieval + 1 tool search; the repeat cost nothing
+
+    // A second request must not inherit the first request's repeat-set.
+    const model2 = toolThenTextModel("dp", "fresh");
+    const deps2 = makeDeps({
+      chatModel: () => model2 as never,
+      retrieve: async () => {
+        retrieveCalls++;
+        return [chunk("notes/dp.md", "dp content")];
+      },
+    });
+    await postChat(deps2, { ...userMessage("explain dp"), mode: "agentic" });
+    expect(retrieveCalls).toBe(4); // pre-retrieval + a tool search that was NOT refused
+  });
+});

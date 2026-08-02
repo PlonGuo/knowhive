@@ -22,7 +22,7 @@ import {
 } from "ai";
 import type { Database } from "bun:sqlite";
 import type { AppConfig, ChatMode } from "../../shared/schema.ts";
-import { SourceCollector, buildAgentTools } from "./agentTools.ts";
+import { SourceCollector, ToolBudget, buildAgentTools } from "./agentTools.ts";
 import {
   buildChatContext,
   buildDistillationPrompt,
@@ -48,6 +48,41 @@ export const MAX_AGENT_STEPS = 6;
 const TITLE_MAX_CHARS = 40;
 export const EVICTION_POLICY = { maxSemantic: 200, episodicTtlDays: 90 };
 
+/**
+ * Wall-clock ceiling on one /chat generation.
+ *
+ * The agentic eval produced two 15-17 minute runs (920s / 1042s) because
+ * stepCountIs() caps steps, not tool calls *within* a step — and nothing on the
+ * chat path had a timeout at all (learnings/evals/Agentic-vs-SingleShot.md).
+ * 180s is deliberately generous: a cold Ollama's first token alone can take tens
+ * of seconds, and a long answer streams for a while. It exists to kill runaways,
+ * not to police slow-but-working generations.
+ */
+const DEFAULT_CHAT_TIMEOUT_MS = 180_000;
+
+function chatTimeoutMs(fromDeps?: number): number {
+  return fromDeps ?? (Number(process.env.KNOWHIVE_CHAT_TIMEOUT_MS) || DEFAULT_CHAT_TIMEOUT_MS);
+}
+
+/** Timeout OR client disconnect — whichever fires first stops the upstream call. */
+function abortSignalFor(timeoutMs: number, clientSignal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return clientSignal ? AbortSignal.any([clientSignal, timeout]) : timeout;
+}
+
+function isAbort(err: unknown): boolean {
+  const name = (err as { name?: string } | undefined)?.name ?? "";
+  return name === "AbortError" || name === "TimeoutError" || /abort/i.test(String(err));
+}
+
+/** Surface a useful reason instead of the SDK's generic masked error string. */
+function streamErrorMessage(timeoutMs: number) {
+  return (error: unknown): string =>
+    isAbort(error)
+      ? `The response timed out after ${Math.round(timeoutMs / 1000)}s and was stopped. Try a narrower question, or turn Agent mode off if it is on.`
+      : `Chat failed: ${(error as Error)?.message ?? String(error)}`;
+}
+
 export interface ChatRoutesDeps {
   getConfig: () => AppConfig;
   /** Fresh model per call so config changes take effect without restart. */
@@ -64,6 +99,9 @@ export interface ChatRoutesDeps {
   db: Database;
   /** Plain-text generation for the summarizer (compression + distillation). */
   generate: (prompt: string) => Promise<string>;
+  /** Wall-clock ceiling for one generation. Defaults to KNOWHIVE_CHAT_TIMEOUT_MS
+   * or DEFAULT_CHAT_TIMEOUT_MS; injected so tests can use a tiny value. */
+  chatTimeoutMs?: number;
   /** Recall semantic memories relevant to the question (Phase M Task 3; optional).
    * Accepts the shared query vector to avoid re-embedding the question. */
   recallMemories?: (question: string, queryVector?: number[]) => Promise<string[]>;
@@ -232,6 +270,10 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       ? { retrieveMs: Math.round(timing.retrieve ?? 0), preLlmMs: Math.round(timing.ready ?? 0) }
       : undefined;
 
+    const timeoutMs = chatTimeoutMs(deps.chatTimeoutMs);
+    const abortSignal = abortSignalFor(timeoutMs, c.req.raw.signal);
+    const onStreamError = streamErrorMessage(timeoutMs);
+
     const withExtra = (base: string) => (systemExtra ? `${base}\n\n${systemExtra}` : base);
     const persist = (answer: string, sources: string[]) => {
       if (!session_id || !question) return;
@@ -245,6 +287,8 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       sources.add(...extractSources(chunks));
 
       const permissionMode = config.chat_permission_mode;
+      // Fresh per request: the cap and the repeat-set must not leak across chats.
+      const budget = new ToolBudget();
       const tools = buildAgentTools({
         retrieve: deps.retrieve,
         readNote: deps.readNote,
@@ -254,7 +298,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
         searchHistory: session_id ? (q) => searchEpisodic(deps.db, q, 5) : undefined,
         // readonly mode: write tools are not mounted at all (fail-closed).
         writeNotes: writeToolsEnabled(permissionMode) ? deps.writeNotes : undefined,
-      });
+      }, budget);
 
       // Approval continuation: the client re-sent the conversation with the user's
       // Allow/Deny recorded on the pending tool call. Those parts must round-trip
@@ -272,6 +316,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
         messages: agenticMessages,
         tools,
         toolApproval: toolApprovalFor(permissionMode),
+        abortSignal,
         stopWhen: stepCountIs(MAX_AGENT_STEPS),
         prepareStep: ({ stepNumber }) =>
           stepNumber >= MAX_AGENT_STEPS - 1
@@ -285,6 +330,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       });
 
       return result.toUIMessageStreamResponse({
+        onError: onStreamError,
         messageMetadata: withUsage(() => ({ sources: sources.list(), ...(timings ? { timings } : {}) })),
       });
     }
@@ -293,10 +339,16 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       model: deps.chatModel(),
       system: withExtra(buildSystemPrompt(config.custom_system_prompt)),
       messages: withPreface(modelMessages, preface),
-      onFinish: ({ text }) => persist(text, extractSources(chunks)),
+      abortSignal,
+      // Same guard as the agentic branch: a timeout/abort ends the stream with a
+      // non-"stop" reason, and half an answer must not enter the history.
+      onFinish: ({ text, finishReason }) => {
+        if (finishReason === "stop") persist(text, extractSources(chunks));
+      },
     });
 
     return result.toUIMessageStreamResponse({
+      onError: onStreamError,
       messageMetadata: withUsage(() => ({ sources: extractSources(chunks), ...(timings ? { timings } : {}) })),
     });
   });
