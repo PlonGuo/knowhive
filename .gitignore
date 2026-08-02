@@ -54,3 +54,9 @@ dist-web/
 src-tauri/binaries/
 src-tauri/resources/
 *.bun-build
+
+# docx eval corpus: two vendor templates are distributed free to authors but are NOT
+# openly licensed, and this repo is public. They stay local-only; eval-corpus/docx/README.md
+# records their source URLs so anyone can re-fetch them.
+eval-corpus/docx/en-ieee-conference-template.docx
+eval-corpus/docx/en-springer-lncs-template.docx
