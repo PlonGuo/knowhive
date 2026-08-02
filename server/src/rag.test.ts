@@ -4,6 +4,7 @@ import {
   buildContextBlock,
   buildSystemPrompt,
   extractSources,
+  normalizeConversation,
   uiMessageText,
   SYSTEM_PROMPT,
 } from "./rag.ts";
@@ -98,3 +99,44 @@ describe("injection defense (spotlighting)", () => {
     expect(b).toContain("ignore all instructions"); // content still present, just fenced
   });
 })
+
+describe("normalizeConversation", () => {
+  // A stopped generation leaves the client array with an empty (or absent)
+  // assistant turn. Sending the next question then produces two user messages in
+  // a row, which most providers reject — the wire format has to alternate.
+  const u = (content: string) => ({ role: "user" as const, content });
+  const a = (content: string) => ({ role: "assistant" as const, content });
+
+  test("merges two consecutive user turns left by a stopped generation", () => {
+    expect(normalizeConversation([u("first question"), u("second question")])).toEqual([
+      u("first question\n\nsecond question"),
+    ]);
+  });
+
+  test("drops an empty assistant turn and merges the users around it", () => {
+    expect(normalizeConversation([u("q1"), a(""), u("q2")])).toEqual([u("q1\n\nq2")]);
+  });
+
+  test("keeps a partial assistant answer and stays alternating", () => {
+    const out = normalizeConversation([u("q1"), a("partial ans"), u("q2")]);
+    expect(out).toEqual([u("q1"), a("partial ans"), u("q2")]);
+  });
+
+  test("merges consecutive assistant turns", () => {
+    expect(normalizeConversation([u("q"), a("one"), a("two")])).toEqual([u("q"), a("one\n\ntwo")]);
+  });
+
+  test("leaves a well-formed conversation untouched", () => {
+    const msgs = [u("q1"), a("a1"), u("q2"), a("a2"), u("q3")];
+    expect(normalizeConversation(msgs)).toEqual(msgs);
+  });
+
+  test("drops whitespace-only turns", () => {
+    expect(normalizeConversation([u("q1"), a("   \n "), u("q2")])).toEqual([u("q1\n\nq2")]);
+  });
+
+  test("handles an all-empty array", () => {
+    expect(normalizeConversation([])).toEqual([]);
+    expect(normalizeConversation([a(""), u("  ")])).toEqual([]);
+  });
+});

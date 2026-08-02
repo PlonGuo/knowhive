@@ -100,3 +100,31 @@ export function uiMessageText(msg: { content?: unknown; parts?: unknown[] } | un
     .join(" ")
     .trim();
 }
+
+/**
+ * Force a chat array into the alternating user/assistant shape providers expect.
+ *
+ * Stopping a generation mid-stream leaves the client with an empty or partial
+ * assistant turn. Dropping the empty one then puts two user turns back to back,
+ * which most providers reject outright — so consecutive same-role turns are
+ * joined rather than merely filtered. Blank turns disappear entirely.
+ *
+ * Only the stateless path needs this: in session mode the server reads history
+ * from SQLite, and an aborted exchange is never persisted (persistence is gated
+ * on finishReason === "stop"), so no orphan turn can exist there.
+ */
+export function normalizeConversation<T extends { role: string; content: string }>(
+  messages: T[],
+): T[] {
+  const out: T[] = [];
+  for (const msg of messages) {
+    if (typeof msg.content !== "string" || msg.content.trim().length === 0) continue;
+    const prev = out[out.length - 1];
+    if (prev && prev.role === msg.role) {
+      out[out.length - 1] = { ...prev, content: `${prev.content}\n\n${msg.content}` };
+      continue;
+    }
+    out.push(msg);
+  }
+  return out;
+}

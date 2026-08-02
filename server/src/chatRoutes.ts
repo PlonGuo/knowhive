@@ -37,6 +37,7 @@ import {
   buildContextBlock,
   buildSystemPrompt,
   extractSources,
+  normalizeConversation,
   uiMessageText,
 } from "./rag.ts";
 import { encodeVector } from "./retrieval.ts";
@@ -258,9 +259,12 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       systemExtra = ctx.systemExtra;
       preface = buildUserPreface({ summary: state.summary, memories: recalled, context: contextBlock });
     } else {
-      modelMessages = messages
-        .map((m) => ({ role: m.role, content: uiMessageText(m) }) as ModelMessage)
-        .filter((m) => typeof m.content === "string" && m.content.length > 0);
+      // normalizeConversation, not just a filter: a stopped generation leaves an
+      // empty assistant turn, and dropping it would put two user turns back to
+      // back — a shape most providers reject.
+      modelMessages = normalizeConversation(
+        messages.map((m) => ({ role: m.role, content: uiMessageText(m) })),
+      ) as ModelMessage[];
       preface = buildUserPreface({ context: contextBlock });
     }
 
@@ -363,7 +367,19 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
  * for the local-model context gauge.
  */
 function withUsage(base: () => Record<string, unknown>) {
-  return ({ part }: { part: { type: string; totalUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } } }) => ({
+  return ({
+    part,
+  }: {
+    part: {
+      type: string;
+      totalUsage?: {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+        inputTokenDetails?: { cacheReadTokens?: number };
+      };
+    };
+  }) => ({
     ...base(),
     ...(part.type === "finish" && part.totalUsage
       ? {
@@ -371,6 +387,12 @@ function withUsage(base: () => Record<string, unknown>) {
             inputTokens: part.totalUsage.inputTokens ?? null,
             outputTokens: part.totalUsage.outputTokens ?? null,
             totalTokens: part.totalUsage.totalTokens ?? null,
+            // Prompt-cache hit size. The 0% -> 22% multi-turn result came from an
+            // offline probe, but the provider reports this per request — passing it
+            // through turns cache hit rate into a live signal at zero extra cost.
+            // null (not 0) when the provider says nothing, so "no cache support" and
+            // "cache missed" stay distinguishable.
+            cachedInputTokens: part.totalUsage.inputTokenDetails?.cacheReadTokens ?? null,
           },
         }
       : {}),

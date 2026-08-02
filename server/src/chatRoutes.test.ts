@@ -694,3 +694,57 @@ describe("tool budget is per request", () => {
     expect(retrieveCalls).toBe(4); // pre-retrieval + a tool search that was NOT refused
   });
 });
+
+describe("prompt-cache visibility", () => {
+  /** finish part carrying the v7 usage shape, including cache detail. */
+  function modelWithUsage(usage: unknown) {
+    return new MockLanguageModelV3({
+      doStream: {
+        stream: simulateReadableStream<LanguageModelV3StreamPart>({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "ok" },
+            { type: "text-end", id: "t1" },
+            { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: usage as never },
+          ],
+        }),
+      },
+    });
+  }
+
+  test("finish metadata reports cached input tokens so cache hit rate is observable live", async () => {
+    // The 0% -> 22% prompt-cache result was measured with an offline probe. The
+    // provider already reports it per request; surfacing it makes the hit rate a
+    // live signal instead of a one-off experiment.
+    const sse = await postChat(
+      makeDeps({
+        chatModel: () =>
+          modelWithUsage({
+            inputTokens: { total: 1000, noCache: 780, cacheRead: 220, cacheWrite: undefined },
+            outputTokens: { total: 50, text: 50, reasoning: undefined },
+            raw: undefined,
+          }) as never,
+      }),
+      userMessage("hi"),
+    );
+    const finish = sse
+      .split("\n")
+      .filter((l) => l.startsWith("data: ") && !l.includes("[DONE]"))
+      .map((l) => JSON.parse(l.slice(6)))
+      .find((c) => c.type === "finish");
+    expect(finish.messageMetadata.usage.inputTokens).toBe(1000);
+    expect(finish.messageMetadata.usage.cachedInputTokens).toBe(220);
+  });
+
+  test("cachedInputTokens is null when the provider reports no cache detail", async () => {
+    const sse = await postChat(makeDeps(), userMessage("hi"));
+    const finish = sse
+      .split("\n")
+      .filter((l) => l.startsWith("data: ") && !l.includes("[DONE]"))
+      .map((l) => JSON.parse(l.slice(6)))
+      .find((c) => c.type === "finish");
+    expect(finish.messageMetadata.usage).toHaveProperty("cachedInputTokens");
+    expect(finish.messageMetadata.usage.cachedInputTokens).toBeNull();
+  });
+});

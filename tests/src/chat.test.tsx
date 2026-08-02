@@ -257,3 +257,83 @@ describe('ChatArea approval flow (Phase H)', () => {
     expect(JSON.stringify(second.body)).toContain('"approved":true')
   })
 })
+
+describe('stop button', () => {
+  /** A stream that stays open until the test closes it, so `streaming` stays true. */
+  function mockOpenStream() {
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null
+    const enc = new TextEncoder()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c
+          // A real fetch rejects/cancels when its signal aborts; the mock has to
+          // do the same or stop() looks like a no-op.
+          init?.signal?.addEventListener('abort', () => {
+            try {
+              c.error(new DOMException('aborted', 'AbortError'))
+            } catch {
+              /* already closed */
+            }
+          })
+          for (const chunk of [
+            { type: 'start', messageMetadata: { sources: [] } },
+            { type: 'start-step' },
+            { type: 'text-start', id: 'txt-0' },
+            { type: 'text-delta', id: 'txt-0', delta: 'partial' },
+          ]) {
+            c.enqueue(enc.encode(`data: ${JSON.stringify(chunk)}\n\n`))
+          }
+        },
+      })
+      return {
+        ok: true,
+        status: 200,
+        body: stream,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+      } as unknown as Response
+    })
+    return {
+      close: () => {
+        try {
+          controller?.close()
+        } catch {
+          /* already errored by the abort */
+        }
+      },
+    }
+  }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('swaps send for stop while streaming, and back again after stopping', async () => {
+    const open = mockOpenStream()
+    render(<ChatArea backendUrl={BACKEND} />)
+    expect(screen.getByTestId('send-button')).toBeInTheDocument()
+    expect(screen.queryByTestId('stop-button')).toBeNull()
+
+    await typeAndSend('a long question')
+    const stop = await waitFor(() => screen.getByTestId('stop-button'))
+    expect(screen.queryByTestId('send-button')).toBeNull()
+
+    await act(async () => {
+      fireEvent.click(stop)
+    })
+    await waitFor(() => expect(screen.getByTestId('send-button')).toBeInTheDocument())
+    expect(screen.queryByTestId('stop-button')).toBeNull()
+    open.close()
+  })
+
+  it('keeps the partial answer visible after stopping, so the turn is not lost', async () => {
+    const open = mockOpenStream()
+    render(<ChatArea backendUrl={BACKEND} />)
+    await typeAndSend('a long question')
+    const stop = await waitFor(() => screen.getByTestId('stop-button'))
+    await waitFor(() => expect(screen.getByText(/partial/)).toBeInTheDocument())
+    await act(async () => {
+      fireEvent.click(stop)
+    })
+    expect(screen.getByText(/partial/)).toBeInTheDocument()
+    open.close()
+  })
+})

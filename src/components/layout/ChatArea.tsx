@@ -13,6 +13,8 @@ export interface ExchangeUsage {
   inputTokens: number | null
   outputTokens: number | null
   totalTokens: number | null
+  /** Prompt-cache read tokens, when the provider reports them. */
+  cachedInputTokens?: number | null
 }
 
 interface ChatAreaProps {
@@ -150,7 +152,7 @@ export default function ChatArea({
     [backendUrl],
   )
 
-  const { messages, sendMessage, status, error, setMessages, addToolApprovalResponse } = useChat({
+  const { messages, sendMessage, status, error, setMessages, stop, addToolApprovalResponse } = useChat({
     transport,
     // After the user answers every pending Allow/Deny, resend automatically so the
     // server can resume (or skip) the gated tool call.
@@ -351,14 +353,29 @@ export default function ChatArea({
             className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             disabled={streaming}
           />
-          <button
-            data-testid="send-button"
-            onClick={submit}
-            disabled={streaming || !input.trim()}
-            className="rounded-xl bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
-          >
-            ↑
-          </button>
+          {streaming ? (
+            // Stopping aborts the fetch, which the server sees as a client
+            // disconnect and turns into an abortSignal on the upstream call —
+            // so the model actually stops generating, not just the UI.
+            <button
+              data-testid="stop-button"
+              onClick={() => void stop()}
+              aria-label="Stop generating"
+              title="Stop generating"
+              className="rounded-xl bg-muted px-3.5 py-1.5 text-sm font-medium text-foreground hover:bg-accent"
+            >
+              ■
+            </button>
+          ) : (
+            <button
+              data-testid="send-button"
+              onClick={submit}
+              disabled={!input.trim()}
+              className="rounded-xl bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+            >
+              ↑
+            </button>
+          )}
         </div>
       </div>
     </main>
