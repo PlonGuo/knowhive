@@ -29,7 +29,7 @@ test("status reports running=false, dir and extensions before start", () => {
   expect(watcher.status()).toEqual({
     running: false,
     knowledge_dir: dir,
-    extensions: [".md"],
+    extensions: [".docx", ".md", ".txt"],
     syncing: false,
   });
 });
@@ -55,7 +55,10 @@ test("a burst of events fires onChange once after the debounce window", async ()
 
 test("events for unwatched extensions are ignored", async () => {
   const { watcher, calls } = makeWatcher();
-  watcher.onFsEvent("notes.txt");
+  // .pdf is deliberately NOT watched: a dropped-in PDF must not trigger a docling
+  // model load from a background file event (see watcher.ts DEFAULT_EXTENSIONS).
+  watcher.onFsEvent("scan.pdf");
+  watcher.onFsEvent("notes.png");
   watcher.onFsEvent(".DS_Store");
   await Bun.sleep(60);
   expect(calls.length).toBe(0);

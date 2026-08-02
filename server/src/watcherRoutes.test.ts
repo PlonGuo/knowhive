@@ -22,7 +22,7 @@ test("GET /watcher/status returns the watcher status", async () => {
   expect(await res.json()).toEqual({
     running: false,
     knowledge_dir: dir,
-    extensions: [".md"],
+    extensions: [".docx", ".md", ".txt"],
     syncing: false,
   });
 });
