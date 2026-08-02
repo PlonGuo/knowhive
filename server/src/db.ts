@@ -3,6 +3,7 @@
 // `chunks` table + FTS5 mirror here; the vec0 virtual table (dimension-dependent on the
 // embedding model) is created in Phase B once the embedding dimension is known.
 import { Database } from "bun:sqlite";
+import { ftsTokenizer, type FtsTokenizer } from "./fts.ts";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as sqliteVec from "sqlite-vec";
@@ -143,13 +144,13 @@ CREATE TABLE IF NOT EXISTS chunks (
   created_at      TEXT DEFAULT (datetime('now'))
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-  content,
-  content='chunks',
-  content_rowid='id'
-);
+-- deleteChunksForFile / renameChunksFilePath / storeChunks all key on file_path.
+CREATE INDEX IF NOT EXISTS chunks_file ON chunks(file_path);
 
--- Keep the FTS index in sync with the chunks table.
+`;
+
+/** Kept out of SCHEMA: they must be recreated whenever chunks_fts is rebuilt. */
+const FTS_TRIGGERS = `
 CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
   INSERT INTO chunks_fts(rowid, content) VALUES (new.id, new.content);
 END;
@@ -163,7 +164,7 @@ END;
 `;
 
 /** Open a database at an explicit path (or ":memory:" for tests) with schema applied. */
-export function openDbAt(dbPath: string): Database {
+export function openDbAt(dbPath: string, tokenizer?: FtsTokenizer): Database {
   initSqlite();
   const db = new Database(dbPath, { create: true });
   db.exec("PRAGMA journal_mode = WAL;");
@@ -175,8 +176,43 @@ export function openDbAt(dbPath: string): Database {
     /* extension loading unavailable on this platform — brute-force path is unaffected */
   }
   db.exec(SCHEMA);
+  syncFtsTokenizer(db, tokenizer ?? ftsTokenizer(process.env.KNOWHIVE_FTS_TOKENIZER));
   migrate(db);
   return db;
+}
+
+/**
+ * Create the FTS mirror, and REBUILD it if the stored table uses a different
+ * tokenizer than the one we want.
+ *
+ * The rebuild is the load-bearing part. The schema uses CREATE VIRTUAL TABLE IF NOT
+ * EXISTS, which is a no-op once the table exists — so without this, an upgrading
+ * user would silently keep the old unicode61 index forever and never see the fix.
+ * Repopulating from `chunks` means no re-ingest and no re-embedding: the text is
+ * already there, only the inverted index is derived.
+ */
+function syncFtsTokenizer(db: Database, tokenizer: FtsTokenizer): void {
+  const row = db.query("SELECT sql FROM sqlite_master WHERE name = 'chunks_fts'").get() as
+    | { sql: string }
+    | null;
+  const wanted = tokenizer === "trigram" ? ", tokenize='trigram'" : "";
+  if (row && row.sql.includes("tokenize='trigram'") === (tokenizer === "trigram")) return;
+
+  if (row) {
+    // Triggers reference the table; drop them first so the recreate is clean.
+    db.exec("DROP TRIGGER IF EXISTS chunks_ai; DROP TRIGGER IF EXISTS chunks_ad; DROP TRIGGER IF EXISTS chunks_au;");
+    db.exec("DROP TABLE chunks_fts;");
+  }
+  db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+  content,
+  content='chunks',
+  content_rowid='id'${wanted}
+);`);
+  db.exec(FTS_TRIGGERS);
+  if (row) {
+    db.exec("INSERT INTO chunks_fts(rowid, content) SELECT id, content FROM chunks;");
+    console.log(`[db] rebuilt chunks_fts with the ${tokenizer} tokenizer`);
+  }
 }
 
 /** Idempotent column additions for tables that predate Phase M (multi-session chat).

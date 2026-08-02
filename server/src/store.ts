@@ -2,6 +2,7 @@
 // (source of truth); FTS5 mirror is kept in sync by triggers (see db.ts). Retrieval fuses
 // brute-force vector KNN with FTS5 keyword hits via RRF.
 import type { Database } from "bun:sqlite";
+import { buildFtsQuery, type FtsTokenizer } from "./fts.ts";
 import type { ChunkedDocument } from "./chunker.ts";
 import type { FrontmatterData } from "./frontmatter.ts";
 import { BruteForceIndex, decodeVector, encodeVector, type Candidate } from "./retrieval.ts";
@@ -94,18 +95,33 @@ export function allChunkCandidates(db: Database): Candidate[] {
 }
 
 /** FTS5 keyword hits, best-first (lower bm25 = better). Returns ids in rank order. */
+/** Read the tokenizer off the live table so the query shape can never drift from
+ * the index. Cached per handle — it cannot change while the DB is open. */
+const tokenizerCache = new WeakMap<Database, FtsTokenizer>();
+function tokenizerOf(db: Database): FtsTokenizer {
+  const hit = tokenizerCache.get(db);
+  if (hit) return hit;
+  const row = db.query("SELECT sql FROM sqlite_master WHERE name = 'chunks_fts'").get() as
+    | { sql: string }
+    | null;
+  const tk: FtsTokenizer = row?.sql.includes("tokenize='trigram'") ? "trigram" : "unicode61";
+  tokenizerCache.set(db, tk);
+  return tk;
+}
+
 export function ftsSearch(db: Database, query: string, limit: number): number[] {
-  const cleaned = query.trim();
-  if (!cleaned) return [];
+  const expr = buildFtsQuery(query, tokenizerOf(db));
+  if (!expr) return [];
   try {
     const rows = db
       .query(
         `SELECT rowid AS id FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT ?`,
       )
-      .all(cleaned, limit) as { id: number }[];
+      .all(expr, limit) as { id: number }[];
     return rows.map((r) => r.id);
   } catch {
-    // Arbitrary user text can be invalid FTS5 syntax — treat as no keyword hits.
+    // buildFtsQuery quotes every term, so syntax errors should be impossible now;
+    // the catch stays as a backstop rather than as the primary defence it used to be.
     return [];
   }
 }
