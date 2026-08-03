@@ -15,16 +15,26 @@ export type CrossEncoderScorer = (query: string, passages: string[]) => Promise<
  *
  * Calibrated on a 28-answerable / 22-unanswerable question set over eval-corpus/md
  * (495 chunks, bge-m3, bge-reranker-v2-m3 int8) — backend/eval_results/abstain_spike.json,
- * write-up in learnings/career/09-工程改进实战记录.md §16. Measured separation:
+ * write-up in learnings/career/09-工程改进实战记录.md §14. Measured separation:
  *
  *   bucket    n    p25     median   p75
  *   answerable 28   0.539   2.332    4.577
  *   near-miss  13  -4.305  -3.769   -2.218   (topic in corpus, answer absent)
  *   off-topic   9  -7.106  -6.109   -4.680
  *
- * At -2 the sweep costs 1/28 false abstentions (4%) and catches 19/22 unanswerable
- * questions (86%; 10/13 of the hard near-miss bucket, 9/9 off-topic). -2 is the knee:
- * moving to -1.4 doubles false abstentions for +5pp catch.
+ * At -2 this costs 1/28 false abstentions (4%) and catches 20/22 unanswerable questions
+ * (91%; 11/13 of the hard near-miss bucket, 9/9 off-topic). -2 is the knee: moving to
+ * -1.4 doubles false abstentions for a few points of catch.
+ *
+ * Confirmed by a pre-registered RAGAS run (28 answerable questions, k=5, same corpus and
+ * grader, only KNOWHIVE_RELEVANCE_FLOOR varied): context_recall 0.9345 -> 0.9167, a 0.0178
+ * drop against a +/-0.02 noise floor. Inside, but with only 11% of the floor to spare --
+ * one more false abstention would put it outside, so recalibrate if corpus or model changes.
+ *
+ * A tiered cascade (cheap gate at the extremes, an LLM "can this be answered" check in the
+ * ambiguous middle) was designed and then dropped: all three of the errors above sit
+ * OUTSIDE the ambiguous band, because the failures are confident-but-wrong, not uncertain.
+ * Covering them needs a band spanning half of all queries. See 09 for the write-up.
  *
  * MODEL-SPECIFIC. These are raw logits from one reranker at one quantization — swapping
  * either invalidates the number. Recalibrate with server/spike-abstain.ts.
