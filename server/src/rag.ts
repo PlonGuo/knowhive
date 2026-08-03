@@ -38,7 +38,18 @@ const CONTEXT_INLINE_GUARD =
  * the system prompt stays a stable, cacheable prefix across turns. Carries its own
  * inline untrusted-data guard (defense-in-depth for the user-role placement). */
 export function buildContextBlock(chunks: readonly ChunkRow[]): string {
-  if (chunks.length === 0) return "No relevant context was found in the knowledge base.";
+  // Reached either because the knowledge base is empty or because the relevance gate
+  // abstained (crossEncoder.ts). Say the search RAN and came back empty: a bare missing
+  // context block reads as "the system forgot to attach it", and the model quietly
+  // answers from its weights instead — the exact failure the gate exists to prevent.
+  if (chunks.length === 0) {
+    return (
+      "No relevant context was found. I searched the knowledge base for this question " +
+      "and nothing relevant came back. Tell me plainly that this is not in my notes. " +
+      "Do not present general knowledge as if it came from my documents; if you add " +
+      "anything from your own knowledge, label it clearly as outside the knowledge base."
+    );
+  }
   const context = chunks.map((c) => `[Source: ${c.file_path}]\n${c.content}`).join("\n\n");
   return `${CONTEXT_INLINE_GUARD}\n<retrieved_context>\n${context}\n</retrieved_context>`;
 }

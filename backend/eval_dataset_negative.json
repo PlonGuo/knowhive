@@ -1,0 +1,112 @@
+[
+  {
+    "question": "最长递增子序列 LIS 用动态规划怎么解？状态转移方程是什么？",
+    "bucket": "near",
+    "why": "语料有爬楼梯和最大子数组两道 DP 题，但没有 LIS"
+  },
+  {
+    "question": "合并两个有序链表的代码怎么写？需要用哑结点吗？",
+    "bucket": "near",
+    "why": "语料有反转链表，没有合并有序链表"
+  },
+  {
+    "question": "翻转二叉树用递归怎么实现？时间复杂度是多少？",
+    "bucket": "near",
+    "why": "语料只有三道 LeetCode 题，都不涉及二叉树"
+  },
+  {
+    "question": "Rust 的生命周期标注 'a 是什么意思？什么时候必须显式写出来？",
+    "bucket": "near",
+    "why": "语料有 Rust Book ch04（所有权）和 ch16（并发），生命周期是 ch10"
+  },
+  {
+    "question": "Rust 的 trait object 和泛型参数有什么区别？各自的运行时开销如何？",
+    "bucket": "near",
+    "why": "ch04/ch16 都不讲 trait"
+  },
+  {
+    "question": "Rust 的 unsafe 块什么时候必须用？它关闭了哪些检查？",
+    "bucket": "near",
+    "why": "ch04/ch16 不涉及 unsafe"
+  },
+  {
+    "question": "ES6 的 Proxy 和 Reflect 怎么配合使用？能拦截哪些操作？",
+    "bucket": "near",
+    "why": "语料只有 ES6 教程的 async 一章"
+  },
+  {
+    "question": "JavaScript 的原型链是怎么查找属性的？和 class 继承什么关系？",
+    "bucket": "near",
+    "why": "语料只有 async 章节，不讲原型"
+  },
+  {
+    "question": "Node.js 的 Cluster 模块怎么实现多进程负载均衡？",
+    "bucket": "near",
+    "why": "语料有 stream 文档切片，没有 cluster"
+  },
+  {
+    "question": "红楼梦里林黛玉最后是怎么死的？临终说了什么？",
+    "bucket": "near",
+    "why": "语料只有前两回，黛玉之死在第九十八回"
+  },
+  {
+    "question": "傲慢与偏见里 Darcy 第二次向 Elizabeth 求婚时说了什么？",
+    "bucket": "near",
+    "why": "语料只有第 1-8 章，第二次求婚在第 58 章"
+  },
+  {
+    "question": "Kubernetes 的 Ingress 怎么配置 TLS 证书？需要哪些字段？",
+    "bucket": "near",
+    "why": "语料是 kubectl 资源缩写表，不含 Ingress TLS 配置"
+  },
+  {
+    "question": "RAGAS 的 answer_correctness 指标是怎么计算的？和 faithfulness 有什么区别？",
+    "bucket": "near",
+    "why": "迁移验证文档只用了四个指标，不含 answer_correctness"
+  },
+  {
+    "question": "Python 的 GIL 是什么？它对多线程 CPU 密集任务有什么影响？",
+    "bucket": "far",
+    "why": "语料无 Python 内容"
+  },
+  {
+    "question": "TCP 三次握手的过程是什么？为什么不是两次？",
+    "bucket": "far",
+    "why": "语料无网络协议内容"
+  },
+  {
+    "question": "MySQL 的 B+ 树索引为什么比 B 树更适合范围查询？",
+    "bucket": "far",
+    "why": "语料无数据库内容"
+  },
+  {
+    "question": "Redis 的 RDB 和 AOF 两种持久化方式有什么区别？怎么选？",
+    "bucket": "far",
+    "why": "语料无 Redis 内容"
+  },
+  {
+    "question": "什么是 CAP 定理？分区容错性为什么通常必须保证？",
+    "bucket": "far",
+    "why": "语料无分布式理论内容"
+  },
+  {
+    "question": "React 的 useEffect 依赖数组写错会导致什么问题？怎么排查？",
+    "bucket": "far",
+    "why": "语料无 React 内容"
+  },
+  {
+    "question": "Docker 镜像的分层存储是怎么工作的？为什么能复用？",
+    "bucket": "far",
+    "why": "语料无 Docker 内容"
+  },
+  {
+    "question": "神经网络训练时梯度消失是什么原因造成的？残差连接为什么能缓解？",
+    "bucket": "far",
+    "why": "语料无深度学习基础内容"
+  },
+  {
+    "question": "HTTP/2 的多路复用解决了 HTTP/1.1 的什么问题？",
+    "bucket": "far",
+    "why": "语料无 HTTP 协议内容"
+  }
+]

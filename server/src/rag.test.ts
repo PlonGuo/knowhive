@@ -53,6 +53,16 @@ test("buildContextBlock states when no context found", () => {
   expect(buildContextBlock([])).toContain("No relevant context was found");
 });
 
+test("the empty-context block states a search happened and blocks parametric fallback", () => {
+  // Deleting the context is not enough — a bare absence reads as "the system forgot to
+  // attach it", and the model answers from weights instead. The block has to say the
+  // search ran, came back empty, and that outside knowledge must not be passed off as
+  // the user's notes.
+  const block = buildContextBlock([]);
+  expect(block).toMatch(/searched/i);
+  expect(block).toMatch(/general knowledge|outside|own knowledge/i);
+});
+
 test("extractSources dedupes preserving order", () => {
   const sources = extractSources([chunk("a.md", "x"), chunk("b.md", "y"), chunk("a.md", "z")]);
   expect(sources).toEqual(["a.md", "b.md"]);

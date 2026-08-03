@@ -35,7 +35,7 @@ import { recallSemanticMemories, runEviction } from "./sessions.ts";
 import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { deleteChunksForFile, expandToParents, hybridSearch } from "./store.ts";
-import { rerankCrossEncoder } from "./crossEncoder.ts";
+import { relevanceFloor, rerankCrossEncoder } from "./crossEncoder.ts";
 import {
   crossEncoderScore,
   downloadStatus,
@@ -300,7 +300,16 @@ const retrieveRanked = async (query: string, k: number, precomputedVector?: numb
   const t2 = T ? T() : 0;
 
   if (config.reranker_backend === "cross-encoder") {
-    const hits = await rerankCrossEncoder(query, candidates, k, crossEncoderScore);
+    // Relevance gate: [] here means "searched, found nothing relevant" and flows into
+    // buildContextBlock's abstention text. Only this branch has calibrated scores —
+    // the LLM reranker returns a ranking, not comparable magnitudes.
+    const hits = await rerankCrossEncoder(
+      query,
+      candidates,
+      k,
+      crossEncoderScore,
+      relevanceFloor(process.env.KNOWHIVE_RELEVANCE_FLOOR),
+    );
     if (T) console.log(`[timing.retrieve] embed=${Math.round(t1 - t0)}ms search=${Math.round(t2 - t1)}ms rerank=${Math.round(T() - t2)}ms`);
     return hits;
   }
