@@ -172,6 +172,16 @@ def main(argv: list[str] | None = None) -> None:
     print("\n=== TS stack RAGAS scores ===")
     print(json.dumps(scores, ensure_ascii=False, indent=2))
 
+    # Environment snapshot. Without it a result file is not reproducible: `num_samples`
+    # alone matched across two entirely different corpora once, and a bare model alias
+    # ("deepseek-chat") silently repointed to a different model between runs.
+    env_snapshot: dict = {"k": args.k, "evaluator_model": args.evaluator_model}
+    try:
+        with urllib.request.urlopen(f"{args.base}/config", timeout=10) as resp:
+            env_snapshot["sidecar_config"] = json.loads(resp.read())  # api_key is masked
+    except Exception as err:  # never let bookkeeping fail the run
+        env_snapshot["sidecar_config_error"] = str(err)
+
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
@@ -181,8 +191,13 @@ def main(argv: list[str] | None = None) -> None:
                 "num_samples": len(eval_data),
                 "stack": "ts",
                 "mode": args.mode,
+                "env": env_snapshot,
                 "scores": scores,
                 "behavior": behavior,
+                # Raw answers + contexts, so a finding can be re-checked (re-grade with a
+                # different grader, length-controlled analysis, manual read) without
+                # paying for generation again.
+                "outputs": pipeline_results,
             },
             ensure_ascii=False,
             indent=2,
