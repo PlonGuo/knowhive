@@ -11,6 +11,18 @@
 export type CrossEncoderScorer = (query: string, passages: string[]) => Promise<number[]>;
 
 /**
+ * Optional observer for the gate decision. The top score is the single number that
+ * explains an abstention, and it used to be computed and discarded — a caller that
+ * only sees `[]` cannot tell "nothing relevant" from "reranker crashed and failed open".
+ * Purely for observability: it must not influence the return value.
+ */
+export type RerankObserver = (info: {
+  topScore: number;
+  floor: number | null;
+  abstained: boolean;
+}) => void;
+
+/**
  * Abstain when the best candidate scores below this.
  *
  * Calibrated on a 28-answerable / 22-unanswerable question set over eval-corpus/md
@@ -60,6 +72,7 @@ export async function rerankCrossEncoder<T extends { content: string }>(
   k: number,
   score: CrossEncoderScorer,
   floor: number | null = null,
+  observe?: RerankObserver,
 ): Promise<T[]> {
   if (chunks.length <= 1) return chunks.slice(0, k);
   try {
@@ -71,7 +84,17 @@ export async function rerankCrossEncoder<T extends { content: string }>(
     // Gate on the best score only: the question is "did retrieval find anything at
     // all", not "is every chunk good". A weak tail behind a strong hit is normal and
     // the k cutoff already handles it.
-    if (floor !== null && ranked[0]!.s < floor) return [];
+    const topScore = ranked[0]!.s;
+    const abstained = floor !== null && topScore < floor;
+    // Reporting must never change the outcome, so a broken observer is swallowed.
+    if (observe) {
+      try {
+        observe({ topScore, floor, abstained });
+      } catch (err) {
+        console.error("[crossEncoder] rerank observer threw (ignored):", err);
+      }
+    }
+    if (abstained) return [];
     return ranked.slice(0, k).map((x) => x.c);
   } catch (err) {
     // Fail OPEN, never closed: a dead reranker must degrade to hybrid order, not to a

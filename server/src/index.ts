@@ -35,7 +35,7 @@ import { recallSemanticMemories, runEviction } from "./sessions.ts";
 import { sessionRoutes } from "./sessionRoutes.ts";
 import { setupRoutes } from "./setupRoutes.ts";
 import { deleteChunksForFile, expandToParents, hybridSearch } from "./store.ts";
-import { relevanceFloor, rerankCrossEncoder } from "./crossEncoder.ts";
+import { relevanceFloor, rerankCrossEncoder, type RerankObserver } from "./crossEncoder.ts";
 import {
   crossEncoderScore,
   downloadStatus,
@@ -49,6 +49,7 @@ import { SUMMARIZE_SYSTEM_PROMPT } from "./summary.ts";
 import { summaryRoutes } from "./summaryRoutes.ts";
 import { syncKnowledgeDir } from "./sync.ts";
 import { runTestLlm } from "./testLlm.ts";
+import { initTracing, shutdownTracing, traced, tracingActive } from "./tracing.ts";
 import { FileWatcher } from "./watcher.ts";
 import { watcherRoutes } from "./watcherRoutes.ts";
 
@@ -287,10 +288,35 @@ app.route("/", pdfRoutes());
 // Parent-child (config.use_parent_expansion) applies LAST, after reranking: ranking wants
 // the small, precise child text, while the model wants the surrounding passage. Expanding
 // before the rerank would hand the cross-encoder diluted passages and undo the point.
-const retrieve = async (query: string, k: number, precomputedVector?: number[]) => {
-  const ranked = await retrieveRanked(query, k, precomputedVector);
-  return config.use_parent_expansion ? expandToParents(db, ranked) : ranked;
-};
+// Tracing note: the spans below sit at exactly the same seams as the KNOWHIVE_TIMING
+// probes. That is deliberate — one set of instrumentation points, two products (a
+// millisecond number for the latency waterfall, a span with inputs/outputs for Langfuse),
+// so the two can never disagree about where a boundary is.
+const retrieve = async (query: string, k: number, precomputedVector?: number[]) =>
+  traced("retrieve", "chain", async (rec) => {
+    const ranked = await retrieveRanked(query, k, precomputedVector);
+    if (!config.use_parent_expansion) {
+      rec.set({ input: { query, k }, output: { chunks: ranked.length, expanded: false } });
+      return ranked;
+    }
+    // Expansion is last on purpose: ranking wants the small precise child, the model
+    // wants the surrounding passage.
+    const expanded = traced("expand-to-parents", "span", (span) => {
+      const out = expandToParents(db, ranked);
+      span.set({
+        input: { children: ranked.length },
+        // Fewer-but-complete is the expected shape here, not a bug — several children
+        // routinely collapse into one parent.
+        output: { parents: out.length, sources: sourcePaths(out) },
+      });
+      return out;
+    });
+    rec.set({ input: { query, k }, output: { chunks: expanded.length, expanded: true } });
+    return expanded;
+  });
+
+/** File paths of a hit list — the one field that makes a retrieval span readable at a glance. */
+const sourcePaths = (rows: { file_path?: string }[]) => rows.map((r) => r.file_path).filter(Boolean);
 
 const retrieveRanked = async (query: string, k: number, precomputedVector?: number[]) => {
   // Env-gated internal split (KNOWHIVE_TIMING=1) so the latency waterfall can drill
@@ -298,43 +324,89 @@ const retrieveRanked = async (query: string, k: number, precomputedVector?: numb
   const T = process.env.KNOWHIVE_TIMING ? () => performance.now() : null;
   const t0 = T ? T() : 0;
   // /chat passes a shared vector so the question is embedded once, not twice.
-  const queryVector = precomputedVector ?? (await embedder([query]))[0];
+  const queryVector =
+    precomputedVector ??
+    (await traced("embed-query", "embedding", async (rec) => {
+      const vec = (await embedder([query]))[0];
+      rec.set({ input: query, output: { dimensions: vec?.length ?? 0 } });
+      return vec;
+    }));
   const t1 = T ? T() : 0;
   if (!config.use_reranker) {
-    const hits = hybridSearch(db, queryVector!, query, k);
+    const hits = traced("hybrid-search", "retriever", (rec) => {
+      const out = hybridSearch(db, queryVector!, query, k);
+      rec.set({ input: { query, k }, output: { hits: out.length, sources: sourcePaths(out) } });
+      return out;
+    });
     if (T) console.log(`[timing.retrieve] embed=${Math.round(t1 - t0)}ms search=${Math.round(T() - t1)}ms rerank=0ms`);
     return hits;
   }
 
-  const candidates = hybridSearch(db, queryVector!, query, RERANK_CANDIDATES);
+  const candidates = traced("hybrid-search", "retriever", (rec) => {
+    const out = hybridSearch(db, queryVector!, query, RERANK_CANDIDATES);
+    rec.set({
+      input: { query, k: RERANK_CANDIDATES },
+      output: { hits: out.length, sources: sourcePaths(out) },
+    });
+    return out;
+  });
   const t2 = T ? T() : 0;
 
   if (config.reranker_backend === "cross-encoder") {
     // Relevance gate: [] here means "searched, found nothing relevant" and flows into
     // buildContextBlock's abstention text. Only this branch has calibrated scores —
     // the LLM reranker returns a ranking, not comparable magnitudes.
-    const hits = await rerankCrossEncoder(
-      query,
-      candidates,
-      k,
-      crossEncoderScore,
-      relevanceFloor(process.env.KNOWHIVE_RELEVANCE_FLOOR),
-    );
+    const floor = relevanceFloor(process.env.KNOWHIVE_RELEVANCE_FLOOR);
+    const hits = await traced("rerank-cross-encoder", "retriever", async (rec) => {
+      // Captured from the observer so the gate span can report WHY it abstained; without
+      // it an empty result is indistinguishable from a reranker that failed open.
+      // A holder rather than a `let`: TS cannot see that the observer callback runs, so a
+      // plain binding stays narrowed to `null` and every read below becomes `never`.
+      const gate: { info: Parameters<RerankObserver>[0] | null } = { info: null };
+      const out = await rerankCrossEncoder(query, candidates, k, crossEncoderScore, floor, (info) => {
+        gate.info = info;
+      });
+      rec.set({
+        input: { query, candidates: candidates.length, k },
+        output: { hits: out.length, sources: sourcePaths(out) },
+        metadata: { topScore: gate.info?.topScore ?? null, scored: gate.info !== null },
+      });
+      traced("abstention-gate", "guardrail", (span) =>
+        span.set({
+          input: { topScore: gate.info?.topScore ?? null, floor },
+          output: {
+            // "not-scored" is the fail-open path: the reranker threw and we degraded to
+            // hybrid order, which is NOT evidence about the corpus and must not read as a pass.
+            decision: gate.info === null ? "not-scored" : gate.info.abstained ? "abstain" : "answer",
+          },
+        }),
+      );
+      return out;
+    });
     if (T) console.log(`[timing.retrieve] embed=${Math.round(t1 - t0)}ms search=${Math.round(t2 - t1)}ms rerank=${Math.round(T() - t2)}ms`);
     return hits;
   }
-  return rerankChunks(
-    query,
-    candidates,
-    k,
-    async (prompt) => {
-      const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
-      return text;
-    },
-    // "coverage" won the k-sweep (learnings/evals/Reranker-K-Sweep.md): best precision AND
-    // recall at k=5. The env override remains for re-running the A/B.
-    process.env.KNOWHIVE_RERANK_STYLE === "relevance" ? "relevance" : "coverage",
-  );
+  return traced("rerank-llm", "retriever", async (rec) => {
+    const out = await rerankChunks(
+      query,
+      candidates,
+      k,
+      async (prompt) => {
+        const { text } = await generateText({ model: chatModel(), prompt, temperature: 0 });
+        return text;
+      },
+      // "coverage" won the k-sweep (learnings/evals/Reranker-K-Sweep.md): best precision AND
+      // recall at k=5. The env override remains for re-running the A/B.
+      process.env.KNOWHIVE_RERANK_STYLE === "relevance" ? "relevance" : "coverage",
+    );
+    rec.set({
+      input: { query, candidates: candidates.length, k },
+      output: { hits: out.length, sources: sourcePaths(out) },
+      // No gate on this path: the LLM reranker returns a ranking, not comparable scores.
+      metadata: { gated: false },
+    });
+    return out;
+  });
 };
 
 // Used for Phase B verification, the RAG retrieve step, and the RAGAS eval adapter.
@@ -402,6 +474,18 @@ app.route("/", sessionRoutes({ db }));
 app.route("/", memoryRoutes({ db, embedFacts: (facts) => embedder(facts) }));
 // Startup eviction sweep (LRU cap on semantic, TTL on episodic).
 runEviction(db, EVICTION_POLICY);
+
+// Tracing (dev only — no keys, no import, no signal handlers). Fire-and-forget: a
+// request arriving before init resolves is simply untraced, which beats delaying startup.
+void initTracing().then(() => {
+  if (!tracingActive()) return;
+  // Only registered when tracing is on, so the off path keeps its exact previous exit
+  // behaviour. The exporter batches, so a sidecar killed by the shell would otherwise
+  // drop the spans it had not flushed yet.
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => void shutdownTracing().finally(() => process.exit(0)));
+  }
+});
 
 console.log(
   `[server] KnowHive sidecar listening on http://127.0.0.1:${port} ` +

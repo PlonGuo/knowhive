@@ -27,6 +27,11 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@langfuse/client": "^5.10.0",
+    "@langfuse/otel": "^5.10.0",
+    "@langfuse/tracing": "^5.10.0",
+    "@langfuse/vercel-ai-sdk": "^5.10.0",
+    "@opentelemetry/sdk-node": "^0.221.0",
     "@types/bun": "latest"
   },
   "trustedDependencies": [

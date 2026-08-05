@@ -22,6 +22,27 @@ import {
 } from "ai";
 import type { Database } from "bun:sqlite";
 import type { AppConfig, ChatMode } from "../../shared/schema.ts";
+import { traced, tracedOpen, withTraceAttributes, type OpenSpan } from "./tracing.ts";
+
+/**
+ * Request-scoped handoff for the chat span the middleware opens. Keyed by the raw
+ * Request (a WeakMap, so an abandoned request cannot leak) rather than Hono context
+ * variables, which would need the route's Env threaded through every signature.
+ */
+const chatSpans = new WeakMap<Request, { span: OpenSpan; claimed: boolean }>();
+
+/**
+ * Hand the chat span to the streaming layer: it now ends when the stream ends, not when
+ * the handler returns. Returns a closer that is safe to call from several callbacks —
+ * finish and error can both fire, and only the first close counts.
+ */
+function claimChatSpan(request: Request): { span: OpenSpan | null; close: () => void } {
+  const handle = chatSpans.get(request);
+  if (!handle) return { span: null, close: () => {} };
+  handle.claimed = true;
+  chatSpans.delete(request);
+  return { span: handle.span, close: () => handle.span.end() };
+}
 import { SourceCollector, ToolBudget, buildAgentTools } from "./agentTools.ts";
 import {
   buildChatContext,
@@ -210,6 +231,38 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     runEviction(deps.db, EVICTION_POLICY);
   }
 
+  // One span per chat request, so retrieval and the LLM call land in the SAME tree
+  // rather than two unrelated traces. Done as middleware on purpose: the handler body
+  // stays untouched, and when tracing is off this is a straight pass-through to next().
+  // Hono caches the parsed body, so reading session_id here does not consume it.
+  //
+  // The span outlives the middleware: the handler returns as soon as the stream starts,
+  // so closing on return would time "how long until the first byte" and label it as the
+  // whole request. The handler claims the span and closes it when the stream actually
+  // finishes; if it never claims (validation error, throw), we close here.
+  app.use("/chat", async (c, next) => {
+    let sessionId: string | undefined;
+    try {
+      sessionId = ((await c.req.json()) as { session_id?: string }).session_id;
+    } catch {
+      // Malformed/absent body is the handler's problem to report, not ours.
+    }
+    return withTraceAttributes(sessionId ? { sessionId } : {}, () =>
+      tracedOpen("chat", "chain", async (span) => {
+        const handle = { span, claimed: false };
+        chatSpans.set(c.req.raw, handle);
+        try {
+          await next();
+        } finally {
+          if (!handle.claimed) {
+            chatSpans.delete(c.req.raw);
+            span.end();
+          }
+        }
+      }),
+    );
+  });
+
   app.post("/chat", async (c) => {
     const { messages, mode, session_id } = (await c.req.json()) as {
       messages: UIMessage[];
@@ -229,7 +282,17 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     const question = uiMessageText(lastUser);
     // Embed the question once and share the vector with retrieve + recall (dedup).
-    const queryVector = question && deps.embedQuery ? await deps.embedQuery(question) : undefined;
+    // The span lives HERE, not in retrieve's embed branch: because of this dedup that
+    // branch never runs on the chat path, so instrumenting it alone leaves the embed
+    // step invisible in exactly the trace you care about.
+    const queryVector =
+      question && deps.embedQuery
+        ? await traced("embed-query", "embedding", async (rec) => {
+            const vec = await deps.embedQuery!(question);
+            rec.set({ input: question, output: { dimensions: vec.length }, metadata: { sharedWith: ["retrieve", "recall"] } });
+            return vec;
+          })
+        : undefined;
     const chunks = question ? await deps.retrieve(question, 5, queryVector) : [];
     if (timing) timing.retrieve = performance.now() - timing.t0;
     const contextBlock = buildContextBlock(chunks);
@@ -276,7 +339,21 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
 
     const timeoutMs = chatTimeoutMs(deps.chatTimeoutMs);
     const abortSignal = abortSignalFor(timeoutMs, c.req.raw.signal);
-    const onStreamError = streamErrorMessage(timeoutMs);
+    const rawOnStreamError = streamErrorMessage(timeoutMs);
+    // The chat span now belongs to the stream. Everything past this point must close it
+    // on every exit — completion, error, and abort alike — or the trace never exports.
+    //
+    // Closed from streamText's own onFinish, NOT toUIMessageStreamResponse's: passing an
+    // onFinish there makes the SDK reassemble the final message list, which needs
+    // `originalMessages` to resolve a tool call carried over from an approval pause and
+    // otherwise throws "No tool invocation found for tool call ID". Observability must
+    // not change the shape of the response — the approval-continuation test caught this.
+    const chatSpan = claimChatSpan(c.req.raw);
+    const onStreamError = (error: unknown) => {
+      chatSpan.close();
+      return rawOnStreamError(error);
+    };
+    abortSignal.addEventListener("abort", chatSpan.close, { once: true });
 
     const withExtra = (base: string) => (systemExtra ? `${base}\n\n${systemExtra}` : base);
     const persist = (answer: string, sources: string[]) => {
@@ -326,9 +403,15 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
           stepNumber >= MAX_AGENT_STEPS - 1
             ? { activeTools: [], toolChoice: "none" as const }
             : undefined,
+        // functionId is what separates the two arms in Langfuse — without it both
+        // branches report as one anonymous generation and you cannot compare them.
+        telemetry: { functionId: "chat-agentic" },
         // Persist only on real completion — an approval pause ends this stream with
         // finishReason 'tool-calls'; the continuation request persists the exchange.
+        // The span closes on every finish reason: one span per HTTP request, and an
+        // approval pause really is the end of THIS request.
         onFinish: ({ text, finishReason }) => {
+          chatSpan.close();
           if (finishReason === "stop") persist(text, sources.list());
         },
       });
@@ -344,9 +427,11 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       system: withExtra(buildSystemPrompt(config.custom_system_prompt)),
       messages: withPreface(modelMessages, preface),
       abortSignal,
+      telemetry: { functionId: "chat-single" },
       // Same guard as the agentic branch: a timeout/abort ends the stream with a
       // non-"stop" reason, and half an answer must not enter the history.
       onFinish: ({ text, finishReason }) => {
+        chatSpan.close();
         if (finishReason === "stop") persist(text, extractSources(chunks));
       },
     });

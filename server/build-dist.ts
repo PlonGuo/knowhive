@@ -13,6 +13,20 @@ import { $ } from "bun";
 
 const NATIVE_EXTERNALS = ["onnxruntime-node", "sharp"];
 
+// Dev-only observability. Marked external but deliberately NOT installed into the
+// resources dir (step 2 only installs NATIVE_EXTERNALS), which makes "tracing never
+// ships" a property of the build rather than a promise in a comment: the packaged
+// bundle carries no Langfuse/OTel code at all. src/tracing.ts reaches these through
+// dynamic import inside a branch that requires LANGFUSE_* keys, so the missing modules
+// are unreachable in a packaged app — where those keys never exist.
+const DEV_ONLY_EXTERNALS = [
+  "@langfuse/tracing",
+  "@langfuse/otel",
+  "@langfuse/vercel-ai-sdk",
+  "@langfuse/client",
+  "@opentelemetry/sdk-node",
+];
+
 const serverDir = import.meta.dir;
 const resourcesDir = join(serverDir, "../src-tauri/resources/server");
 const binariesDir = join(serverDir, "../src-tauri/binaries");
@@ -23,7 +37,7 @@ mkdirSync(resourcesDir, { recursive: true });
 const result = await Bun.build({
   entrypoints: [join(serverDir, "src/index.ts")],
   target: "bun",
-  external: NATIVE_EXTERNALS,
+  external: [...NATIVE_EXTERNALS, ...DEV_ONLY_EXTERNALS],
   outdir: resourcesDir,
 });
 if (!result.success) {
