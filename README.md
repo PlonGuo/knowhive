@@ -72,6 +72,7 @@ Query → embed (Ollama) → hybrid retrieve (vector KNN ⊕ FTS5, RRF-fused, to
       → rerank to top 5
           ├─ cross-encoder (default): bge-reranker-v2-m3 int8 ONNX, in-process, ~50ms/pair
           └─ llm (fallback): listwise coverage-prompt rerank with the configured chat model
+      → abstention gate (cross-encoder path only): top-1 below the relevance floor → answer nothing
       → system prompt injection → streamText → UI-message stream with source metadata
 ```
 
@@ -91,7 +92,7 @@ It ships **off by default** — a pre-registered eval gate (single vs agentic, 4
 | Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
 | Sidecar runtime | bun + Hono |
 | LLM integration | Vercel AI SDK v7 (streamText / useChat) |
-| Storage & search | bun:sqlite — one DB for chunks, brute-force cosine KNN, FTS5 |
+| Storage & search | bun:sqlite — one DB for chunks, brute-force cosine KNN, FTS5 (trigram tokenizer, so the keyword leg works on CJK) |
 | Embeddings | Ollama (`nomic-embed-text` / `bge-m3`) |
 | Reranker | `onnx-community/bge-reranker-v2-m3-ONNX` int8 via @huggingface/transformers (onnxruntime-node) |
 | Evaluation | RAGAS (Python harness in `backend/`, dev-only) |
@@ -149,6 +150,8 @@ uv run python -m app.memory_eval --db <sidecar-db>   # cross-session memory A/B
 | Does my memory system actually help? | User-specific answer recall **0% → 100%** (A/B, with a leak self-check) | [Memory-Eval](learnings/evals/Memory-Eval.md) |
 | Is the chat request cache-friendly? | Multi-turn cache hit **0% → 22%** by moving volatile context off the stable prefix (caught + fixed a security regression in the process) | [Prompt-Cache](learnings/evals/Prompt-Cache.md) |
 | Where does time-to-first-token go? | Cross-encoder rerank is 46% of TTFT; killed a redundant embed (recall 156ms → 1ms) | [Latency-Waterfall](learnings/evals/Latency-Waterfall.md) |
+| Does the keyword leg actually work on Chinese? | **No — it never had.** FTS5's default tokenizer indexes an unspaced Chinese run as one token, so hybrid silently degraded to vector-only. Fixed (trigram + query rewrite + index rebuild): context_recall **+0.054** on a corpus that is only 8% Chinese | [FTS-Tokenizer](learnings/evals/FTS-Tokenizer.md) |
+| Does the system know when it doesn't know? | Abstention gate on the cross-encoder's top-1 score: unanswerable questions correctly refused **32% → 91%**, with false-abstention measured in the other direction (1/28 worst arm) | [learnings/](learnings/) |
 
 Full learnings index (spikes, tradeoffs, negative results): [learnings/](learnings/).
 
