@@ -118,6 +118,14 @@ const ingestOne = async (absPath: string) => {
 // so config changes (provider/base_url/key) take effect without restart. Ollama is
 // reached through its OpenAI-compatible /v1; for openai-compatible the user's base_url
 // already includes the version prefix (parity with the Python test-llm probe).
+//
+// includeUsage is NOT the default: the provider only sends stream_options.include_usage
+// when asked, and an OpenAI-style server that is not asked omits usage from a streamed
+// response entirely. DeepSeek volunteers it anyway, which is exactly why this stayed
+// hidden — the cloud path had numbers, so the local path looking empty read as "Ollama
+// doesn't report tokens" rather than "we never requested them". Without this flag the
+// StatusBar's context-usage bar (inputTokens / model context limit) has no input on the
+// default provider, and the prompt-cache hit rate is unmeasurable in-app.
 const chatModel = () => {
   const base = config.base_url.replace(/\/+$/, "");
   const apiKey = config.api_key ?? undefined;
@@ -125,11 +133,13 @@ const chatModel = () => {
     case "anthropic":
       return createAnthropic({ apiKey, baseURL: `${base}/v1` })(config.model_name);
     case "openai-compatible":
-      return createOpenAICompatible({ name: "openai-compatible", baseURL: base, apiKey })(
+      return createOpenAICompatible({ name: "openai-compatible", baseURL: base, apiKey, includeUsage: true })(
         config.model_name,
       );
     default:
-      return createOpenAICompatible({ name: "ollama", baseURL: `${base}/v1` })(config.model_name);
+      return createOpenAICompatible({ name: "ollama", baseURL: `${base}/v1`, includeUsage: true })(
+        config.model_name,
+      );
   }
 };
 
