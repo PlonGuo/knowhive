@@ -152,6 +152,7 @@ uv run python -m app.memory_eval --db <sidecar-db>   # cross-session memory A/B
 | Where does time-to-first-token go? | Cross-encoder rerank is 46% of TTFT; killed a redundant embed (recall 156ms → 1ms) | [Latency-Waterfall](learnings/evals/Latency-Waterfall.md) |
 | Does the keyword leg actually work on Chinese? | **No — it never had.** FTS5's default tokenizer indexes an unspaced Chinese run as one token, so hybrid silently degraded to vector-only. Fixed (trigram + query rewrite + index rebuild): context_recall **+0.054** on a corpus that is only 8% Chinese | [FTS-Tokenizer](learnings/evals/FTS-Tokenizer.md) |
 | Does the system know when it doesn't know? | Abstention gate on the cross-encoder's top-1 score: unanswerable questions correctly refused **32% → 91%**, with false-abstention measured in the other direction (1/28 worst arm) | [learnings/](learnings/) |
+| How much more does agent mode cost? | **Bimodal, so the average lies.** No tool call: 1.3×. Once it hops: **17× cost / 21× tokens**, worst single question 62× | [Agentic-Cost](learnings/evals/Agentic-Cost.md) |
 
 Full learnings index (spikes, tradeoffs, negative results): [learnings/](learnings/).
 
