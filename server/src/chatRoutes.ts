@@ -355,6 +355,24 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
     };
     abortSignal.addEventListener("abort", chatSpan.close, { once: true });
 
+    // Time to first token, recorded onto OUR span rather than the model's.
+    //
+    // Langfuse has a native TTFT field, derived from completionStartTime on the
+    // generation — but @langfuse/vercel-ai-sdk never sets it (the AI SDK tracks
+    // msToFirstChunk internally and the integration does not map it across), and that
+    // generation is created inside the SDK's telemetry pipeline where we cannot reach
+    // it. So TTFT rides the chat span instead: the number is what matters, and this way
+    // it is always on rather than gated behind KNOWHIVE_TIMING like the stage waterfall.
+    const requestStart = performance.now();
+    const markFirstToken = chatSpan.span
+      ? () => {
+          if (ttftMs !== null) return;
+          ttftMs = Math.round(performance.now() - requestStart);
+          chatSpan.span!.set({ metadata: { ttftMs } });
+        }
+      : () => {};
+    let ttftMs: number | null = null;
+
     const withExtra = (base: string) => (systemExtra ? `${base}\n\n${systemExtra}` : base);
     const persist = (answer: string, sources: string[]) => {
       if (!session_id || !question) return;
@@ -406,6 +424,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
         // functionId is what separates the two arms in Langfuse — without it both
         // branches report as one anonymous generation and you cannot compare them.
         telemetry: { functionId: "chat-agentic" },
+        onChunk: markFirstToken,
         // Persist only on real completion — an approval pause ends this stream with
         // finishReason 'tool-calls'; the continuation request persists the exchange.
         // The span closes on every finish reason: one span per HTTP request, and an
@@ -428,6 +447,7 @@ export function chatRoutes(deps: ChatRoutesDeps): Hono {
       messages: withPreface(modelMessages, preface),
       abortSignal,
       telemetry: { functionId: "chat-single" },
+      onChunk: markFirstToken,
       // Same guard as the agentic branch: a timeout/abort ends the stream with a
       // non-"stop" reason, and half an answer must not enter the history.
       onFinish: ({ text, finishReason }) => {

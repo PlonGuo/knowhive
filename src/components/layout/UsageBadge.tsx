@@ -21,7 +21,8 @@ interface UsageBadgeProps {
   usage: UsageStats | null
 }
 
-const formatTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
+/** Shared with the composer's agent toggle so both surfaces round tokens identically. */
+export const formatTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
 
 export default function UsageBadge({ backendUrl, usage }: UsageBadgeProps) {
   const [provider, setProvider] = useState<string | null>(null)

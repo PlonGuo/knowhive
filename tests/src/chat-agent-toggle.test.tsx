@@ -68,4 +68,21 @@ describe('Chat composer — agent mode toggle', () => {
     })
     expect(screen.getByTestId('chat-agent-toggle')).toHaveAttribute('aria-pressed', 'true')
   })
+
+  // Agent mode costs ~17x on questions where the model takes a hop
+  // (learnings/evals/Agentic-Cost.md), so the toggle should not be the one unpriced
+  // control in the app. Until an exchange finishes there is nothing honest to show.
+  it('shows no token count before any exchange has finished', async () => {
+    mockFetch()
+    render(<ChatArea backendUrl={BACKEND} />)
+    await waitFor(() => screen.getByTestId('chat-agent-toggle'))
+    expect(screen.queryByTestId('chat-agent-last-tokens')).toBeNull()
+  })
+
+  it('states the measured cost multiplier in the toggle tooltip', async () => {
+    mockFetch()
+    render(<ChatArea backendUrl={BACKEND} />)
+    const toggle = await waitFor(() => screen.getByTestId('chat-agent-toggle'))
+    expect(toggle.getAttribute('title')).toMatch(/17x/)
+  })
 })

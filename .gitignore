@@ -33,6 +33,11 @@ docs/leetcode/
 # The rest of learnings/ (evals, decisions, design) stays tracked.
 learnings/career/
 learnings/README.md
+# Personal learning tracker — a progress bar for Jason, not project documentation.
+learnings/GLOSSARY.md
+
+# Working plan doc kept local.
+docs/plans/2026-08-04-tool-trace-and-audit-log.md
 
 # Build artifacts
 extraResources/

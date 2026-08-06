@@ -8,6 +8,7 @@ import {
 import FadeContent from '../reactbits/FadeContent'
 import ShinyText from '../reactbits/ShinyText'
 import { isToolPart, toolPartLabel, toolPartStatus, type ToolPartLike } from '../../lib/toolPart'
+import { formatTokens } from './UsageBadge'
 
 export interface ExchangeUsage {
   inputTokens: number | null
@@ -122,6 +123,11 @@ export default function ChatArea({
   // composer rather than in Settings. Toggling persists immediately — the next
   // /chat request reads the saved config.
   const [agentMode, setAgentMode] = useState(false)
+  // Last exchange's token count, shown on the toggle. Agent mode costs 17x on questions
+  // where the model actually takes a hop (learnings/evals/Agentic-Cost.md), so the
+  // switch should not be the only unpriced control in the app: whoever flips it deserves
+  // to see what the previous answer spent before spending an order of magnitude more.
+  const [lastUsage, setLastUsage] = useState<ExchangeUsage | null>(null)
   const configRef = useRef<Record<string, unknown> | null>(null)
   useEffect(() => {
     fetch(`${backendUrl ?? DEFAULT_BACKEND_URL}/config`)
@@ -171,13 +177,13 @@ export default function ChatArea({
   // Surface finish-metadata token usage exactly once per assistant message.
   const reportedUsageIds = useRef(new Set<string>())
   useEffect(() => {
-    if (!onUsage) return
     for (const m of messages) {
       if (m.role !== 'assistant' || !m.id || reportedUsageIds.current.has(m.id)) continue
       const usage = (m.metadata as { usage?: ExchangeUsage } | undefined)?.usage
       if (!usage) continue
       reportedUsageIds.current.add(m.id)
-      onUsage(usage)
+      setLastUsage(usage)
+      onUsage?.(usage)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages])
@@ -332,9 +338,18 @@ export default function ChatArea({
             onClick={toggleAgentMode}
             aria-pressed={agentMode}
             title={
-              agentMode
-                ? 'Agent mode on: the AI searches and reads notes on its own'
-                : 'Agent mode off: single-shot answers from retrieved context'
+              [
+                agentMode
+                  ? 'Agent mode on: the AI searches and reads notes on its own'
+                  : 'Agent mode off: single-shot answers from retrieved context',
+                lastUsage?.totalTokens != null
+                  ? `Last answer used ${lastUsage.totalTokens.toLocaleString()} tokens`
+                  : null,
+                // Measured, not a guess: 6 questions x both modes, retrieval held fixed.
+                'Measured: agent mode costs about the same when it answers directly, and ~17x when it takes a hop.',
+              ]
+                .filter(Boolean)
+                .join('\n')
             }
             className={`mb-0.5 shrink-0 rounded-xl border px-2.5 py-1 text-xs font-medium transition-colors ${
               agentMode
@@ -343,6 +358,11 @@ export default function ChatArea({
             }`}
           >
             ⚡ Agent
+            {lastUsage?.totalTokens != null && (
+              <span data-testid="chat-agent-last-tokens" className="ml-1 opacity-70">
+                · {formatTokens(lastUsage.totalTokens)}
+              </span>
+            )}
           </button>
           <textarea
             value={input}

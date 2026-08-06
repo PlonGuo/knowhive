@@ -94,7 +94,13 @@ test("real fs.watch delivers events after start (integration smoke)", async () =
   const { dir, watcher, calls } = makeWatcher();
   watcher.start();
   writeFileSync(join(dir, "hello.md"), "# hi");
-  for (let i = 0; i < 100 && calls.length === 0; i++) await Bun.sleep(10);
+  // Waits up to 5s, not 1s. The bound is patience, not an assertion: the loop exits on
+  // the first event, so a healthy run is exactly as fast as before and only a loaded
+  // machine spends the extra time. At 1s this failed ~8% of the time (3/36 runs, and
+  // 1/15 on a tree with no local changes at all) because macOS fs.watch delivery plus
+  // the 20ms debounce does not fit in a second when the box is busy -- a test that
+  // reports a real defect 8% of the time is worse than no test.
+  for (let i = 0; i < 500 && calls.length === 0; i++) await Bun.sleep(10);
   watcher.stop();
   expect(calls.length).toBe(1);
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import FileTree from '../knowledge/FileTree'
 import UsageBadge, { type UsageStats } from './UsageBadge'
+import ReindexBadge from './ReindexBadge'
 import { selectFiles } from '../../lib/platform'
 import { getInitialTheme, setTheme, type Theme } from '../../lib/theme'
 
@@ -314,6 +315,7 @@ export default function Sidebar({
                 {dueCount} due
               </button>
             )}
+            {backendUrl && <ReindexBadge backendUrl={backendUrl} />}
             {backendUrl && <UsageBadge backendUrl={backendUrl} usage={usage ?? null} />}
           </span>
           <button
